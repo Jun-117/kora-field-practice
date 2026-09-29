@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KORA Field · Practice</title>
+<meta name="description" content="KORA CARE field app and command centre">
+<!-- v0.8 security: only our own scripts run (no inline, no eval); data goes only to Google (Firebase) and map tiles to OpenStreetMap. reCAPTCHA hosts stay allowed in case Firebase sign-in asks for it. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; connect-src 'self' https://*.googleapis.com; font-src 'self' data:; worker-src 'self'; manifest-src 'self'; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; object-src 'none'; base-uri 'self'; form-action 'self'">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="KORA Field">
+<meta name="theme-color" content="#1f6fb2">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <main>
+    <div id="banner" class="banner">🔴 Saving on this phone is failing — write it on paper and tell Jun.</div>
+    <div id="view"></div>
+  </main>
+  <nav id="nav" class="tabs hidden">
+    <button data-tab="today"><span class="i">📋</span>Today<span class="badge hidden"></span></button>
+    <button data-tab="route"><span class="i">🗺️</span>Map</button>
+    <button data-tab="new"><span class="i">➕</span>New</button>
+    <button data-tab="customers"><span class="i">👥</span>Customers</button>
+    <button data-tab="status"><span class="i">📊</span>Status</button>
+  </nav>
+  <div id="toast" class="toast"></div>
+  <div id="viewer"><img alt=""></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

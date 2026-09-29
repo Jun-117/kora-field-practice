@@ -55,14 +55,64 @@ export function billAmount(k, p = PRICES) {
   return { amount: p.monthly, install: 0, subscription: p.monthly, deposit: 0 };
 }
 export function billDue(installDate, k) { return k === 1 ? installDate : addMonths(installDate, k - 1); }
+// ---------- v0.10 pauses in the ledger (Jun 2026-09-29 · rules = repo docs/research/2026-09-29_딥조사B_정지정책.md 「✅ Jun 결정」) ----------
+// A pause skips one bill: the first bill day on/after the pause start. The amount follows the bill number (k) — the deposit
+// instalments and the 36 months just move one month later. Back within 15 days of the skipped bill day → no skip: that bill is
+// charged, due on the restart day. Either way the pause counts as the year's one pause.
+export const PAUSE = { minMonths: 6, perMonths: 12, noticeDays: 7, earlyDays: 15, reason: 'Away / house empty' };
+export function pauseSkips(c) {
+  const inst = c && isDate(c.installDate) ? c.installDate : null; if (!inst) return [];
+  const log = Array.isArray(c.pauseLog) ? c.pauseLog.filter((p) => p && (isDate(p.from) || isDate(p.skipDue))) : [];
+  const cur = c.status === 'Paused' && !log.some((p) => !isDate(p.resumed)) && isDate(c.pausedFrom) ? [{ from: c.pausedFrom, resumed: '' }] : [];
+  const out = [];
+  for (const p of [...log, ...cur]) {
+    let due = isDate(p.skipDue) ? p.skipDue : null;
+    if (!due) for (let j = 2; j <= 84; j++) { const d = addMonths(inst, j - 1); if (d >= p.from) { due = d; break; } }
+    if (!due) continue;
+    const back = isDate(p.resumed) ? p.resumed : '';
+    const early = !!back && daysBetween(due, back) <= PAUSE.earlyDays;
+    out.push({ due, from: p.from || '', resumed: back, early, skip: !early, open: !back });
+  }
+  return out.sort((a, b) => a.due.localeCompare(b.due));
+}
+// the bill days k = 1..n for this home (skipped months left out · an early-return month is due on the restart day)
+export function billDays(c, n = 84) {
+  const inst = c.installDate; const sk = pauseSkips(c);
+  const skip = new Set(sk.filter((s) => s.skip).map((s) => s.due)); const late = new Map(sk.filter((s) => s.early && s.resumed > s.due).map((s) => [s.due, s.resumed]));
+  const dues = [inst]; let j = 1;
+  while (dues.length < n && j < n + skip.size + 2) { j++; const d = addMonths(inst, j - 1); if (skip.has(d)) continue; dues.push(late.get(d) || d); }
+  return { dues, skipped: [...skip].sort() };
+}
+// the next bill day a pause asked for on `asked` can skip: at least 7 days away (earlier than that → the one after)
+export function pauseStartDay(c, asked, wanted) {
+  if (!c || !isDate(c.installDate)) return null; const from = isDate(wanted) && wanted > asked ? wanted : asked;
+  for (let j = 2; j <= 84; j++) { const d = addMonths(c.installDate, j - 1); if (d >= from && daysBetween(asked, d) >= PAUSE.noticeDays) return d; }
+  return null;
+}
+// Can this home pause? Reasons it cannot (shown, not enforced — a person decides, like screening).
+export function pauseEligibility(c, led, asked, v = {}) {
+  const why = []; if (!c || !isDate(c.installDate)) return { ok: false, why: ['No install date'], skipDue: null, until: '' };
+  const skipDue = pauseStartDay(c, asked, v.from); const start = skipDue || asked;
+  const six = addMonths(c.installDate, PAUSE.minMonths); if (start < six) why.push(`Pauses start 6 months after the install — from ${six}.`);
+  const prev = (Array.isArray(c.pauseLog) ? c.pauseLog : []).filter((p) => p && isDate(p.from) && isDate(p.resumed)).map((p) => p.from).sort();
+  const last = prev[prev.length - 1]; if (last && start < addMonths(last, PAUSE.perMonths)) why.push(`One pause in 12 months — the last one started ${last} (next from ${addMonths(last, PAUSE.perMonths)}).`);
+  if (v.reason && v.reason !== PAUSE.reason) why.push(v.reason === 'Money trouble' ? 'Money trouble is not a pause — it goes to collections (§2.7).' : v.reason === 'Waiting for repair' ? 'Waiting for our repair is not a pause — the repair-delay credit covers it.' : 'Only "away / house empty" is a pause.');
+  if (led && led.overdue > 0.5) why.push(`NPR ${Math.round(led.overdue).toLocaleString('en-IN')} overdue — it must be 0 before the pause starts (it can be paid at the cartridge pickup).`);
+  const until = skipDue ? addDays(addMonths(skipDue, 1), -1) : '';
+  if (v.until && until && v.until > until) why.push(`A pause is at most 1 month — until ${until}.`);
+  return { ok: !why.length, why, skipDue, until };
+}
 
 // money actions that need an OK (v0.8 #12): a discount or a deposit refund waiting for approval (or rejected) does not count yet
 export const moneyEffective = (x) => !x || (x.approval !== 'Pending' && x.approval !== 'Rejected');
 const discOf = (x) => (moneyEffective(x) ? Number(x.discount) || 0 : 0);
-const CREDIT_TYPES = new Set(['Installation fee (4,900)', 'Monthly subscription', 'Referral credit']);
-export const PAYMENT_TYPES = ['Installation fee (4,900)', 'Monthly subscription', 'Repair / other', 'Penalty', 'Referral credit'];
+const CREDIT_TYPES = new Set(['Installation fee (4,900)', 'Monthly subscription', 'Referral credit', 'Service credit']);
+export const PAYMENT_TYPES = ['Installation fee (4,900)', 'Monthly subscription', 'Repair / other', 'Penalty', 'Referral credit', 'Service credit'];
+// v0.10: credits that are not cash — a referral free month and the repair-delay credit (Jun 2026-09-29). They pay the subscription of bill 2 onward, never the first-day 4,900.
+export const NONCASH = new Set(['Referral credit', 'Service credit']);
+export const isNonCash = (p) => !!p && NONCASH.has(p.type);
 // Same-day order must not depend on random document ids: install fee first, then credits, then by entry time.
-const TYPE_RANK = { 'Installation fee (4,900)': 0, 'Referral credit': 1, 'Monthly subscription': 2 };
+const TYPE_RANK = { 'Installation fee (4,900)': 0, 'Referral credit': 1, 'Service credit': 1, 'Monthly subscription': 2 };
 const entryMs = (p) => (p.createdAt && p.createdAt.toMillis ? p.createdAt.toMillis() : Number(p._localT) || Number(p.createdAtMs) || 0);
 const cmpPay = (a, b) => String(a.date).localeCompare(String(b.date)) || (TYPE_RANK[a.type] ?? 3) - (TYPE_RANK[b.type] ?? 3) || entryMs(a) - entryMs(b) || String(a.id || '').localeCompare(String(b.id || ''));
 
@@ -75,24 +125,32 @@ export function ledger(customer, payments, today, p = PRICES) {
   const pays = (payments || []).filter((x) => x.customerId === customer.id && Number(x.amount) > 0).slice().sort(cmpPay);
   const pool = pays.filter((x) => CREDIT_TYPES.has(x.type));
   const totalCredit = pool.reduce((s, x) => s + Number(x.amount) + discOf(x), 0);
+  const nonCashTotal = pool.filter(isNonCash).reduce((s, x) => s + Number(x.amount), 0); let subs2 = 0;
   // enough bills to cover everything due by today and anything prepaid (cap 60 months)
   const bills = [];
   let covered = 0;
   // a home that left gets no unpaid bills after its leaving day; bills it had already paid ahead stay as they were
   // (their VAT / deposit split does not change afterwards) and are money to pay back (prepaidAfterLeave)
   const stopAt = customer.status === 'Churned' && isDate(customer.churnDate) ? customer.churnDate : null;
+  const BD = billDays(customer); out.skipped = BD.skipped;
   for (let k = 1; k <= 60; k++) {
-    const due = billDue(customer.installDate, k);
+    const due = BD.dues[k - 1];
     if (stopAt && due > stopAt && covered + billAmount(k, p).amount > totalCredit + 1e-9) break;
-    if (due > today && covered >= totalCredit) break;
+    if (due > today && covered >= totalCredit && subs2 >= nonCashTotal - 0.0001) break;
     const b = { k, due, ...billAmount(k, p), paid: 0, paidOn: null, parts: { install: 0, subscription: 0, deposit: 0 } };
-    bills.push(b); covered += b.amount;
+    bills.push(b); covered += b.amount; if (k >= 2) subs2 += b.subscription;
   }
-  // allocate
+  // v0.10: non-cash credits first, into the subscription of bill 2 onward (the first-day 4,900 is never reduced)
+  for (const pay of pool.filter(isNonCash)) {
+    let left = Number(pay.amount); const split = { install: 0, subscription: 0, deposit: 0, unallocated: 0, cashShare: 0 };
+    for (const b of bills) { if (left <= 0.0001) break; if (b.k < 2) continue; const need = b.subscription - b.parts.subscription; if (need <= 0) continue; const take = Math.min(need, left); b.parts.subscription += take; b.paid += take; left -= take; split.subscription += take; if (b.paid >= b.amount - 0.0001 && !b.paidOn) b.paidOn = pay.date; }
+    if (left > 0.0001) split.unallocated += left; out.splits[pay.id] = split;
+  }
+  // allocate cash
   let bi = 0;
-  for (const pay of pool) {
+  for (const pay of pool.filter((x) => !isNonCash(x))) {
     let left = Number(pay.amount) + discOf(pay);
-    const cash = pay.type === 'Referral credit' ? 0 : Number(pay.amount);
+    const cash = Number(pay.amount);
     const cashShare = left > 0 ? cash / left : 0;
     const split = { install: 0, subscription: 0, deposit: 0, unallocated: 0, cashShare };
     while (left > 0.0001 && bi < bills.length) {
@@ -103,7 +161,7 @@ export function ledger(customer, payments, today, p = PRICES) {
         const take = Math.min(need, left);
         b.parts[part] += take; b.paid += take; left -= take; split[part] += take;
       }
-      if (b.paid >= b.amount - 0.0001) { b.paidOn = pay.date; bi++; }
+      if (b.paid >= b.amount - 0.0001) { if (!b.paidOn) b.paidOn = pay.date; bi++; }
     }
     if (left > 0.0001) split.unallocated += left;
     out.splits[pay.id] = split;
@@ -119,11 +177,11 @@ export function ledger(customer, payments, today, p = PRICES) {
     if (!full && b.due <= today) { out.overdue += b.amount - b.paid; if (!out.overdueSince) out.overdueSince = b.due; }
     if (!full && !out.nextBill) out.nextBill = b;
   }
-  if (!out.nextBill && stopAt) out.nextBill = null; else if (!out.nextBill) { const k = bills.length + 1; out.nextBill = { k, due: billDue(customer.installDate, k), ...billAmount(k, p), paid: 0, status: 'future' }; }
+  if (!out.nextBill && stopAt) out.nextBill = null; else if (!out.nextBill) { const k = bills.length + 1; out.nextBill = { k, due: BD.dues[k - 1], ...billAmount(k, p), paid: 0, status: 'future' }; }
   out.depositCollected = bills.reduce((s, b) => s + b.parts.deposit, 0);
   out.prepaidAfterLeave = stopAt ? bills.filter((b) => b.due > stopAt).reduce((s, b) => s + b.paid, 0) + out.credit : 0;
   out.daysOverdue = out.overdueSince ? daysBetween(out.overdueSince, today) : 0;
-  out.contractEnded = monthsBetween(customer.installDate, today) >= p.contractMonths;
+  out.contractEnded = monthsBetween(customer.installDate, today) - BD.skipped.filter((d) => d <= today).length >= p.contractMonths;
   out.bills = bills;
   return out;
 }
@@ -163,7 +221,7 @@ export function promiseOf(chases, payments, today) {
   const q = (chases || []).find((x) => isDate(x.promiseDate));
   if (!q) return null;
   const amount = Number(q.promiseAmount) > 0 ? Number(q.promiseAmount) : 0;
-  const cash = (payments || []).filter((x) => x.customerId === q.customerId && x.type !== 'Referral credit' && isDate(x.date) && x.date >= q.date);
+  const cash = (payments || []).filter((x) => x.customerId === q.customerId && !isNonCash(x) && isDate(x.date) && x.date >= q.date);
   const sum = (xs) => xs.reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const paid = sum(cash.filter((x) => x.date <= q.promiseDate)); const paidAll = sum(cash);
   const enough = (n) => (amount ? n >= amount - 0.5 : n > 0);
@@ -213,18 +271,50 @@ export function pauseStats(customers, today, from) {
 // §2.11 transfer / succession = [TBC] (recorded only) · §2.14 WhatsApp, SMS or a phone call count as notice.
 export const CONTRACT_KINDS = ['Notice to end', 'Transfer to a new holder', 'Lost or stolen'];
 // earlyPct: Jun 2026-09-29 「남은 구독료의 조기해지는 30퍼로 하자」 — 30% of the subscription still to come · 🔴 the lawyer still checks it (draft §2.2 [TBC])
-export const CONTRACT = { noticeDays: 30, removeDays: 7, lostNotifyDays: 7, earlyPct: 0.3 };
+export const CONTRACT = { noticeDays: 30, removeDays: 7, lostNotifyDays: 7, earlyPct: 0.3, abroadCut: 0.5 }; // abroadCut: Jun 2026-09-29 「해외 이주(증빙) 시 위약금 감면」 — half of the 30% (🔴 our number · proof wording = the lawyer)
+// 🟢 landed cost without VAT (memory kora-business-spec.md:30) — the value of a unit for lost / not-returned settlements
+export const DEVICE_VALUE = 15607;
 export const TRANSFER_REASONS = ['House sold', 'Tenant changed', 'Death in the family', 'Within the family', 'Other'];
 export const LOST_FAULT = ['Customer negligence', 'Not the customer — police report', 'Not known yet'];
-export function noticeTerms(customer, noticeDate, endDate, p = PRICES) {
+export function noticeTerms(customer, noticeDate, endDate, p = PRICES, o = {}) {
   const inst = customer && isDate(customer.installDate) ? customer.installDate : null;
-  const minEnd = inst ? addMonths(inst, p.contractMonths) : null;
+  const skips = inst ? billDays(customer).skipped : []; /* v0.10: each paused month moves the 36 months one month later */
+  const minEnd = inst ? addMonths(inst, p.contractMonths + skips.length) : null;
   const end = isDate(endDate) ? endDate : isDate(noticeDate) ? noticeDate : null;
   const early = !!(minEnd && end && end < minEnd);
   const earliestEnd = !early && isDate(noticeDate) ? addDays(noticeDate, CONTRACT.noticeDays) : null;
-  const served = inst && end ? Math.min(p.contractMonths, Math.max(1, monthsBetween(inst, end) + 1)) : null; /* the month the service ends in = months billed */
-  const earlyFee = early && served ? Math.round(p.monthly * (p.contractMonths - served) * CONTRACT.earlyPct) : 0;
+  const served = inst && end ? Math.min(p.contractMonths, Math.max(1, monthsBetween(inst, end) + 1 - skips.filter((d) => d <= end).length)) : null; /* months billed up to the end */
+  const earlyFee = early && served ? Math.round(p.monthly * (p.contractMonths - served) * CONTRACT.earlyPct * (o.abroad ? CONTRACT.abroadCut : 1)) : 0;
   return { served, remaining: served ? p.contractMonths - served : null, earlyFee, monthN: inst && isDate(noticeDate) ? Math.max(1, monthsBetween(inst, noticeDate) + 1) : null, minEnd, early, earliestEnd, shortNotice: !!(earliestEnd && isDate(endDate) && endDate < earliestEnd), removeBy: isDate(endDate) ? addDays(endDate, CONTRACT.removeDays) : null };
+}
+// v0.10 (Jun 2026-09-29): lost / stolen / not returned = the early-ending charge + what the unit is still worth (straight over 36 months) − deposit paid
+export function lostSettlement(c, led, date, p = PRICES) {
+  const T = noticeTerms(c, date, date, p); const served = T.served || 1;
+  const residual = Math.round(DEVICE_VALUE * Math.max(0, p.contractMonths - served) / p.contractMonths);
+  const deposit = led ? Math.round(led.depositCollected || 0) : 0;
+  return { fee: T.earlyFee, residual, deposit, total: T.earlyFee + residual - deposit, served };
+}
+// v0.10 (Jun 2026-09-29): our repair late — billing goes on; not fixed within 7 days of the report → every day from the report to the fix comes off the next bill
+export const REPAIR = { freeDays: 7, types: ['Breakdown', 'Leak', 'Water quality'] };
+export function repairCredit(r, today, p = PRICES) {
+  if (!r || !REPAIR.types.includes(r.type) || String(r.ourFault || '').startsWith('No')) return null;
+  const from = isDate(r.receivedDate) ? r.receivedDate : String(r.receivedAt || '').slice(0, 10); if (!isDate(from)) return null;
+  const done = r.status === 'Done' && isDate(r.doneDate); const to = done ? r.doneDate : today;
+  const days = daysBetween(from, to); if (days <= REPAIR.freeDays) return null;
+  return { from, to, days, amount: Math.round(p.monthly / 30 * days), done };
+}
+export function repairCredits(requests, payments, today) {
+  const paid = new Set((payments || []).filter((x) => x.type === 'Service credit').map((x) => x.id));
+  return (requests || []).map((r) => ({ r, c: repairCredit(r, today) })).filter((x) => x.c).map((x) => ({ ...x, id: 'svc_' + x.r.id, given: paid.has('svc_' + x.r.id) }));
+}
+// Reminders about pauses: restart in ≤7 days (tell the family, book the refit visit) · pause asked but a bill is still overdue.
+export function pauseReminders(customers, ledgers, today) {
+  const out = [];
+  for (const c of customers || []) {
+    if (c.status !== 'Paused' || !isDate(c.pausedUntil)) continue; const d = daysBetween(today, c.pausedUntil);
+    if (d >= 0 && d <= 7) out.push({ c, kind: 'restart', days: d });
+  }
+  return out;
 }
 // What still needs a person: a notice with no recovery case since it came in · a lost / stolen device not settled yet.
 export function contractOpen(events, recoveries, today) {
@@ -244,13 +334,17 @@ export function contractOpen(events, recoveries, today) {
 export const SCREEN_INCOME = ['Salary', 'Business / shop', 'Money from abroad', 'Farming', 'Daily work', 'Other'];
 export function screenVerdict(s) {
   const hold = [], check = []; s = s || {};
-  if (s.housing === 'Renting' && s.landlordOk !== 'Yes') hold.push('renting — the landlord has not agreed');
+  // v0.10 (Jun 2026-09-29): hold only on 5 objective conditions (Consumer Protection Act §12 — sell without discrimination) · everything else is a check
+  if (s.cashDay1 === 'No') hold.push('cannot pay the first-day 4,900 in cash');
+  if (s.housing === 'Renting' && s.mount === 'Wall' && s.landlordOk !== 'Yes') hold.push('renting + wall mounting — no written landlord consent');
+  if (s.housing === 'Renting' && s.mount !== 'Wall' && !String(s.landlordPhone || '').trim()) check.push('renting — write the landlord name and phone + moving plans');
   if (s.power === 'No') hold.push('no power point near the tap');
   if (s.tap === 'No') hold.push('no tap for the unit');
   if (s.stay36 === 'No') hold.push('will not stay 36 months'); else if (s.stay36 === 'Not sure') check.push('not sure they will stay 36 months');
-  if (!String(s.phone2 || '').trim()) check.push('only one phone number');
-  if (s.idSeen !== 'Yes') check.push('ID not seen');
-  if (s.housing === 'Renting' && s.yearsHere !== null && s.yearsHere !== undefined && s.yearsHere !== '' && Number(s.yearsHere) < 1) check.push('renting here less than a year');
+  if (!String(s.phone2 || '').trim() && !String(s.referee || '').trim()) check.push('only one phone number — add a family number or a referee');
+  if (s.idSeen !== 'Yes') check.push('ID not seen — it must be seen by the install day (or no install)');
+  if (s.housing === 'Renting' && s.yearsHere !== null && s.yearsHere !== undefined && s.yearsHere !== '' && Number(s.yearsHere) < 1 && !String(s.referee || '').trim()) check.push('renting here less than a year — add a referee');
+  if (!String(s.verifyBy || '').trim() || (s.by && String(s.verifyBy).trim() === String(s.by).trim())) check.push('no check call yet by someone other than the seller');
   if (s.waterSource === 'Well / borehole') check.push('well / borehole water — hardness and arsenic can be high');
   return { verdict: hold.length ? 'Hold' : check.length ? 'Check' : 'Pass', hold, check };
 }
@@ -560,7 +654,7 @@ export function metrics(D, ledgers, today, settings = {}) {
   const collection = billsDue ? billsPaid / billsDue : null;
   // money this month
   const mk = monthKey(today);
-  const cashThisMonth = D.payments.filter((p) => monthKey(p.date) === mk && p.type !== 'Referral credit').reduce((s, p) => s + Number(p.amount || 0), 0);
+  const cashThisMonth = D.payments.filter((p) => monthKey(p.date) === mk && !isNonCash(p)).reduce((s, p) => s + Number(p.amount || 0), 0);
   let mrr = 0; for (const c of active) { const l = ledgers.get(c.id); if (l && l.nextBill) mrr += l.nextBill.k === 1 ? PRICES.monthly : l.nextBill.amount; }
   // stock: devices = stock moves − installs · filters = moves − used in completed visits
   const stock = {};
@@ -652,7 +746,7 @@ export function salesBook(payments, ledgers, custById, recoveries, from, to) {
   for (const p of payments) {
     if (!inR(p.date)) continue;
     const c = custById.get(p.customerId) || {};
-    if (p.type === 'Referral credit') { skipped.push({ p, c, why: 'referral credit — no cash' }); continue; }
+    if (isNonCash(p)) { skipped.push({ p, c, why: p.type === 'Referral credit' ? 'referral credit — no cash' : 'service credit — no cash' }); continue; }
     const led = ledgers.get(p.customerId); const sp = led && led.splits[p.id];
     if (!sp) { skipped.push({ p, c, why: 'customer not found' }); continue; }
     if (sp.extra !== undefined && p.type === 'Penalty') { penalties.push({ p, c, amount: sp.extra }); continue; }
@@ -706,7 +800,7 @@ export function periodActivity(D, from, to) {
   const reqIn = D.requests.filter((r) => inR(r.receivedDate || String(r.receivedAt || '')));
   return {
     installs: D.customers.filter((c) => inR(c.installDate)), churns: D.customers.filter((c) => c.status === 'Churned' && inR(c.churnDate)),
-    payments: pays, cash: pays.filter((p) => p.type !== 'Referral credit').reduce((s, p) => s + (Number(p.amount) || 0), 0), byType,
+    payments: pays, cash: pays.filter((p) => !isNonCash(p)).reduce((s, p) => s + (Number(p.amount) || 0), 0), byType,
     visits: vis, visitTypes: vType, filters: filt, sanitised: vis.filter((v) => v.visitType === 'Sanitisation' || v.sanitised === 'Yes').length,
     requestsIn: reqIn, requestsDone: D.requests.filter((r) => r.status === 'Done' && inR(r.doneDate)),
     checkins: D.checkins.filter((x) => inR(x.date)), recoveries: D.recoveries.filter((r) => inR(r.startedDate)),
@@ -733,8 +827,9 @@ export function cashOutlook(customers, ledgers, today, days = 28) {
   for (const c of customers) {
     if ((c.status || 'Active') !== 'Active' || !isDate(c.installDate)) continue;
     const l = ledgers.get(c.id); if (!l || !l.nextBill) continue;
+    const BD = billDays(c);
     for (let k = l.nextBill.k; k < l.nextBill.k + 3; k++) {
-      const due = billDue(c.installDate, k); if (due <= today) continue; if (due > addDays(today, days)) break;
+      const due = BD.dues[k - 1]; if (due <= today) continue; if (due > addDays(today, days)) break;
       const b = k === l.nextBill.k ? { amount: l.nextBill.amount - (l.nextBill.paid || 0) } : billAmount(k);
       const w = weeks.find((x) => due >= x.from && due <= x.to); if (w && b.amount > 0.01) { w.amount += b.amount; w.bills++; }
     }
@@ -1113,7 +1208,7 @@ export function funnelDays(leads, customers, payments, from, to, today) {
   const leadFor = (c) => { const xs = phoneLeads.get(phoneKey(c.phone)) || []; const cut = (isDate(c.signUpDate) && c.signUpDate) || c.installDate || '9999';
     return xs.filter((l) => (!l.customerId || l.customerId === c.id) && (!takenBy.has(l.id) || takenBy.get(l.id) === c.id) && String(leadDates(l).lead || '') <= cut).sort((a, b) => String(leadDates(b).lead || '').localeCompare(String(leadDates(a).lead || '')))[0] || null; };
   const byId = new Map((leads || []).map((l) => [l.id, l]));
-  const firstPay = new Map(); for (const p of payments || []) { if (p.type === 'Referral credit' || !(Number(p.amount) > 0) || !isDate(p.date)) continue; const o = firstPay.get(p.customerId); if (!o || p.date < o) firstPay.set(p.customerId, p.date.slice(0, 10)); }
+  const firstPay = new Map(); for (const p of payments || []) { if (isNonCash(p) || !(Number(p.amount) > 0) || !isDate(p.date)) continue; const o = firstPay.get(p.customerId); if (!o || p.date < o) firstPay.set(p.customerId, p.date.slice(0, 10)); }
   const journeys = (customers || []).filter((c) => isDate(c.installDate) && c.installDate >= from && c.installDate <= to).map((c) => {
     const l = (c.leadId && byId.get(c.leadId)) || leadFor(c) || null; const ld = l ? leadDates(l) : { lead: null, demo: null, signed: null };
     const d = { lead: ld.lead, demo: ld.demo, signed: (isDate(c.signUpDate) && c.signUpDate) || ld.signed, installed: c.installDate, paid: firstPay.get(c.id) || null };
@@ -1154,13 +1249,13 @@ export function performKpis(D, ledgersIn, from, to, today, opts = {}) {
   const ledgers = ledgersIn || new Map(custs.map((c) => [c.id, ledger(c, D.payments, today, p)]));
   const payById = new Map((D.payments || []).map((q) => [q.id, q]));
   // cash
-  const cashPays = (D.payments || []).filter((q) => inR(q.date) && q.type !== 'Referral credit' && Number(q.amount) > 0);
+  const cashPays = (D.payments || []).filter((q) => inR(q.date) && !isNonCash(q) && Number(q.amount) > 0);
   const cash = cashPays.reduce((s2, q) => s2 + Number(q.amount), 0);
   let followCash = 0, dayOneCash = 0, dueFollow = 0, refFollow = 0; const crC = []; let outAll = 0; const rar = { 30: 0, 90: 0, 180: 0, cr70: 0, cr50: 0 };
   for (const c of custs) {
     const led = ledgers.get(c.id); if (!led) continue;
     for (const [pid, sp] of Object.entries(led.splits)) { const q = payById.get(pid); if (!q || !inR(q.date) || sp.extra !== undefined) continue;
-      if (q.type === 'Referral credit') { refFollow += (sp.subscription || 0) + (sp.deposit || 0); continue; } /* a free month: not cash, and not due as cash either */ const cs = sp.cashShare ?? 1; followCash += ((sp.subscription || 0) + (sp.deposit || 0) + (sp.unallocated || 0)) * cs; dayOneCash += (sp.install || 0) * cs; }
+      if (isNonCash(q)) { refFollow += (sp.subscription || 0) + (sp.deposit || 0); continue; } /* a free month: not cash, and not due as cash either */ const cs = sp.cashShare ?? 1; followCash += ((sp.subscription || 0) + (sp.deposit || 0) + (sp.unallocated || 0)) * cs; dayOneCash += (sp.install || 0) * cs; }
     for (const b of led.bills) if (b.k >= 2 && inR(b.due)) dueFollow += b.amount;
     if (c.status === 'Churned') continue;
     const out = contractLeft(c, led, p); outAll += out;

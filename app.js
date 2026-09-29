@@ -15,7 +15,7 @@ import * as CA from './capack.js';
 import * as B from './bs.js';
 import * as CAL from './cal.js';
 
-export const APP_VERSION = 'kf-v0.9.5 (2026-09-29)';
+export const APP_VERSION = 'kf-v0.10.0 (2026-09-29)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -25,7 +25,7 @@ export async function isAdminEmail(email) {
 }
 const firebaseConfig = { apiKey: 'practice-no-server', authDomain: 'practice.invalid', projectId: 'kora-field-practice-none', storageBucket: 'practice.invalid', messagingSenderId: '0', appId: '1:0:web:practice' }; // PRACTICE: fake on purpose
 // Local self-test/preview only (127.0.0.1 / localhost with ?demo): fake signed-in admin + demo data. Never active on the live site.
-export const DEMO = true; // PRACTICE build (koracarenepal.com/kora-field-practice/): fake data only — nothing reaches the server (fake Firebase config below)
+export const DEMO = true; // PRACTICE build (koracarenepal.com/kora-field-practice/): fake data only — nothing reaches the server (fake Firebase config above)
 if (/[?&]reset=1/.test(location.search)) { try { Object.keys(localStorage).filter((k) => k.startsWith('kfp_')).forEach((k) => localStorage.removeItem(k)); indexedDB.deleteDatabase('kfp-photos'); } catch (e) {} location.replace(location.pathname); }
 
 // Option lists — Airtable options (English names per the Phase 2 mapping) + SOP E-1/E-2/G-1 wording.
@@ -232,7 +232,7 @@ function jSave(list) {
   list = list.filter((e) => e.state !== 'done' || e.t > cutoff).slice(-1500);
   const ok = lsSet(JKEY, list); S.storageOk = ok; return ok;
 }
-function jPut(entry) { const l = jLoad(); const i = l.findIndex((x) => x.key === entry.key); if (i >= 0) l[i] = entry; else l.push(entry); return jSave(l); }
+function jPut(entry) { const l = jLoad(); const i = l.findIndex((x) => x.key === entry.key); if (i >= 0) l[i] = { ...entry, isNew: l[i].isNew || entry.isNew, data: { ...l[i].data, ...entry.data } }; else l.push(entry); return jSave(l); } // PRACTICE: edits add up
 function jMark(key, state, err) {
   const l = jLoad(); const e = l.find((x) => x.key === key); if (!e || e.state === state) return;
   e.state = state; e.err = err || ''; if (state === 'done') e.doneAt = Date.now(); jSave(l);
@@ -286,12 +286,12 @@ export function save(path, data, isNew, img) {
   const parts = path.split('/'); const id = parts[parts.length - 1]; const col = parts[0];
   if (isNew && parts.length === 2) data = stampPlace(col, data);
   if (!isNew && parts.length === 2 && S.D[col] && S.D[col].has(id)) auditLog(col, id, S.D[col].get(id), data);
-  const e = { key: path, path, id, data, isNew, uid: S.user.uid, state: 'pending', t: Date.now(), err: '', photo: !!img };
+  const e = { key: path, path, id, data, isNew, uid: S.user.uid, state: 'practice', t: Date.now(), err: '', photo: !!img };
   const ok = jPut(e);
   if (img) photoPut(id, img);
   if (parts.length === 2 && S.D[col]) {
     const prev = S.D[col].get(id) || {};
-    S.D[col].set(id, { ...prev, ...data, id, _pending: true, createdBy: prev.createdBy || S.user.uid, updatedBy: S.user.uid, _localT: Date.now() });
+    S.D[col].set(id, { ...prev, ...data, id, _pending: false, createdBy: prev.createdBy || S.user.uid, updatedBy: S.user.uid, _localT: Date.now() });
     bump();
   }
   sendEntry(e, img);
@@ -449,6 +449,10 @@ export function model() {
   if (can('stock')) { const cl = claimsSt.open.filter((x) => x.notSentLate || x.dueSoon); if (cl.length) alerts.push({ lvl: cl.some((x) => x.notSentLate) ? 'bad' : 'warn', ic: '📮', key: 'claims', t: `${cl.length} supplier claim(s) to send — PI deadline`, list: 'claims' }); }
   const nSoon = contractOpen.filter((o) => o.kind === 'notice' && (o.soon || o.overdue)).length; if (nSoon) alerts.push({ lvl: 'warn', ic: '📜', key: 'contract:notice', t: `${nSoon} home(s) ending soon — book the recovery`, list: 'contract' });
   const nLost = contractOpen.filter((o) => o.kind === 'lost').length; if (nLost) alerts.push({ lvl: 'warn', ic: '📜', key: 'contract:lost', t: `${nLost} lost or stolen device(s) not settled`, list: 'contract' });
+  const pSoon = R.pauseReminders(D.customers, null, t); if (pSoon.length) alerts.push({ lvl: 'info', ic: '⏸️', key: 'pause:soon', t: `${pSoon.length} paused home(s) restart within 7 days — message them and book the refit visit`, list: 'paused' });
+  const repairCr = R.repairCredits(D.requests, D.payments, t); /* v0.10 */ const rcDue = repairCr.filter((x) => x.c.done && !x.given); const rcSlow = repairCr.filter((x) => !x.c.done);
+  if (rcSlow.length) alerts.push({ lvl: 'warn', ic: '🛠️', key: 'repair:slow', t: `${rcSlow.length} repair(s) open over 7 days — the credit grows each day`, list: 'repairs' });
+  if (rcDue.length && isBoss()) alerts.push({ lvl: 'warn', ic: '🛠️', key: 'repair:credit', t: `${rcDue.length} late repair(s) — give the credit`, list: 'repairs' });
   const pLate = [...cust.values()].filter((x) => x.status === 'Paused' && R.isDate(x.c.pausedUntil) && x.c.pausedUntil < t).length; if (pLate) alerts.push({ lvl: 'warn', ic: '⏸️', key: 'pause:late', t: `${pLate} paused home(s) past their restart day`, list: 'paused' });
   const offTomorrow = (hm[tomorrow] || []).find((h) => h.kind === 'all'); if (offTomorrow) alerts.push({ lvl: 'info', ic: '🎉', t: `Office closed tomorrow — ${offTomorrow.n}`, cal: tomorrow });
   if (can('money')) for (const dl of CAL.deadlines(t, R.addDays(t, 5), S.settings)) alerts.push({ lvl: dl.d <= R.addDays(t, 2) ? 'bad' : 'warn', ic: dl.ic, t: `${dl.t} — ${dl.d === t ? 'today' : 'by ' + dl.d}${CAL.isOff(hm, dl.d) ? ' (a holiday — do it the day before)' : ''}`, cal: dl.d });
@@ -458,7 +462,7 @@ export function model() {
   const watch = watchAll.filter((w) => { const k = wOk[w.x.c.id]; return !(k && k.until >= t && w.score <= k.score); });
   const wHigh = watch.filter((w) => w.lvl === 'high').length; if (wHigh) alerts.push({ lvl: 'warn', ic: '⚠️', key: 'watch:high', t: `${wHigh} home(s) to look after this week`, list: 'watch' });
   if (isBoss() && S.fleetCache) for (const d of S.fleetCache) { const q = deviceIssues(d); if (q.lvl === 'bad') { alerts.push({ lvl: 'bad', ic: '📱', key: 'phone:' + d.id, t: `${userName(d.uid, d.name || d.email || 'A phone')}: ${q.out.filter((x) => x[0] === 'bad').map((x) => x[1]).join(' · ')}`, side: 'phones' }); } }
-  const m = { t, D, cust, ledgers, approvals, contractOpen, claimsSt, vials, collections, visitsDue, calls, tomorrowBills, openReq, leadsDue, metrics, deposits, vat, referrals, learning, filtersAll, alerts, devices, expMonths, relOpen, hm, mineOnly, watch, watchChecked: watchAll.length - watch.length, filterPlan, capacity };
+  const m = { t, D, cust, ledgers, approvals, repairCr, contractOpen, claimsSt, vials, collections, visitsDue, calls, tomorrowBills, openReq, leadsDue, metrics, deposits, vat, referrals, learning, filtersAll, alerts, devices, expMonths, relOpen, hm, mineOnly, watch, watchChecked: watchAll.length - watch.length, filterPlan, capacity };
   modelCache = { ver: S.ver, day: t, m };
   return m;
 }
@@ -695,6 +699,8 @@ FORMS.install = {
     }
     need(errs, v, 'agent', 'Who installed?');
     if (!v._edit && !confirmed && S.settings.screenWarn === 'Yes' && phone && !R.findScreening(arr('screenings'), S.convertLead, phone)) warns.name = 'No sign-up screening for this phone yet — do one first (🔎 New → Sign-up screening), or save anyway.';
+    const scr = !v._edit && phone ? R.findScreening(arr('screenings'), S.convertLead, phone) : null; /* v0.10 H5: the ID must be seen by the install day */
+    if (scr && !confirmed && scr.idSeen !== 'Yes') warns.name = (warns.name ? warns.name + ' ' : '') + 'ID not seen at the screening — see the ID before installing (hold).';
     if (v.buyerPan && !/^\d{9}$/.test(String(v.buyerPan).replace(/\s/g, ''))) errs.buyerPan = 'PAN has 9 digits.';
     return { errs, warns, phone };
   },
@@ -731,13 +737,21 @@ FORMS.customerEdit = {
     // v0.9 #2: each pause is one line in the home's pause history (start · why · planned restart · restarted)
     { k: 'pausedFrom', l: 'Paused from', t: 'date', def: () => ((editedCust() || {}).status === 'Paused' ? '' : today()), show: (v) => v.status === 'Paused', hint: 'Empty is fine for a home that was paused before this box existed.' },
     { k: 'pauseReason', l: 'Why paused', t: 'chips', o: OPT.pauseReason, show: (v) => v.status === 'Paused' },
-    { k: 'pausedUntil', l: 'Paused until', t: 'date', show: (v) => v.status === 'Paused', hint: 'The planned restart day (optional). Billing does not stop while paused — no policy yet (🔴 Jun decides).' },
+    { k: 'pausedUntil', l: 'Paused until', t: 'date', show: (v) => v.status === 'Paused', hint: 'Empty = the skipped bill day + 1 month − 1 day. At most 1 month (Jun 2026-09-29).' },
+    { k: 'pauseInfo', t: 'info', show: (v) => v.status === 'Paused' },
     { k: 'resumedOn', l: 'Restarted on', t: 'date', def: today, show: (v) => v.status === 'Active' && (editedCust() || {}).status === 'Paused' },
     ...FORMS.install.spec().filter((f) => !['checks', 'purifiedTds', 'flow', 'firstPay', 'payMethod', 'payRef', 'payBillNo', 'photos', 'signName', 'sign', 'noSign', 'vialStarted'].includes(f.k) && !(f.t === 'section' && ['Final checks', 'First-day payment', 'Photos', 'Customer signature', 'Raw-water vial (PoC)'].includes(f.l))),
     { k: 'photos', l: 'Add photos', t: 'photos' },
   ],
+  info(v) {
+    const c = (v._id && S.D.customers.get(v._id)) || editedCust(); if (!c || v.status !== 'Paused') return '';
+    const line = (x) => `<div>${esc(x)}</div>`; const E = R.pauseEligibility(c, model().ledgers.get(c.id), today(), { from: v.pausedFrom, reason: v.pauseReason, until: v.pausedUntil });
+    return (E.skipDue ? line(`Skipped bill: ${E.skipDue} · paused until ${v.pausedUntil || E.until}`) : '') + line('Back within 15 days of that bill day → that bill is charged. Either way it is the one pause for 12 months.') + line('Collect the cartridges at the start · fit new ones at the restart visit.')
+      + (E.why.length ? `<div class="warn" style="margin-top:6px">⚠️ ${E.why.map(esc).join('<br>')}</div>` : line('✅ All pause rules met (Jun 2026-09-29).'));
+  },
   check(v, confirmed) {
     const r = FORMS.install.check({ ...v, _edit: true }, confirmed); if (v.status === 'Churned' && !v.churnDate) r.errs.churnDate = 'When did they leave?';
+    const pc = S.D.customers.get(v._id); if (v.status === 'Paused' && pc && pc.status !== 'Paused' && !confirmed) { const E = R.pauseEligibility(pc, model().ledgers.get(pc.id), today(), { from: v.pausedFrom, reason: v.pauseReason, until: v.pausedUntil }); if (E.why.length) r.warns.pauseReason = E.why.join(' '); }
     if (v.status === 'Paused') { if (!v.pausedFrom && (S.D.customers.get(v._id) || {}).status !== 'Paused') r.errs.pausedFrom = 'When did it stop?'; if (!v.pauseReason) r.errs.pauseReason = 'Choose why.'; if (v.pausedUntil && v.pausedFrom && v.pausedUntil < v.pausedFrom) r.errs.pausedUntil = 'Cannot be before the pause starts.'; }
     const open = R.pauseSpans(S.D.customers.get(v._id) || {}, today()).find((p) => p.open);
     if (v.status === 'Active' && v.resumedOn && open && open.from && v.resumedOn < open.from) r.errs.resumedOn = 'Cannot be before the pause started.';
@@ -747,8 +761,10 @@ FORMS.customerEdit = {
     const prev = S.D.customers.get(id) || {}; const log = Array.isArray(prev.pauseLog) ? prev.pauseLog.map((p) => ({ ...p })) : []; const t = today();
     const open = log.length && !R.isDate(log[log.length - 1].resumed) ? log[log.length - 1] : null;
     if (v.status === 'Paused') {
-      if (open) Object.assign(open, { from: v.pausedFrom, until: v.pausedUntil || '', reason: v.pauseReason });
-      else log.push({ from: v.pausedFrom || '', until: v.pausedUntil || '', reason: v.pauseReason, resumed: '', by: myName(), at: new Date().toISOString() });
+      const E = R.pauseEligibility(prev, model().ledgers.get(id), t, { from: v.pausedFrom }); /* v0.10: the bill the pause skips is fixed when it is saved */
+      if (!v.pausedUntil && E.until) v.pausedUntil = E.until;
+      if (open) Object.assign(open, { from: v.pausedFrom, until: v.pausedUntil || '', reason: v.pauseReason, skipDue: open.skipDue || E.skipDue || '' });
+      else log.push({ from: v.pausedFrom || '', until: v.pausedUntil || '', reason: v.pauseReason, skipDue: E.skipDue || '', resumed: '', by: myName(), at: new Date().toISOString() });
     } else if (prev.status === 'Paused') {
       const end = v.status === 'Active' ? v.resumedOn || t : v.churnDate || t;
       if (open) Object.assign(open, { resumed: end, endedAs: v.status });
@@ -843,7 +859,7 @@ FORMS.payment = {
     custPicker,
     { k: 'due', t: 'info' },
     { k: 'date', l: 'Payment date', t: 'date', req: 1, def: today },
-    { k: 'type', l: 'What for', t: 'chips', o: () => R.PAYMENT_TYPES.filter((x) => x !== 'Referral credit' || isBoss()), req: 1, def: 'Monthly subscription' },
+    { k: 'type', l: 'What for', t: 'chips', o: () => R.PAYMENT_TYPES.filter((x) => !R.NONCASH.has(x) || isBoss()), req: 1, def: 'Monthly subscription' },
     { k: 'amount', l: 'Amount received (NPR)', t: 'number', req: 1 },
     { k: 'method', l: 'Paid by', t: 'chips', o: OPT.method, req: 1, def: 'Khalti' },
     { k: 'ref', l: 'Transaction ID', t: 'text', ph: 'from Khalti / eSewa / bank' },
@@ -898,6 +914,7 @@ FORMS.request = {
     { k: 'agent', l: 'Handled by', t: 'chips', o: techNames, def: myName },
     { k: 'resolution', l: 'What we did', t: 'textarea', show: (v) => v.status === 'Done' || v.status === 'In progress' },
     { k: 'doneDate', l: 'Done on', t: 'date', show: (v) => v.status === 'Done', def: today },
+    { k: 'ourFault', l: 'Whose fault was it?', t: 'chips', o: ['Our unit / our work', 'No — power, water supply or the customer'], def: 'Our unit / our work', show: (v) => v.status === 'Done' && R.REPAIR.types.includes(v.type), hint: 'Billing goes on. Not fixed within 7 days of the report → every day from the report comes off the next bill (Jun 2026-09-29).' },
   ],
   prefill(p) { return { customerId: p.cid || '', type: p.type || '' }; },
   check(v) {
@@ -1143,6 +1160,7 @@ FORMS.contract = {
     { k: 'endDate', l: 'They want to end on', t: 'date', show: isKind('Notice to end') },
     { k: 'reasonCode', l: 'Main reason', t: 'chips', o: OPT.leaveReason, show: isKind('Notice to end') },
     { k: 'noticeStatus', l: 'Still leaving?', t: 'chips', o: ['Yes, leaving', 'Withdrawn'], def: 'Yes, leaving', show: isKind('Notice to end'), hint: 'Withdrawn = they changed their mind — the reminder stops.' },
+    { k: 'abroad', l: 'Moving abroad (proof seen)?', t: 'chips', o: OPT.yesNo, def: 'No', show: isKind('Notice to end'), hint: 'Jun 2026-09-29: moving abroad with proof → the early-ending charge is halved (🔴 the lawyer words the proof).' },
     { k: 'newName', l: 'New holder — name', t: 'text', show: isKind('Transfer to a new holder') },
     { k: 'newPhone', l: 'New holder — mobile', t: 'tel', ph: '98XXXXXXXX', show: isKind('Transfer to a new holder') },
     { k: 'relation', l: 'Relation to the old holder', t: 'text', ph: 'e.g. son, new owner, tenant', show: isKind('Transfer to a new holder') },
@@ -1162,12 +1180,13 @@ FORMS.contract = {
     const c = S.D.customers.get(v.customerId); if (!c || !v.kind) return '';
     const line = (x) => `<div>${esc(x)}</div>`;
     if (v.kind === 'Notice to end') {
-      const T = R.noticeTerms(c, v.date, v.endDate); const dep = (model().deposits.rows.find((r) => r.c.id === c.id) || {}).held || 0;
+      const T = R.noticeTerms(c, v.date, v.endDate, R.PRICES, { abroad: v.abroad === 'Yes' }); const dep = (model().deposits.rows.find((r) => r.c.id === c.id) || {}).held || 0;
       return T.early ? `<div>⚠️ <b>${esc('Before 36 months')}</b> · <span>${esc(`month ${T.monthN || '?'} · minimum ends ${T.minEnd || '?'}`)}</span></div>` + line(`Early-ending charge (30% of the subscription still to come): ${T.remaining} months left → ${R.npr(T.earlyFee)}`) + line(T.earlyFee >= dep ? `Deposit paid so far ${R.npr(dep)} is used first → the customer pays ${R.npr(T.earlyFee - dep)} more.` : `Deposit paid so far ${R.npr(dep)} is used first → ${R.npr(dep - T.earlyFee)} goes back to the customer.`) + line('Jun set 30% on 2026-09-29 — 🔴 the lawyer still checks whether it holds (draft §2.2).') + line(T.removeBy ? `The unit comes back within 7 days — by ${T.removeBy}.` : 'The unit comes back within 7 days.') + line('The install fee and the months served are not refunded.') + line('🔴 [TBC] what happens to the part of the deposit not paid yet.')
         : line('After 36 months — draft §2.2:') + line(T.earliestEnd ? `30 days' notice — earliest end ${T.earliestEnd}.` : "30 days' notice.") + line(`The deposit (${R.npr(dep)}) is refunded with the unit back in working order.`);
     }
     if (v.kind === 'Transfer to a new holder') return line('🔴 Draft §2.11 (transfer / succession) is still [TBC] with the lawyer — this only records it. Saving puts the new name and phone on the customer; the old ones stay in this record.');
-    return line(`Draft §2.5(b): the customer tells us within ${R.CONTRACT.lostNotifyDays} days.`) + (c.deviceSerial ? line(`Saving marks the device ${c.deviceSerial} as “Lost / stolen”.`) : '');
+    const LS = R.lostSettlement(c, model().ledgers.get(c.id), v.lostDate || v.date);
+    return line(`Settlement (Jun 2026-09-29): early-ending charge ${R.npr(LS.fee)} + the unit's value ${R.npr(LS.residual)} − deposit paid ${R.npr(LS.deposit)} = ${R.npr(LS.total)}`) + line(`Draft §2.5(b): the customer tells us within ${R.CONTRACT.lostNotifyDays} days.`) + (c.deviceSerial ? line(`Saving marks the device ${c.deviceSerial} as “Lost / stolen”.`) : '');
   },
   prefill(p) { return { customerId: p.cid || '', kind: p.kind || '' }; },
   check(v) {
@@ -1194,8 +1213,8 @@ FORMS.contract = {
   },
   save(v, id, isNew) {
     const c = S.D.customers.get(v.customerId) || {}; const d = { ...v, by: myName() }; delete d.terms; delete d.photos;
-    for (const [k2, kinds] of Object.entries({ endDate: ['Notice to end'], reasonCode: ['Notice to end'], noticeStatus: ['Notice to end'], newName: ['Transfer to a new holder'], newPhone: ['Transfer to a new holder'], relation: ['Transfer to a new holder'], transferReason: ['Transfer to a new holder'], depositHandling: ['Transfer to a new holder'], newSigned: ['Transfer to a new holder'], lostDate: ['Lost or stolen'], fault: ['Lost or stolen'], policeRef: ['Lost or stolen'], settleAmount: ['Lost or stolen'], settledDate: ['Lost or stolen'] })) if (!kinds.includes(d.kind) && isNew) delete d[k2];
-    if (d.kind === 'Notice to end') { const T = R.noticeTerms(c, d.date, d.endDate); const paid = (model().deposits.rows.find((r) => r.c.id === c.id) || {}).held || 0; Object.assign(d, { early: T.early, removeBy: T.removeBy || '', depositPaid: paid, earlyFee: T.earlyFee, earlyNet: T.earlyFee - paid }); }
+    for (const [k2, kinds] of Object.entries({ endDate: ['Notice to end'], reasonCode: ['Notice to end'], noticeStatus: ['Notice to end'], abroad: ['Notice to end'], newName: ['Transfer to a new holder'], newPhone: ['Transfer to a new holder'], relation: ['Transfer to a new holder'], transferReason: ['Transfer to a new holder'], depositHandling: ['Transfer to a new holder'], newSigned: ['Transfer to a new holder'], lostDate: ['Lost or stolen'], fault: ['Lost or stolen'], policeRef: ['Lost or stolen'], settleAmount: ['Lost or stolen'], settledDate: ['Lost or stolen'] })) if (!kinds.includes(d.kind) && isNew) delete d[k2];
+    if (d.kind === 'Notice to end') { const T = R.noticeTerms(c, d.date, d.endDate, R.PRICES, { abroad: d.abroad === 'Yes' }); const paid = (model().deposits.rows.find((r) => r.c.id === c.id) || {}).held || 0; Object.assign(d, { early: T.early, removeBy: T.removeBy || '', depositPaid: paid, earlyFee: T.earlyFee, earlyNet: T.earlyFee - paid }); }
     if (d.kind === 'Transfer to a new holder') { d.newPhone = normPhone(d.newPhone); if (isNew) { d.oldName = c.name || ''; d.oldPhone = c.phone || ''; } }
     const ok = save(`contractEvents/${id}`, d, isNew);
     if (ok && isNew && d.kind === 'Transfer to a new holder' && c.id) save(`customers/${c.id}`, { name: String(d.newName).trim(), phone: d.newPhone, holderSince: d.date }, false);
@@ -1215,7 +1234,10 @@ FORMS.screening = {
     { k: 'date', l: 'Date', t: 'date', req: 1, def: today },
     { t: 'section', l: 'Home', hint: '🔴 First-guess rules (G-1 has no sign-up rule yet) — the verdict only advises; you decide at the end.' },
     { k: 'housing', l: 'Own house or rent?', t: 'chips', o: ['Own house', 'Renting'], req: 1 },
-    { k: 'landlordOk', l: 'Landlord agreed to the unit?', t: 'chips', o: OPT.yesNo, show: (v) => v.housing === 'Renting' },
+    { k: 'mount', l: 'Unit on the wall or on a stand?', t: 'chips', o: ['Stand', 'Wall'], def: 'Stand', show: (v) => v.housing === 'Renting', hint: 'Wall = drilling. Renting + wall needs the landlord\'s written OK (Civil Code §396(1)).' },
+    { k: 'landlordOk', l: 'Landlord agreed in writing?', t: 'chips', o: OPT.yesNo, show: (v) => v.housing === 'Renting' && v.mount === 'Wall' },
+    { k: 'landlordName', l: 'Landlord — name', t: 'text', show: (v) => v.housing === 'Renting' },
+    { k: 'landlordPhone', l: 'Landlord — mobile', t: 'tel', ph: '98XXXXXXXX', show: (v) => v.housing === 'Renting' },
     { k: 'yearsHere', l: 'Years living in this house', t: 'number', step: 0.5 },
     { k: 'stay36', l: 'Will they stay here 36 months?', t: 'chips', o: ['Yes', 'Not sure', 'No'], req: 1 },
     { k: 'householdSize', l: 'People in the household', t: 'number' },
@@ -1223,9 +1245,15 @@ FORMS.screening = {
     { k: 'prevWater', l: 'Drinking water now', t: 'chips', o: OPT.prevWater },
     { k: 'waterSpend', l: 'Spent on drinking water a month (NPR)', t: 'number' },
     { k: 'income', l: 'Main income', t: 'chips', o: R.SCREEN_INCOME, hint: 'Only the kind — do not ask the amount.' },
+    { k: 'remitMonths', l: 'Months the money usually comes', t: 'text', ph: 'e.g. Baisakh, Kartik', show: (v) => v.income === 'Money from abroad', hint: 'For the bill day — not a reason to hold.' },
+    { k: 'cashDay1', l: 'First-day 4,900 in cash on the install day?', t: 'chips', o: OPT.yesNo, req: 1, hint: 'No = hold. The first day is not split, owed or waived (Jun 2026-09-29).' },
     { t: 'section', l: 'Checks' },
     { k: 'phone2', l: 'Second phone (family)', t: 'tel' },
     { k: 'phone2Who', l: 'Whose is it', t: 'text', ph: 'e.g. husband, son abroad' },
+    { k: 'referee', l: 'Referee — name · relation · phone', t: 'text', ph: 'a neighbour, ward person or relative', hint: 'Needed when there is only one phone, or renting here under a year.' },
+    { k: 'consentSigned', l: 'Consent form signed?', t: 'chips', o: OPT.yesNo, hint: 'Needed before we tell a family number or referee about a late bill (Privacy Act §12).' },
+    { k: 'verifyBy', l: 'Check call made by', t: 'text', ph: 'someone other than the seller — usually Tara' },
+    { k: 'verifyDate', l: 'Check call on', t: 'date' },
     { k: 'idSeen', l: 'Citizenship card / ID seen?', t: 'chips', o: OPT.yesNo, req: 1, hint: 'Tick only — do not write the number or photograph it.' },
     { k: 'power', l: 'Power point near the tap?', t: 'chips', o: OPT.yesNo, req: 1 },
     { k: 'tap', l: 'A tap the unit can use?', t: 'chips', o: OPT.yesNo, req: 1 },
@@ -1245,7 +1273,7 @@ FORMS.screening = {
     if (!normPhone(v.phone)) errs.phone = 'Enter a 10-digit mobile number starting with 9.';
     if (v.phone2 && !normPhone(v.phone2)) errs.phone2 = '10-digit mobile starting with 9.';
     need(errs, v, 'date'); need(errs, v, 'housing', 'Choose one.'); need(errs, v, 'stay36', 'Choose one.'); need(errs, v, 'idSeen', 'Choose one.'); need(errs, v, 'power', 'Choose one.'); need(errs, v, 'tap', 'Choose one.'); need(errs, v, 'decision', 'Choose your decision.');
-    if (v.housing === 'Renting') need(errs, v, 'landlordOk', 'Choose one.');
+    if (v.housing === 'Renting' && v.mount === 'Wall') need(errs, v, 'landlordOk', 'Choose one.'); need(errs, v, 'cashDay1', 'Choose one.');
     if (!inRange(v.householdSize, 1, 40)) errs.householdSize = 'Check this number (1–40).';
     if (v.decision === 'Go ahead' && R.screenVerdict(v).verdict === 'Hold') warns.decision = 'The rules say hold — write why you go ahead in the notes.';
     return { errs, warns };
@@ -1959,9 +1987,10 @@ function viewDetail(p) {
     <div class="bigstat"><span class="v" style="color:${led.overdue ? 'var(--bad)' : 'var(--ok)'}">${led.overdue ? R.npr(led.overdue) : 'Paid up'}</span><span class="muted">${led.overdue ? `overdue since ${esc(led.overdueSince)} · ${led.daysOverdue} days` : `through bill ${led.paidThrough}`}</span></div>
     <div class="kv" style="margin-top:10px"><div class="k">Next bill</div><div class="v">${led.nextBill ? `#${led.nextBill.k} · ${R.npr(led.nextBill.amount - led.nextBill.paid)} on ${esc(led.nextBill.due)}` : 'none — has left'}</div>${led.prepaidAfterLeave > 0.5 ? `<div class="k">Paid ahead after leaving</div><div class="v" style="color:var(--warn)">${R.npr(led.prepaidAfterLeave)} — to pay back</div>` : ''}
       <div class="k">Deposit held</div><div class="v">${R.npr(dep ? dep.held : 0)} <span class="muted">of ${R.npr(R.PRICES.depositTotal)}</span></div>
-      <div class="k">Month of contract</div><div class="v">${Math.max(1, R.monthsBetween(c.installDate, m.t) + 1)} / ${R.PRICES.contractMonths}${led.contractEnded ? ' · <span class="pill warn">contract ended — renew</span>' : ''}</div></div>
+      <div class="k">Month of contract</div><div class="v">${Math.max(1, R.monthsBetween(c.installDate, m.t) + 1 - (led.skipped || []).filter((d) => d <= m.t).length)} / ${R.PRICES.contractMonths}${led.contractEnded ? ' · <span class="pill warn">contract ended — renew</span>' : ''}</div></div>
     <div class="scroll-x" style="margin-top:10px"><table class="tbl"><tr><th>#</th><th>Due</th><th class="n">Amount</th><th class="n">Paid</th><th>Status</th></tr>
       ${bills.map((b) => `<tr><td>${b.k}</td><td>${esc(b.due)}</td><td class="n">${Math.round(b.amount).toLocaleString('en-IN')}</td><td class="n">${Math.round(b.paid).toLocaleString('en-IN')}</td><td><span class="pill ${b.status === 'paid' ? 'ok' : b.status === 'future' ? 'grey' : 'bad'}">${b.status}</span>${R.inPause(spans, b.due) ? ' <span class="pill blue">⏸ paused</span>' : ''}</td></tr>`).join('')}</table></div>
+    ${(led.skipped || []).length ? `<div class="muted" style="margin-top:6px">${esc('⏸️ Skipped bill days (paused): ' + led.skipped.join(' · '))}</div>` : ''}
     ${spans.length ? `<div class="sec-mini">⏸️ Pauses (${spans.length})</div>${spans.slice().reverse().map((p) => `<div class="muted" style="margin:3px 0">${esc(p.from || '?')} → <span>${esc(p.to || (p.until ? 'until ' + p.until : 'still paused'))}</span>${p.days !== null ? ` · <span>${esc(p.days + ' days')}</span>` : ''}${esc(p.reason ? ' · ' + p.reason : '')}${p.endedAs === 'Churned' ? ' · <span class="pill grey">left</span>' : ''}${p.late ? ' · <span class="pill bad">restart day passed</span>' : ''}${p.by ? ' · ' + esc(p.by) : ''}</div>`).join('')}` : ''}
     ${x.chases && x.chases.length ? `<div class="sec-mini">📞 Payment contacts (${x.chases.length})</div>${x.chases.slice(0, 8).map((q) => { const pq = R.isDate(q.promiseDate) ? R.promiseOf([q], pays, t) : null; return `<div class="muted" style="margin:3px 0">${esc(q.date)} · ${esc(q.channel || '')} · <span>${esc(q.reached || '—')}</span>${q.by ? ' · ' + esc(q.by) : ''}${pq ? ` · 🤝 <span>${esc(`promised by ${pq.date}`)}</span>${pq.amount ? ' ' + R.npr(pq.amount) : ''} <span class="pill ${{ kept: 'ok', late: 'warn', broken: 'bad', waiting: 'blue' }[pq.status]}">${esc({ kept: 'kept', late: 'paid late', broken: 'broken', waiting: 'waiting' }[pq.status])}</span>` : ''}${q.lateReason ? ' · ' + esc(q.lateReason) : ''}${q.notes ? ` · “${esc(q.notes)}”` : ''}</div>`; }).join('')}` : ''}
     ${refs.length ? `<div class="note">🎁 Referral reward: ${refs.map((r) => `${r.role === 'referee' ? '1st month free' : '1 month free (referrer)'} ${r.ready ? `— <a href="#" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">apply</a>` : `(${esc(r.waiting)})`}`).join(' · ')}</div>` : ''}
@@ -2241,10 +2270,15 @@ function viewList(p) {
       `<h2>To do <span class="pill">${open.length}</span></h2><div class="card flush">${open.map((o) => contractItem(o.e, o)).join('') || '<div class="empty">Nothing open 🎉</div>'}</div>
       <h2>All <span class="pill">${all.length}</span></h2><div class="card flush">${all.slice(0, 60).map((e) => contractItem(e)).join('') || '<div class="empty">No contract events yet</div>'}</div>${canForm('contract') ? '<button class="btn" data-go-form="contract">📜 New contract event</button>' : ''}`;
   }
+  if (k === 'repairs') {
+    const xs = m.repairCr.slice().sort((a, b) => Number(a.given) - Number(b.given) || b.c.days - a.c.days); const cn = (id) => esc((S.D.customers.get(id) || {}).name || '?');
+    return head('🛠️ Late repairs', 'Jun 2026-09-29: billing goes on; a breakdown, leak or water-quality problem not fixed within 7 days of the report → every day from the report comes off the next bill (1,100 ÷ 30 a day). Not our fault (power, water supply, the customer) → nothing.') +
+      `<div class="card flush">${xs.map((x) => `<div class="item" data-cust="${esc(x.r.customerId)}"><span class="dot ${x.given ? 'g' : x.c.done ? 'r' : 'y'}"></span><div class="main"><div class="t">${cn(x.r.customerId)} · <span>${esc(x.r.type)}</span></div><div class="s"><span>${esc(x.c.days + ' days')}</span> · ${R.npr(x.c.amount)}${x.given ? ' · <span>given</span>' : ''} · ${esc(x.c.from)} → <span>${esc(x.c.done ? x.c.to : 'still open')}</span></div></div>${x.c.done && !x.given && isBoss() ? `<div class="acts"><button class="btn small" data-svccredit="${esc(x.r.id)}">Give ${R.npr(x.c.amount)}</button></div>` : ''}</div>`).join('') || '<div class="empty">No late repairs</div>'}</div>`;
+  }
   if (k === 'paused') {
     const P = R.pauseStats(m.D.customers, t, R.addDays(t, -365)); const px = [...m.cust.values()].filter((x) => x.status === 'Paused'); const cn = (c) => esc(c.name || '?');
     const right = (x) => { const sp = R.pauseSpans(x.c, t).find((p) => p.open) || {}; return `<div class="r" style="text-align:right">${sp.days !== null && sp.days !== undefined ? `<span class="pill ${sp.late ? 'bad' : 'blue'}">${esc(sp.days + ' days')}</span>` : ''}<div class="muted" style="font-size:12px">${sp.from ? esc('since ' + sp.from) : ''}${sp.until ? '<br>' + esc((sp.late ? 'restart day passed ' : 'restart ') + sp.until) : ''}</div></div>`; };
-    return head('⏸️ Paused', 'Each pause is one line in the home\'s history (customer → ✏️ Edit → status). Billing does not stop while paused — no policy yet (🔴 Jun decides).') +
+    return head('⏸️ Paused', 'Each pause is one line in the home\'s history (customer → ✏️ Edit → status). The first bill day after the start is skipped (one month) · back within 15 days → that bill is charged · rules: Jun 2026-09-29.') +
       `<div class="card flush">${px.map((x) => cItem(x, right(x))).join('') || '<div class="empty">Nobody paused</div>'}</div>
       <div class="card"><div class="kv"><div class="k">Paused now</div><div class="v num">${P.now.length}</div><div class="k">Past the restart day</div><div class="v num"${P.late.length ? ' style="color:var(--bad)"' : ''}>${P.late.length}</div>
         <div class="k">Pauses ended · 12 months</div><div class="v num">${P.closed.length}</div><div class="k">Days paused · average / median</div><div class="v num">${P.avgDays === null ? '—' : Math.round(P.avgDays)} / ${P.medianDays === null ? '—' : Math.round(P.medianDays)}</div>
@@ -2513,7 +2547,7 @@ export function dataQuality(m) {
   return [
     { k: 'gps', ic: '📍', t: 'Houses without GPS', why: 'no pin on the map, no route, no directions', xs: live.filter((x) => !(x.c.gps && Number.isFinite(x.c.gps.lat))).map((x) => ({ id: x.c.id, t: x.c.name, s: toleOf(x.c) })) },
     { k: 'house', ic: '🏠', t: 'No “how to find the house”', why: 'new technicians get lost', xs: live.filter((x) => !String(x.c.houseDetail || '').trim()).map((x) => ({ id: x.c.id, t: x.c.name, s: toleOf(x.c) })) },
-    { k: 'bill', ic: '🧾', t: 'Payments without a VAT bill no. (last 120 days)', why: 'the CA sales book needs it', xs: m.D.payments.filter((q) => q.type !== 'Referral credit' && q.date >= since && !String(q.billNo || '').trim()).sort((a, b) => String(b.date).localeCompare(String(a.date))).map((q) => ({ id: q.customerId, pay: q.id, t: `${R.npr(q.amount)} · ${(S.D.customers.get(q.customerId) || {}).name || '?'}`, s: `${q.date} · ${q.type}` })) },
+    { k: 'bill', ic: '🧾', t: 'Payments without a VAT bill no. (last 120 days)', why: 'the CA sales book needs it', xs: m.D.payments.filter((q) => !R.isNonCash(q) && q.date >= since && !String(q.billNo || '').trim()).sort((a, b) => String(b.date).localeCompare(String(a.date))).map((q) => ({ id: q.customerId, pay: q.id, t: `${R.npr(q.amount)} · ${(S.D.customers.get(q.customerId) || {}).name || '?'}`, s: `${q.date} · ${q.type}` })) },
     { k: 'tds', ic: '💧', t: 'Completed visits without TDS after', why: 'the TDS line and filter learning need it', xs: m.D.visits.filter((v) => isDone(v.status) && !Number.isFinite(v.tdsAfter)).map((v) => ({ id: v.customerId, t: (S.D.customers.get(v.customerId) || {}).name || '?', s: `${v.date} · ${v.visitType || 'Visit'}` })) },
     { k: 'lead', ic: '🧲', t: 'Open leads without a follow-up date', why: 'they are forgotten', xs: m.D.leads.filter((l) => !['Signed', 'Rejected'].includes(l.outcome) && !R.isDate(l.followUpDate)).map((l) => ({ lead: l.id, t: l.name, s: l.tole || '' })) },
   ];
@@ -2587,7 +2621,7 @@ async function fetchUsers() {
 }
 function staffActivity(uid, mk) {
   const inM = (d) => R.monthKey(d || '') === mk; const mine = (x) => x.createdBy === uid;
-  const pays = arr('payments').filter((x) => mine(x) && inM(x.date) && x.type !== 'Referral credit');
+  const pays = arr('payments').filter((x) => mine(x) && inM(x.date) && !R.isNonCash(x));
   const all = COLS.flatMap((col) => arr(col).filter(mine).map((x) => ({ col, x, t: (x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : x._localT) || 0 }))).sort((a, b) => b.t - a.t);
   return { installs: arr('customers').filter((x) => mine(x) && inM(x.installDate)).length, visits: arr('visits').filter((x) => mine(x) && inM(x.date) && isDone(x.status)).length,
     payN: pays.length, paySum: pays.reduce((sum, x) => sum + (Number(x.amount) || 0), 0), reqDone: arr('requests').filter((x) => mine(x) && x.status === 'Done' && inM(x.doneDate)).length,
@@ -2826,6 +2860,11 @@ document.addEventListener('click', async (ev) => {
   const cb = t.closest('button[data-cust]'); if (cb && cb.dataset.cust) { nav('customers', 'detail', { id: cb.dataset.cust }); return; } // a button inside an edit row
   const ed = t.closest('[data-edit]'); if (ed) { nav(S.route.tab, 'form', { form: ed.dataset.edit, id: ed.dataset.id }); return; }
   const rc = t.closest('[data-receipt]'); if (rc) { nav('customers', 'detail', { id: rc.dataset.cid, receipt: rc.dataset.receipt }); return; }
+  const sc = t.closest('[data-svccredit]'); if (sc) { /* before [data-cust]: the button sits inside the customer row */
+    if (!isBoss()) return; const x = model().repairCr.find((y) => y.r.id === sc.dataset.svccredit); if (!x || x.given || !x.c.done) return;
+    save(`payments/${x.id}`, { customerId: x.r.customerId, date: today(), type: 'Service credit', amount: x.c.amount, method: '', notes: `Repair late ${x.c.days} days (${x.c.from} → ${x.c.to}) · request ${x.r.id}`, by: myName() }, !S.D.payments.has(x.id));
+    toast(`🛠️ ${R.npr(x.c.amount)} comes off the next bill`); scheduleRender(); if (S.drawer) refreshDrawer(); return;
+  }
   const c = t.closest('[data-cust]'); if (c && c.dataset.cust) { nav('customers', 'detail', { id: c.dataset.cust }); return; }
   const ls = t.closest('[data-list]'); if (ls) { nav(S.route.tab, 'list', { list: ls.dataset.list }); return; }
   const rp = t.closest('[data-report]'); if (rp) { ev.preventDefault(); nav('status', 'report', { r: rp.dataset.report, ...(rp.dataset.serial ? { serial: rp.dataset.serial } : {}), ...(rp.dataset.uid ? { uid: rp.dataset.uid } : {}), ...(rp.dataset.pm ? { pm: rp.dataset.pm } : {}) }); return; }
@@ -3012,12 +3051,22 @@ if ('serviceWorker' in navigator && !DEMO) {
 
 initLang(DEMO ? (new URLSearchParams(location.search).get('lang') || 'en') : 'en');
 if (DEMO && new URLSearchParams(location.search).get('lang')) setLang(new URLSearchParams(location.search).get('lang'), false);
+// PRACTICE: the fake world is made once for the first practice day and kept (same records every day) · every practice save is replayed on top
+function practiceDay() { let d = lsGet('kfp_demo_day', ''); if (!R.isDate(d) || d > today()) { d = today(); lsSet('kfp_demo_day', d); } return d; }
+function practiceReplay() {
+  for (const e of jLoad().slice().sort((a, b) => a.t - b.t)) {
+    const parts = String(e.path || '').split('/'); if (parts.length !== 2) continue; const [col, id] = parts;
+    if (col === 'settings') { S.settings = { ...S.settings, ...e.data }; if (e.data.bsOverride) B.setOverrides(S.settings.bsOverride); continue; }
+    if (!S.D[col]) continue; const prev = S.D[col].get(id) || {};
+    S.D[col].set(id, { ...prev, ...e.data, id, createdBy: prev.createdBy || e.uid, updatedBy: e.uid, _localT: e.t });
+  }
+}
 if (DEMO) {
   S.user = { uid: 'demo-uid', email: 'demo@local' }; S.isAdmin = true; S.role = 'admin';
   const asRole = new URLSearchParams(location.search).get('as'); // ?as=technician|office|viewer → see the app as that staff member
   if (asRole && PRESETS[asRole]) { S.isAdmin = false; S.role = 'staff'; S.profile = { name: asRole === 'office' ? 'Tara' : asRole === 'technician' ? 'Ramesh' : 'Viewer', preset: asRole, perms: { ...PRESETS[asRole].perms, ...(asRole === 'technician' ? { seeAll: 0 } : {}) }, toles: asRole === 'technician' ? ['Lakeside', 'Baidam'] : [] }; }
   window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save};
   const flag = document.createElement('div'); flag.className = 'demo-flag'; flag.textContent = 'PRACTICE — NOT SENT TO THE SERVER'; document.body.appendChild(flag);
-  if (!location.search.includes('empty')) import('./demo.js').then((d) => { d.loadDemo(S, today()); bump(); heartbeat(true); render(true); }).catch((e) => console.warn('demo', e));
+  if (!location.search.includes('empty')) import('./demo.js').then((d) => { d.loadDemo(S, practiceDay()); practiceReplay(); bump(); heartbeat(true); render(true); }).catch((e) => console.warn('demo', e));
 }
 render(true);

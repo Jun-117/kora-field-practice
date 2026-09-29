@@ -232,12 +232,15 @@ export function loadDemo(S, today) {
     if (withPay[1]) { const { c, p } = withPay[1]; chase(c, { date: R.addDays(p.date, -5), reached: 'Talked', promiseDate: R.addDays(p.date, -3), promiseAmount: Number(p.amount) }); }
   }
   // v0.9 #2 demo: pause history — the paused homes get their line · 3 homes paused and restarted before · 1 paused and then left
-  { const q = rng(9292027); const qi = (a2, b2) => a2 + Math.floor(q() * (b2 - a2 + 1)); const why = R.PAUSE_REASONS;
-    for (const c of [...S.D.customers.values()].filter((x) => x.status === 'Paused')) { const from = R.addDays(today, -qi(8, 30)); c.pausedFrom = from; c.pauseReason = why[qi(0, 1)]; c.pauseLog = [{ from, until: c.pausedUntil || '', reason: c.pauseReason, resumed: '', by: 'Tara', at: from + 'T10:00:00.000Z' }]; }
+  { const q = rng(9292027); const qi = (a2, b2) => a2 + Math.floor(q() * (b2 - a2 + 1));
+    // v0.10 (Jun 2026-09-29): only "away" is a pause · it skips one bill day · at most 1 month · the first home restarts within a week
+    const lastAnniv = (c, d) => { let a = c.installDate; for (let j = 1; j <= 84; j++) { const n2 = R.addMonths(c.installDate, j); if (n2 > d) break; a = n2; } return a; };
+    [...S.D.customers.values()].filter((x) => x.status === 'Paused' && R.isDate(x.installDate)).forEach((c, i) => { const skipDue = lastAnniv(c, R.addDays(today, i ? -3 : 0)); const from = R.addDays(skipDue, -qi(2, 5)); const full = R.addDays(R.addMonths(skipDue, 1), -1);
+      c.pausedFrom = from; c.pauseReason = R.PAUSE.reason; c.pausedUntil = i ? full : (full < R.addDays(today, 5) ? full : R.addDays(today, 5)); c.pauseLog = [{ from, until: c.pausedUntil, reason: c.pauseReason, skipDue, resumed: '', by: 'Tara', at: from + 'T10:00:00.000Z' }]; });
     [...S.D.customers.values()].filter((x) => x.status === 'Active' && R.isDate(x.installDate) && x.installDate < R.addDays(today, -150)).slice(0, 3).forEach((c, i) => {
-      const from = R.addDays(today, -qi(60, 140)); c.pauseLog = [{ from, until: R.addDays(from, 30), reason: why[[0, 2, 1][i]], resumed: R.addDays(from, qi(7, 40)), endedAs: 'Active', by: 'Tara', at: from + 'T09:00:00.000Z' }]; });
+      const from = R.addDays(today, -qi(60, 140)); c.pauseLog = [{ from, until: R.addDays(from, 30), reason: R.PAUSE.reason, resumed: R.addDays(from, qi(7, 40)), endedAs: 'Active', by: 'Tara', at: from + 'T09:00:00.000Z' }]; });
     const gone = [...S.D.customers.values()].find((x) => x.status === 'Churned' && R.isDate(x.churnDate) && x.churnDate > R.addDays(today, -300) && x.churnDate < R.addDays(today, -20));
-    if (gone) { const from = R.addDays(gone.churnDate, -qi(15, 40)); gone.pauseLog = [{ from, until: '', reason: 'Money trouble', resumed: gone.churnDate, endedAs: 'Churned', by: 'Tara', at: from + 'T09:00:00.000Z' }]; }
+    if (gone) { const from = R.addDays(gone.churnDate, -qi(15, 40)); gone.pauseLog = [{ from, until: '', reason: R.PAUSE.reason, resumed: gone.churnDate, endedAs: 'Churned', by: 'Tara', at: from + 'T09:00:00.000Z' }]; }
   }
   // v0.9 #3 demo: a notice to end (early, 5 days out, no recovery yet) · an older transfer · a lost device not settled
   { const act = [...S.D.customers.values()].filter((x) => x.status === 'Active' && R.isDate(x.installDate) && x.installDate < R.addDays(today, -60));
@@ -246,10 +249,24 @@ export function loadDemo(S, today) {
     if (cT) put('contractEvents', { customerId: cT.id, kind: 'Transfer to a new holder', date: R.addDays(today, -40), channel: 'In person', oldName: 'Hari ' + String(cT.name || '').split(' ').pop(), oldPhone: '+9779801234567', newName: cT.name, newPhone: cT.phone, relation: 'son', transferReason: 'Within the family', depositHandling: 'Carried over to the new holder', newSigned: 'Yes', by: 'Tara' });
     if (cL) put('contractEvents', { customerId: cL.id, kind: 'Lost or stolen', date: R.addDays(today, -6), channel: 'Phone', lostDate: R.addDays(today, -15), fault: 'Not known yet', by: 'Tara' });
   }
+  // v0.10 demo: late repairs (Jun 2026-09-29 — over 7 days from the report → a credit from the report day) · one ours not given · one not our fault · one still open · one already given
+  { const act = [...S.D.customers.values()].filter((x) => x.status === 'Active' && R.isDate(x.installDate) && x.installDate < R.addDays(today, -90));
+    const late = (c, type, got, done, fault, desc) => put('requests', { customerId: c.id, type, priority: 'Normal', status: done === null ? 'In progress' : 'Done', receivedAt: R.addDays(today, -got) + 'T11:20', receivedAtMs: R.parseD(R.addDays(today, -got)).getTime() + 11 * 3600e3, receivedDate: R.addDays(today, -got), description: desc, agent: 'Ramesh', resolution: done === null ? '' : 'pump replaced (part waited)', doneDate: done === null ? '' : R.addDays(today, -done), ...(done === null ? {} : { ourFault: fault }) });
+    const c1 = act[3], c2 = act[9], c3 = act[15], c4 = act[21];
+    if (c1) late(c1, 'Breakdown', 20, 8, 'Our unit / our work', 'no water coming out — pump not running');
+    if (c2) late(c2, 'Leak', 15, 6, 'No — power, water supply or the customer', 'leak under the sink — their own pipe');
+    if (c3) late(c3, 'Water quality', 9, null, '', 'water smells since the rain');
+    if (c4) { const r4 = late(c4, 'Breakdown', 40, 30, 'Our unit / our work', 'UV light off'); const cr = R.repairCredit(r4, today); if (cr) put('payments', { id: 'svc_' + r4.id, customerId: c4.id, date: R.addDays(today, -29), type: 'Service credit', amount: cr.amount, method: '', notes: `Repair late ${cr.days} days`, by: 'Jun' }); }
+  }
   // v0.9 #4 demo: sign-up screenings — most open leads, and half of the customers who came from a lead (so the outcome table has rows)
-  { const q = rng(9292029); const pick = (a2) => a2[Math.floor(q() * a2.length)];
+  { const q = rng(9292029); const q2 = rng(9292031); const pick = (a2) => a2[Math.floor(q() * a2.length)];
     const one = (x, date, leadId) => { const s = { name: x.name, phone: x.phone || '', tole: x.tole || '', date, housing: q() < 0.7 ? 'Own house' : 'Renting', yearsHere: Math.round(q() * 12 * 2) / 2, stay36: q() < 0.8 ? 'Yes' : q() < 0.5 ? 'Not sure' : 'No', householdSize: 3 + Math.floor(q() * 4), prevWater: pick(['Jar (20L delivery)', 'Boiled tap', 'Bottled']), waterSpend: 300 + Math.floor(q() * 8) * 50, income: pick(R.SCREEN_INCOME), phone2: q() < 0.75 ? '+97798' + (10000000 + Math.floor(q() * 89999999)) : '', idSeen: q() < 0.9 ? 'Yes' : 'No', power: q() < 0.95 ? 'Yes' : 'No', tap: 'Yes', waterSource: q() < 0.85 ? 'Municipal tap' : 'Well / borehole', leadId: leadId || '', by: 'Tara' };
-      if (s.housing === 'Renting') s.landlordOk = q() < 0.8 ? 'Yes' : 'No'; const V = R.screenVerdict(s); s.verdict = V.verdict; s.verdictWhy = [...V.hold, ...V.check]; s.decision = V.verdict === 'Hold' ? 'Wait' : 'Go ahead'; put('screenings', s); };
+      if (s.housing === 'Renting') s.landlordOk = q() < 0.8 ? 'Yes' : 'No';
+      s.by = q2() < 0.7 ? 'Ramesh' : 'Tara'; s.cashDay1 = q2() < 0.93 ? 'Yes' : 'No'; s.consentSigned = q2() < 0.85 ? 'Yes' : 'No'; if (q2() < 0.8 && s.by !== 'Tara') { s.verifyBy = 'Tara'; s.verifyDate = R.addDays(date, 1); }
+      if (s.housing === 'Renting') { s.mount = q2() < 0.35 ? 'Wall' : 'Stand'; if (s.mount !== 'Wall') delete s.landlordOk; if (q2() < 0.8) { s.landlordName = 'Landlord ' + x.name.split(' ').pop(); s.landlordPhone = '+97798' + (10000000 + Math.floor(q2() * 89999999)); } }
+      if (!s.phone2 && q2() < 0.6) s.referee = 'Hari · neighbour · 98' + (10000000 + Math.floor(q2() * 89999999));
+      if (s.income === 'Money from abroad') s.remitMonths = q2() < 0.5 ? 'Baisakh, Kartik' : 'every 2–3 months';
+      const V = R.screenVerdict(s); s.verdict = V.verdict; s.verdictWhy = [...V.hold, ...V.check]; s.decision = V.verdict === 'Hold' ? 'Wait' : 'Go ahead'; put('screenings', s); };
     for (const l of [...S.D.leads.values()].filter((x) => !['Signed', 'Rejected'].includes(x.outcome))) if (q() < 0.6) one(l, R.addDays(today, -Math.floor(q() * 10)), l.id);
     for (const c of [...S.D.customers.values()].filter((x) => R.isDate(x.signUpDate || x.installDate))) if (q() < 0.5) one(c, R.addDays(c.signUpDate || c.installDate, -2), c.leadId || '');
   }

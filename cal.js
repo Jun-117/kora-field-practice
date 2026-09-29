@@ -116,8 +116,9 @@ export function customerDays(m, from, to) {
   for (const x of m.cust.values()) {
     const c = x.c; if (x.status !== 'Active' || !R.isDate(c.installDate)) continue;
     // bills: the ledger knows the past ones; future ones follow the install day (G-1 §1-3)
+    const BDc = R.billDays(c); /* v0.10: paused months are skipped */
     for (let k = 1; k <= 72; k++) {
-      const due = R.billDue(c.installDate, k); if (due > to) break; if (due < from) continue;
+      const due = BDc.dues[k - 1]; if (due > to) break; if (due < from) continue;
       const b = x.led.bills[k - 1] || { k, due, ...R.billAmount(k), paid: 0, status: due > t ? 'future' : 'due' };
       const left = b.status === 'paid' ? 0 : b.amount - (b.paid || 0);
       add(due, { kind: 'bill', ic: '💵', cid: c.id, t: c.name, sub: `bill ${k} · ${Math.round(b.status === 'paid' ? b.amount : left).toLocaleString('en-IN')}${b.status !== 'paid' && b.paid ? ' left' : ''}`, amt: b.amount, left, status: b.status, tole: toleName(c) });

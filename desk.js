@@ -309,7 +309,7 @@ function pageCommand(m) {
   const weeks = M.weeks.map((w) => w.n);
   const mk = monthsBack(t, 12);
   const cashBy = Object.fromEntries(mk.map((k) => [k, 0]));
-  for (const p of m.D.payments) if (p.type !== 'Referral credit' && cashBy[R.monthKey(p.date)] !== undefined) cashBy[R.monthKey(p.date)] += Number(p.amount) || 0;
+  for (const p of m.D.payments) if (!R.isNonCash(p) && cashBy[R.monthKey(p.date)] !== undefined) cashBy[R.monthKey(p.date)] += Number(p.amount) || 0;
   const cashVals = mk.map((k) => cashBy[k]);
   const H = historyModel(m); const prevMk = mk[mk.length - 2]; const prev = H.byMonth[prevMk];
   const fStat = { overdue: 0, soon: 0, ok: 0 }; for (const f of m.filtersAll) fStat[f.status] = (fStat[f.status] || 0) + 1;
@@ -582,7 +582,7 @@ function repVisual(k, m, p) {
       + panel('s5', 6, '<b>Homes by amount held</b>', hbars(buckets, 'var(--info)'));
   }
   if (k === 'payments') {
-    const cur = R.monthKey(t); const ps = m.D.payments.filter((q) => q.type !== 'Referral credit');
+    const cur = R.monthKey(t); const ps = m.D.payments.filter((q) => !R.isNonCash(q));
     const thisM = ps.filter((q) => R.monthKey(q.date) === cur); const prevM = ps.filter((q) => R.monthKey(q.date) === R.monthKey(R.addMonths(cur + '-01', -1)));
     const byMethod = {}; for (const q of thisM) byMethod[q.method || '—'] = (byMethod[q.method || '—'] || 0) + (Number(q.amount) || 0);
     const days = Array.from({ length: 30 }, (_, i) => R.addDays(t, i - 29)); const byDay = Object.fromEntries(days.map((x) => [x, 0])); for (const q of ps) if (byDay[q.date] !== undefined) byDay[q.date] += Number(q.amount) || 0;
@@ -678,7 +678,7 @@ export function monthPeekHtml(mk) {
   const ex = m.expMonths[mk] || { paid: 0, vat: 0, net: 0, byCat: {} }; const rev = X.vat ? X.vat.net : 0; const result = rev - ex.net;
   const bsA = B.adToBs(mk + '-01'), bsB = B.adToBs(X.end);
   const days = []; for (let d = mk + '-01'; d <= X.end; d = R.addDays(d, 1)) days.push(d);
-  const byDay = Object.fromEntries(days.map((d) => [d, 0])); for (const q of A.payments) if (q.type !== 'Referral credit' && byDay[q.date] !== undefined) byDay[q.date] += Number(q.amount) || 0;
+  const byDay = Object.fromEntries(days.map((d) => [d, 0])); for (const q of A.payments) if (!R.isNonCash(q) && byDay[q.date] !== undefined) byDay[q.date] += Number(q.amount) || 0;
   const cname = (id) => { const c = S.D.customers.get(id); return c ? c.name : '?'; };
   const tile = (l, v, sub, color) => `<div class="pk-tile"><span>${l}</span><b class="num"${color ? ` style="color:${color}"` : ''}>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
   const exps = m.D.expenses.filter((x) => R.monthKey(x.date || '') === mk).sort((a, b) => String(a.date).localeCompare(String(b.date)));
@@ -1026,7 +1026,7 @@ export function liveModel(m) {
   for (const v of m.D.visits) if (v.date === t && String(v.status || '').includes('Completed')) { add(v.technician, { ic: '🔧', t: `${v.visitType || 'Visit'} · ${cn(v.customerId)}`, ms: tsOf(v), at: v.savedAt, cid: v.customerId }); if (v.technician) P(v.technician).done.push(v.customerId); }
   for (const v of m.D.visits) if (String(v.date || '').slice(0, 10) === t && R.isNoShow(v)) add(v.technician, { ic: '🚪', t: `Nobody home · ${cn(v.customerId)}`, ms: tsOf(v), at: v.savedAt, cid: v.customerId });
   for (const c of m.D.customers) if (c.installDate === t) { add(c.agent, { ic: '🏠', t: `Install · ${c.name}`, ms: tsOf(c), at: c.savedAt, cid: c.id }); if (c.agent) P(c.agent).done.push(c.id); }
-  for (const q of m.D.payments) if (q.date === t && q.type !== 'Referral credit') { add(q.by, { ic: '💵', t: `${R.npr(q.amount)} · ${q.method || ''} · ${cn(q.customerId)}`, ms: tsOf(q), at: q.savedAt, cid: q.customerId }); if (q.by) { P(q.by).cash += Number(q.amount) || 0; if (q.method === 'Cash') P(q.by).cashCash += Number(q.amount) || 0; } }
+  for (const q of m.D.payments) if (q.date === t && !R.isNonCash(q)) { add(q.by, { ic: '💵', t: `${R.npr(q.amount)} · ${q.method || ''} · ${cn(q.customerId)}`, ms: tsOf(q), at: q.savedAt, cid: q.customerId }); if (q.by) { P(q.by).cash += Number(q.amount) || 0; if (q.method === 'Cash') P(q.by).cashCash += Number(q.amount) || 0; } }
   for (const r of m.D.requests) if (r.status === 'Done' && r.doneDate === t) add(r.agent, { ic: '📋', t: `Request done · ${cn(r.customerId)}`, ms: tsOf(r), at: r.savedAt, cid: r.customerId });
   for (const q of m.D.checkins) if (q.date === t) add(q.by, { ic: '📞', t: `${q.kind} · ${cn(q.customerId)}`, ms: tsOf(q), at: q.savedAt, cid: q.customerId });
   const rows = Object.values(who).filter((p) => p.name !== '—' || p.plan.length);

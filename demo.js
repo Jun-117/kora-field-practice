@@ -305,3 +305,69 @@ export function loadDemo(S, today) {
     older.slice(0, 12).forEach((c, i) => vial(c, i % 4 === 0 ? R.VIAL_RESULTS[0] : i % 4 === 1 ? R.VIAL_RESULTS[1] : i === 10 ? R.VIAL_RESULTS[3] : R.VIAL_RESULTS[2], 1 + Math.floor(q() * 2)));
   }
 }
+
+// PRACTICE (v0.10.1 · Jun 2026-09-29 "살아있는것처럼"): the fake world keeps living after the day it was made.
+// Customers pay by their habit (on time · late · stopped — the same habit every day), new repair requests come in, neighbours of
+// customers ask about the unit (leads linked to the customer who told them), and a promise you logged on a chase call is kept on
+// its day most of the time. Only the customers act — the staff work (visits, calls, installs, recording cash) stays yours.
+// The same day always gives the same events (ids sim_…), so a reload never doubles anything; events later than `nowMs` wait.
+// Returns the records it added this time.
+export function liveWorld(S, anchor, nowMs) {
+  const today = R.fmtD(new Date(nowMs)); if (!R.isDate(anchor) || today <= anchor) return [];
+  const seen = S.simSeen || (S.simSeen = new Set()); const added = [];
+  const hash = (s) => { let h = 2166136261; for (const ch of String(s)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const stream = (key) => { const q = rng(hash(key)); return { q, int: (a, b) => a + Math.floor(q() * (b - a + 1)), pick: (a) => a[Math.floor(q() * a.length)] }; };
+  const msOf = (d, h, m) => R.parseD(d).getTime() + (h * 60 + m) * 60e3;
+  const put = (col, x, ms) => {
+    if (ms > nowMs || seen.has(x.id)) return; seen.add(x.id);
+    const cur = S.D[col].get(x.id); // a practice edit of this record was replayed first → keep the edit on top
+    S.D[col].set(x.id, { ...x, createdBy: x.createdBy || 'demo-tara', updatedAt: { toMillis: () => ms }, ...(cur || {}) }); added.push({ col, x: S.D[col].get(x.id) });
+  };
+  const days = []; for (let d = R.addDays(anchor, 1); d <= today; d = R.addDays(d, 1)) days.push(d);
+  const active = [...S.D.customers.values()].filter((c) => c.status === 'Active' && R.isDate(c.installDate)).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  const paysOf = (id) => [...S.D.payments.values()].filter((p) => p.customerId === id);
+  const chases = [...S.D.checkins.values()].filter((q) => q.kind === R.CHASE_KIND && R.isDate(q.promiseDate) && q.promiseDate > anchor && q.promiseDate <= today);
+  const pay = (c, date, amount, key, extra) => {
+    if (!(amount > 0.5)) return; const s = stream('m|' + key); const h = s.int(8, 20), mi = s.int(0, 59);
+    put('payments', { id: 'sim_pay_' + key, customerId: c.id, date, type: 'Monthly subscription', amount: Math.round(amount), method: s.pick(['Khalti', 'eSewa', 'Fonepay QR', 'Fonepay QR']), ref: 'TXN' + s.int(100000, 999999), billNo: '', point: 'Digital', by: 'Tara', ...extra }, msOf(date, h, mi));
+  };
+  // 1 · bills: each home pays by its habit (from how it stood on the day the world was made)
+  for (const c of active) {
+    const led0 = R.ledger(c, paysOf(c.id), anchor); const s = stream('habit|' + c.id);
+    const habit = led0.daysOverdue > 30 ? 'stopped' : led0.daysOverdue > 0 || s.q() > 0.82 ? 'late' : 'ontime';
+    if (habit === 'stopped') continue; // only a promise on a chase call brings money now
+    const promised = chases.some((q) => q.customerId === c.id);
+    const dues = R.billDays(c).dues;
+    for (let k = 2; k <= dues.length; k++) {
+      const due = dues[k - 1]; if (due > today) break; if (due < R.addDays(anchor, -40)) continue;
+      const w = stream(`bill|${c.id}|${k}`); let date = R.addDays(due, habit === 'ontime' ? w.int(-2, 3) : w.int(4, 18));
+      if (due <= anchor) { if (promised) continue; if (date <= anchor) date = R.addDays(anchor, w.int(1, 6)); } // late at the start: pays in the first days
+      if (date <= anchor || date > today) continue;
+      const b = R.ledger(c, paysOf(c.id), date < due ? due : date).bills[k - 1]; if (!b || b.status === 'paid') continue; // already paid (also by you) → nothing
+      pay(c, date, b.amount - b.paid, `${c.id}_${k}`, {});
+    }
+  }
+  // 2 · promises you logged on a chase call: kept on the day (or the day after) most of the time
+  for (const q of chases) {
+    const c = S.D.customers.get(q.customerId); if (!c || c.status === 'Churned') continue;
+    const w = stream('promise|' + q.id); if (w.q() > 0.75) continue; const date = w.q() < 0.7 ? q.promiseDate : R.addDays(q.promiseDate, 1); if (date > today) continue;
+    const led = R.ledger(c, paysOf(c.id), date); if (led.overdue < 0.5) continue; // paid some other way already
+    pay(c, date, Number(q.promiseAmount) || led.overdue, 'p_' + q.id, { notes: 'kept the promise from the chase call' });
+  }
+  // 3 · each day: repair requests (about one every two days) · people asking about the unit (often a customer's neighbour)
+  const reqT = [['Water quality', 'water tastes different since yesterday'], ['Leak', 'small leak under the tap'], ['Breakdown', 'no water coming out'], ['Water quality', 'water smells since the rain'], ['Other', 'wants to move the unit to the other wall'], ['Breakdown', 'UV light blinking'], ['Leak', 'drip from the filter housing']];
+  for (const d of days) {
+    const s = stream('day|' + d); const nReq = (s.q() < 0.5 ? 1 : 0) + (s.q() < 0.12 ? 1 : 0);
+    for (let i = 0; i < nReq && active.length; i++) {
+      const c = s.pick(active); const [type, desc] = s.pick(reqT); const h = s.int(7, 19), mi = s.int(0, 59); const ms = msOf(d, h, mi);
+      put('requests', { id: `sim_req_${d}_${i}`, customerId: c.id, type, priority: type === 'Breakdown' ? 'Urgent' : 'Normal', status: 'Received', receivedAt: `${d}T${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`, receivedAtMs: ms, receivedDate: d, description: desc, agent: R.assigneeOf(c, d), resolution: '', doneDate: '' }, ms);
+    }
+    if (s.q() < 0.55 && active.length) {
+      const ref = s.q() < 0.6 ? s.pick(active) : null; const h = s.int(9, 20), mi = s.int(0, 59);
+      put('leads', { id: `sim_lead_${d}`, name: `${s.pick(FIRST)} ${s.pick(LAST)}`, phone: '+97798' + s.int(10000000, 99999999), tole: ref ? ref.tole : s.pick(Object.keys(TOLES)), ward: ref ? ref.ward : String(s.int(1, 33)),
+        channel: ref ? 'Word of mouth' : s.pick(['Facebook', 'Pop-up Booth', 'Tara_Direct']), referrerId: ref ? ref.id : '', outcome: 'New', followUpDate: R.addDays(d, 1),
+        notes: ref ? `neighbour of ${ref.name} (customer ${ref.code}) — saw the unit there` : '' }, msOf(d, h, mi));
+    }
+  }
+  return added;
+}

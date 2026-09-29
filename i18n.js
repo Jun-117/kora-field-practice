@@ -1163,6 +1163,26 @@ P.unshift(
   [/^🛠️ (NPR [\d,]+) comes off the next bill$/, '🛠️ 다음 청구서에서 $1 빠져요', '🛠️ अर्को बिलबाट $1 घट्छ'],
 );
 
+// v0.10.1 — demo / practice: who you practise as · start over · the living world (🔴 Nepali = draft for Tara)
+Object.assign(W, {
+  PRACTICE: ['연습', 'अभ्यास'], 'Change who you are': ['누구로 볼지 바꾸기', 'को भएर हेर्ने बदल्नुहोस्'], '👤 Practise as': ['👤 누구로 연습할까', '👤 को भएर अभ्यास गर्ने'],
+  'One set of data for all three — what one saves, the others see (like the real server).': ['세 사람이 같은 데이터를 써요 — 한 사람이 저장하면 다른 사람도 봐요 (진짜 서버처럼).', 'तीनै जनाको एउटै डाटा — एकले सेभ गरेको अरूले पनि देख्छन् (साँचो सर्भरजस्तै)।'],
+  'Admin — everything': ['관리자 — 전부', 'एडमिन — सबै'],
+  'Deputy admin · office — every home, money OKs, service credits (not the settings)': ['대리 관리자 · 사무실 — 모든 집, 돈 승인, 수리 지연 감면 (설정은 X)', 'सहायक एडमिन · अफिस — सबै घर, पैसा स्वीकृति, सेवा छुट (सेटिङ बाहेक)'],
+  "Technician — only his homes and today's route · visits, installs, cash": ['기사 — 자기 담당 집과 오늘 동선만 · 방문, 설치, 현금', 'प्राविधिक — आफ्नै घर र आजको रुट मात्र · भ्रमण, जडान, नगद'],
+  '🗑️ Start over': ['🗑️ 처음부터 다시', '🗑️ फेरि सुरुदेखि'], 'Start over': ['처음부터 다시', 'फेरि सुरुदेखि'],
+  'Fake data made again from today · every practice record deleted.': ['오늘 기준으로 가짜 데이터를 새로 만들어요 · 연습 기록은 전부 지워져요.', 'आजबाट नक्कली डाटा फेरि बन्छ · अभ्यासका सबै रेकर्ड मेटिन्छन्।'],
+  'Tap again — delete every practice record': ['한 번 더 누르면 — 연습 기록 전부 삭제', 'फेरि थिच्नुहोस् — अभ्यासका सबै रेकर्ड मेटाउने'],
+  'kept the promise from the chase call': ['독촉 전화 때 한 약속을 지킴', 'ताकेता फोनमा गरेको वाचा पूरा गर्‍यो'],
+  'water tastes different since yesterday': ['어제부터 물맛이 달라요', 'हिजोदेखि पानीको स्वाद फरक छ'], 'no water coming out': ['물이 안 나와요', 'पानी आउँदैन'],
+  'wants to move the unit to the other wall': ['기기를 다른 벽으로 옮기고 싶어 함', 'उपकरण अर्को भित्तामा सार्न चाहनुहुन्छ'], 'UV light blinking': ['UV 램프가 깜빡여요', 'UV बत्ती झिम्किन्छ'], 'drip from the filter housing': ['필터 하우징에서 물이 떨어져요', 'फिल्टर हाउसिङबाट पानी चुहिन्छ'],
+  'water tastes different': ['물맛이 달라요', 'पानीको स्वाद फरक छ'], 'small leak under the tap': ['수도꼭지 밑에 조금 새요', 'धारामुनि अलिकति चुहिन्छ'], 'water flow slow since yesterday': ['어제부터 물이 약하게 나와요', 'हिजोदेखि पानी बिस्तारै आउँछ'], 'wants a second tap': ['꼭지를 하나 더 달고 싶어 함', 'अर्को धारा थप्न चाहनुहुन्छ'],
+});
+P.unshift(
+  [/^(Since you last looked|Just now): payments (\d+) · repair requests (\d+) · new leads (\d+)$/, (m) => `${m[1] === 'Just now' ? '방금' : '지난번 이후'}: 결제 ${m[2]} · 수리 요청 ${m[3]} · 새 리드 ${m[4]}`, (m) => `${m[1] === 'Just now' ? 'भर्खरै' : 'पछिल्लो पटकदेखि'}: भुक्तानी ${m[2]} · मर्मत अनुरोध ${m[3]} · नयाँ लिड ${m[4]}`],
+  [/^neighbour of (.+) \(customer (KC-[A-Z0-9-]+)\) — saw the unit there$/, '$1 이웃 (고객 $2) — 그 집에서 기기를 봄', '$1 को छिमेकी (ग्राहक $2) — त्यहाँ उपकरण देखे'],
+);
+
 Object.assign(W, { 'Practice — saved on this phone only': ['연습 — 이 폰에만 저장', 'अभ्यास — यो फोनमा मात्र सेभ'], 'PRACTICE — NOT SENT TO THE SERVER': ['연습용 — 서버로 안 보냄', 'अभ्यास — सर्भरमा पठाइँदैन'] });
 
 const D2 = {}; for (const [en, [ko, ne]] of Object.entries(W)) { D2[en.trim()] = { ko, ne }; }

@@ -15,7 +15,7 @@ import * as CA from './capack.js';
 import * as B from './bs.js';
 import * as CAL from './cal.js';
 
-export const APP_VERSION = 'kf-v0.10.0 (2026-09-29)';
+export const APP_VERSION = 'kf-v0.10.1 (2026-09-29)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -27,6 +27,8 @@ const firebaseConfig = { apiKey: 'practice-no-server', authDomain: 'practice.inv
 // Local self-test/preview only (127.0.0.1 / localhost with ?demo): fake signed-in admin + demo data. Never active on the live site.
 export const DEMO = true; // PRACTICE build (koracarenepal.com/kora-field-practice/): fake data only — nothing reaches the server (fake Firebase config above)
 if (/[?&]reset=1/.test(location.search)) { try { Object.keys(localStorage).filter((k) => k.startsWith('kfp_')).forEach((k) => localStorage.removeItem(k)); indexedDB.deleteDatabase('kfp-photos'); } catch (e) {} location.replace(location.pathname); }
+const DEMO_KEEP = true; // the practice build turns this on: the chosen person is remembered · a start-over button · the fake world keeps living
+const DEMO_LABEL = 'PRACTICE';
 
 // Option lists — Airtable options (English names per the Phase 2 mapping) + SOP E-1/E-2/G-1 wording.
 export const OPT = {
@@ -2856,7 +2858,7 @@ document.addEventListener('click', async (ev) => {
   const sideb = t.closest('[data-side]'); if (sideb) { history_.length = 0; closeDrawer(true); go(sideb.dataset.side, sideb.dataset.side, {}, true); return; }
   const gf = t.closest('[data-go-form]'); if (gf && !canForm(gf.dataset.goForm)) return; // hidden rights stay hidden (no message)
   if (gf) { ev.preventDefault(); nav(S.route.tab === 'customers' || S.route.screen === 'detail' ? 'customers' : 'new', 'form', { form: gf.dataset.goForm, cid: gf.dataset.cid, id: gf.dataset.id, lead: gf.dataset.lead, kind: gf.dataset.kind, serial: gf.dataset.serial, event: gf.dataset.kind, date: gf.dataset.date, lane: gf.dataset.lane }); return; }
-  const cv = t.closest('[data-convert]'); if (cv) { const l = S.D.leads.get(cv.dataset.convert); S.convertLead = l ? l.id : ''; nav('new', 'form', { form: 'install' }); setTimeout(() => { const f = $('#drawer #theForm') || $('#theForm'); if (f && l) { f.elements.name.value = l.name || ''; f.elements.phone.value = String(l.phone || '').replace('+977', ''); if (l.tole) f.elements.tole.value = l.tole; if (l.ward) f.elements.ward.value = l.ward; if (l.channel) f.elements.referral.value = l.channel; refreshConditional(f); } }, 30); return; }
+  const cv = t.closest('[data-convert]'); if (cv) { const l = S.D.leads.get(cv.dataset.convert); S.convertLead = l ? l.id : ''; nav('new', 'form', { form: 'install' }); setTimeout(() => { const f = $('#drawer #theForm') || $('#theForm'); if (f && l) { f.elements.name.value = l.name || ''; f.elements.phone.value = String(l.phone || '').replace('+977', ''); if (l.tole) f.elements.tole.value = l.tole; if (l.ward) f.elements.ward.value = l.ward; if (l.channel) f.elements.referral.value = l.channel; if (l.referrerId && f.elements.referrerId) f.elements.referrerId.value = l.referrerId; refreshConditional(f); } }, 30); return; }
   const cb = t.closest('button[data-cust]'); if (cb && cb.dataset.cust) { nav('customers', 'detail', { id: cb.dataset.cust }); return; } // a button inside an edit row
   const ed = t.closest('[data-edit]'); if (ed) { nav(S.route.tab, 'form', { form: ed.dataset.edit, id: ed.dataset.id }); return; }
   const rc = t.closest('[data-receipt]'); if (rc) { nav('customers', 'detail', { id: rc.dataset.cid, receipt: rc.dataset.receipt }); return; }
@@ -2916,6 +2918,9 @@ document.addEventListener('click', async (ev) => {
   const a = t.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
   if (act === 'closeDrawer') closeDrawer();
+  else if (act === 'demoWho') { if (DEMO) demoWho(); }
+  else if (act === 'demoAs') { if (DEMO) demoAs(a.dataset.as || ''); }
+  else if (act === 'demoReset') { if (!DEMO || !DEMO_KEEP) return; if (a.dataset.armed !== '1') { a.dataset.armed = '1'; a.textContent = 'Tap again — delete every practice record'; a.classList.add('danger'); return; } location.href = location.pathname + '?reset=1'; }
   else if (act === 'staffCreate') {
     const name = ($('#nsName') || {}).value?.trim() || ''; const email = (($('#nsEmail') || {}).value || '').trim().toLowerCase(); const pre = document.querySelector('[data-nspreset].on'); const out = $('#nsOut');
     if (!name) { toast('Write their name first'); return; }
@@ -3049,8 +3054,20 @@ if ('serviceWorker' in navigator && !DEMO) {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (S.swWaiting && !reloaded) { reloaded = true; location.reload(); } });
 }
 
-initLang(DEMO ? (new URLSearchParams(location.search).get('lang') || 'en') : 'en');
-if (DEMO && new URLSearchParams(location.search).get('lang')) setLang(new URLSearchParams(location.search).get('lang'), false);
+initLang(DEMO ? (new URLSearchParams(location.search).get('lang') || 'ko') : 'ko');
+if (DEMO && new URLSearchParams(location.search).get('lang')) setLang(new URLSearchParams(location.search).get('lang'), true);
+// v0.10.1 (Jun 2026-09-29 "쉽게 버튼을"): demo / practice — switch who you are with the 👤 button, no link to type
+const DEMO_WHO = { '': ['👑', 'Jun', 'Admin — everything'], office: ['⭐', 'Tara', 'Deputy admin · office — every home, money OKs, service credits (not the settings)'], technician: ['🔧', 'Ramesh', 'Technician — only his homes and today\'s route · visits, installs, cash'] };
+function demoWho() {
+  const cur = S.isAdmin ? '' : (S.profile && S.profile.preset) || '';
+  peek(`<h3>👤 Practise as</h3><div class="muted">One set of data for all three — what one saves, the others see (like the real server).</div>
+    <div class="who-list">${Object.entries(DEMO_WHO).map(([k, w]) => `<button class="who-btn${k === cur ? ' on' : ''}" data-act="demoAs" data-as="${k}"><b>${w[0]} ${esc(w[1])}</b><span>${esc(w[2])}</span></button>`).join('')}</div>
+    ${DEMO_KEEP ? `<div class="sec-mini">🗑️ Start over</div><div class="muted">Fake data made again from today · every practice record deleted.</div><button class="btn ghost" data-act="demoReset" style="margin-top:8px">Start over</button>` : ''}`);
+}
+function demoAs(as) {
+  if (DEMO_KEEP) lsSet('kfp_demo_as', as || '');
+  const u = new URL(location.href); if (as) u.searchParams.set('as', as); else u.searchParams.delete('as'); u.searchParams.set('lang', getLang()); location.href = u.toString();
+}
 // PRACTICE: the fake world is made once for the first practice day and kept (same records every day) · every practice save is replayed on top
 function practiceDay() { let d = lsGet('kfp_demo_day', ''); if (!R.isDate(d) || d > today()) { d = today(); lsSet('kfp_demo_day', d); } return d; }
 function practiceReplay() {
@@ -3061,12 +3078,23 @@ function practiceReplay() {
     S.D[col].set(id, { ...prev, ...e.data, id, createdBy: prev.createdBy || e.uid, updatedBy: e.uid, _localT: e.t });
   }
 }
+// the world keeps living: customers pay, new requests and leads come in (demo.js liveWorld) — at start and every 3 minutes
+function practiceLive(d, first) {
+  let got = []; try { got = d.liveWorld(S, practiceDay(), Date.now()); } catch (e) { console.warn('practice live', e); return; } if (!got.length) return;
+  const n = (col) => got.filter((g) => g.col === col).length;
+  bump(); if (!first) scheduleRender(); toast(`${first ? 'Since you last looked' : 'Just now'}: payments ${n('payments')} · repair requests ${n('requests')} · new leads ${n('leads')}`, 6000);
+}
 if (DEMO) {
   S.user = { uid: 'demo-uid', email: 'demo@local' }; S.isAdmin = true; S.role = 'admin';
-  const asRole = new URLSearchParams(location.search).get('as'); // ?as=technician|office|viewer → see the app as that staff member
-  if (asRole && PRESETS[asRole]) { S.isAdmin = false; S.role = 'staff'; S.profile = { name: asRole === 'office' ? 'Tara' : asRole === 'technician' ? 'Ramesh' : 'Viewer', preset: asRole, perms: { ...PRESETS[asRole].perms, ...(asRole === 'technician' ? { seeAll: 0 } : {}) }, toles: asRole === 'technician' ? ['Lakeside', 'Baidam'] : [] }; }
+  const asRole = new URLSearchParams(location.search).get('as') || (DEMO_KEEP ? lsGet('kfp_demo_as', '') : ''); // ?as=technician|office|viewer → see the app as that staff member (or the 👤 button)
+  if (asRole && PRESETS[asRole]) { S.isAdmin = false; S.role = 'staff'; S.profile = { name: asRole === 'office' ? 'Tara' : asRole === 'technician' ? 'Ramesh' : 'Viewer', preset: asRole, perms: { ...PRESETS[asRole].perms, ...(asRole === 'technician' ? { seeAll: 0 } : {}) }, toles: asRole === 'technician' ? ['Lakeside', 'Baidam'] : [] };
+    // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
+    S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'ramesh@example.com' : 'viewer@example.com' };
+    if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
   window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save};
-  const flag = document.createElement('div'); flag.className = 'demo-flag'; flag.textContent = 'PRACTICE — NOT SENT TO THE SERVER'; document.body.appendChild(flag);
-  if (!location.search.includes('empty')) import('./demo.js').then((d) => { d.loadDemo(S, practiceDay()); practiceReplay(); bump(); heartbeat(true); render(true); }).catch((e) => console.warn('demo', e));
+  const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
+  const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
+  flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag);
+  if (!location.search.includes('empty')) import('./demo.js').then((d) => { d.loadDemo(S, practiceDay()); practiceReplay(); practiceLive(d, true); setInterval(() => practiceLive(d, false), 180000); bump(); heartbeat(true); render(true); }).catch((e) => console.warn('demo', e));
 }
 render(true);

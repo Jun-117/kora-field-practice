@@ -253,6 +253,16 @@ body.desk nav.tabs { display:none; }
 .tick.y { background:var(--ok); color:#04150d; } .tick.n { background:var(--line); color:var(--muted); }
 @media (max-width: 1480px) { .s3 { grid-column: span 6; } .s4 { grid-column: span 6; } .s5, .s7 { grid-column: span 12; } .s8 { grid-column: span 12; } }
 body.desk .demo-flag { top:auto; bottom:14px; right:14px; }
+/* v0.10.1 demo / practice: the flag is the 👤 button (who you practise as) */
+button.demo-flag { pointer-events:auto; cursor:pointer; border:0; font-family:inherit; letter-spacing:.06em; }
+body:not(.desk) button.demo-flag { right:auto; left:50%; transform:translateX(-50%); white-space:nowrap; } /* phone: top middle — clear of the language buttons */
+body:not(.desk) button.demo-flag:active { transform:translateX(-50%) scale(.97); }
+button.demo-flag:active { transform:scale(.97); }
+.who-list { display:grid; gap:10px; margin-top:12px; }
+.who-btn { display:flex; flex-direction:column; align-items:flex-start; gap:4px; text-align:left; padding:14px 16px; border-radius:14px; border:1.5px solid var(--line); background:var(--card2); color:var(--ink); font:inherit; cursor:pointer; }
+.who-btn b { font-size:17px; } .who-btn span { font-size:13px; color:var(--muted); line-height:1.35; }
+.who-btn.on { border-color:var(--brand); background:color-mix(in srgb, var(--brand) 12%, var(--card2)); }
+.who-btn.on b::after { content:' ✓'; color:var(--brand); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } .chart .line { stroke-dashoffset:0; } }
 
 /* ================= v0.3 — phone refresh (colour, depth) ================= */

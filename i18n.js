@@ -1176,6 +1176,7 @@ Object.assign(W, {
   'kept the promise from the chase call': ['독촉 전화 때 한 약속을 지킴', 'ताकेता फोनमा गरेको वाचा पूरा गर्‍यो'],
   'water tastes different since yesterday': ['어제부터 물맛이 달라요', 'हिजोदेखि पानीको स्वाद फरक छ'], 'no water coming out': ['물이 안 나와요', 'पानी आउँदैन'],
   'wants to move the unit to the other wall': ['기기를 다른 벽으로 옮기고 싶어 함', 'उपकरण अर्को भित्तामा सार्न चाहनुहुन्छ'], 'UV light blinking': ['UV 램프가 깜빡여요', 'UV बत्ती झिम्किन्छ'], 'drip from the filter housing': ['필터 하우징에서 물이 떨어져요', 'फिल्टर हाउसिङबाट पानी चुहिन्छ'],
+  'Referral: 1 month free (off bill 2)': ['추천: 1개월 무료 (2회차에서 빠짐)', 'सिफारिस: १ महिना नि:शुल्क (दोस्रो बिलबाट घट्छ)'], '1 month free (off bill 2)': ['1개월 무료 (2회차에서 빠짐)', '१ महिना नि:शुल्क (दोस्रो बिलबाट घट्छ)'], 'G-1 §4: new customer — 1 month free (taken off bill 2)': ['G-1 §4: 새 고객 — 1개월 무료 (2회차에서 빠짐)', 'G-1 §4: नयाँ ग्राहक — १ महिना नि:शुल्क (दोस्रो बिलबाट घट्छ)'],
   'water tastes different': ['물맛이 달라요', 'पानीको स्वाद फरक छ'], 'small leak under the tap': ['수도꼭지 밑에 조금 새요', 'धारामुनि अलिकति चुहिन्छ'], 'water flow slow since yesterday': ['어제부터 물이 약하게 나와요', 'हिजोदेखि पानी बिस्तारै आउँछ'], 'wants a second tap': ['꼭지를 하나 더 달고 싶어 함', 'अर्को धारा थप्न चाहनुहुन्छ'],
 });
 P.unshift(

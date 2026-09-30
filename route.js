@@ -1,7 +1,7 @@
 // KORA Field — today's route on a map (phone). Numbered stops like a delivery app: visits due, 7+ day collections
 // (home visit, G-1 §1-3), open repairs; done today = green.
 // Order: AUTO (default) = nearest-neighbour from where you stand + 2-opt, redone as you move (live position).
-//        MANUAL = your own order (▲▼ / 📌 in the list); "Auto" switches back. Both are kept per day on the phone.
+//        MANUAL = your own order (hold ☰ and drag a stop, or 📌 it next — v0.11); "Auto" switches back. Both are kept per day on the phone.
 import * as R from './logic.js';
 import { S, model, esc, custLabel, toleOf, waLink, dunText, nav, toast, today, offerLink, omwBtn, omwChips, can } from './app.js';
 import { loadLeaflet, MAP_OPTS, setHere, hereNow, openDirections, dirUrl } from './geo.js';
@@ -165,9 +165,9 @@ function listSheet(keep) {
   el.innerHTML = `<div class="grab" data-act="rClose"></div><button class="sx" data-act="rClose" title="Close">✕</button>
     <div class="rl-h"><b style="font-size:18px">Today's order</b> <span class="muted">${seq.length} stops · ≈${total.toFixed(1)} km straight-line</span></div>
     <div class="rl-mode">${auto ? '<span class="on">📡 Auto — redone from where you are as you move</span>' : '<span class="man">✋ Your own order</span><button class="btn small ghost" data-act="rAuto">📡 Back to auto</button>'}</div>
-    <div class="muted" style="font-size:12px;margin:4px 0 8px">▲▼ move a stop · 📌 go there next · tap a name to open. Changing the order switches to your own order.</div>
-    <div class="card flush rl">${seq.map((s, i) => `<div class="item rl-i"><span class="pill blue">#${i + 1}</span><div class="main" data-cust="${esc(s.id)}"><div class="t">${esc(s.x.c.name)}</div><div class="s">${esc(toleOf(s.x.c))} · ${s.why.map(esc).join(' · ')}</div></div>
-      <div class="ord"><button data-rmove="${esc(s.id)}|-1" ${i === 0 ? 'disabled' : ''} title="Up">▲</button><button data-rmove="${esc(s.id)}|1" ${i === seq.length - 1 ? 'disabled' : ''} title="Down">▼</button><button data-rnext="${esc(s.id)}" ${i === 0 ? 'disabled' : ''} title="Go there next">📌</button></div></div>`).join('') || '<div class="empty">No stops</div>'}</div>`;
+    <div class="muted" style="font-size:12px;margin:4px 0 8px">Hold ☰ and drag a stop to where you want it · 📌 go there next · tap a name to open. Changing the order switches to your own order.</div>
+    <div class="card flush rl">${seq.map((s, i) => `<div class="item rl-i" data-rid="${esc(s.id)}"><span class="pill blue">#${i + 1}</span><div class="main" data-cust="${esc(s.id)}"><div class="t">${esc(s.x.c.name)}</div><div class="s">${esc(toleOf(s.x.c))} · ${s.why.map(esc).join(' · ')}</div></div>
+      <div class="ord"><button data-rnext="${esc(s.id)}" ${i === 0 ? 'disabled' : ''} title="Go there next">📌</button><button class="rdrag" data-rdrag="${esc(s.id)}" title="Hold and drag">☰</button></div></div>`).join('') || '<div class="empty">No stops</div>'}</div>`;
   document.body.appendChild(el);
   if (scroll) el.querySelector('.rl').scrollTop = scroll;
 }
@@ -177,11 +177,40 @@ function moveStop(id, d) {
   if (i < 0 || j < 0 || j >= ids.length || i === j) return;
   ids.splice(j, 0, ids.splice(i, 1)[0]); setManual(ids); update(); listSheet(true);
 }
+// v0.11 drag to reorder (Jun 2026-09-30 "꾹 누르면 위로 원하는만큼"): hold a row's ☰ (≈0.3 s), drag it up or down as far as you like, let go → your own order.
+// Pointer Events, so a mouse on the PC does the same. The list scrolls by itself near its top and bottom edges.
+let drag = null;
+const dragRows = () => [...document.querySelectorAll('#rsheet .rl-i')];
+document.addEventListener('pointerdown', (ev) => {
+  const h = ev.target.closest('[data-rdrag]'); if (!h || drag) return;
+  ev.preventDefault(); const row = h.closest('.rl-i'); const list = row.parentElement;
+  drag = { id: h.dataset.rdrag, row, list, h, y0: ev.clientY, s0: list.scrollTop, pid: ev.pointerId, live: false, before: '', timer: 0 };
+  drag.timer = setTimeout(() => { if (!drag) return; drag.live = true; row.classList.add('lifting'); try { h.setPointerCapture(drag.pid); } catch (e) {} }, 300);
+});
+document.addEventListener('pointermove', (ev) => {
+  if (!drag || ev.pointerId !== drag.pid) return;
+  if (!drag.live) { if (Math.abs(ev.clientY - drag.y0) > 8) { clearTimeout(drag.timer); drag = null; } return; } /* moved before the hold → it was a scroll */
+  ev.preventDefault(); const { row, list } = drag;
+  const lr = list.getBoundingClientRect(); if (ev.clientY < lr.top + 24) list.scrollTop -= 8; else if (ev.clientY > lr.bottom - 24) list.scrollTop += 8;
+  row.style.transform = `translateY(${ev.clientY - drag.y0 + (list.scrollTop - drag.s0)}px)`;
+  const mid = row.getBoundingClientRect().top + row.offsetHeight / 2; const rows = dragRows().filter((r) => r !== row);
+  const before = rows.find((r) => mid < r.getBoundingClientRect().top + r.offsetHeight / 2) || null;
+  rows.forEach((r) => r.classList.toggle('drop-before', r === before)); list.classList.toggle('drop-end', !before); drag.before = before ? before.dataset.rid : '';
+});
+function endDrag(ev) {
+  if (!drag || (ev && ev.pointerId !== undefined && ev.pointerId !== drag.pid)) return;
+  clearTimeout(drag.timer); const d = drag; drag = null;
+  d.row.classList.remove('lifting'); d.row.style.transform = ''; dragRows().forEach((r) => r.classList.remove('drop-before')); d.list.classList.remove('drop-end');
+  if (!d.live) return;
+  const ids = (S.routeSeq || []).map((s) => s.id); const i = ids.indexOf(d.id); if (i < 0) return; ids.splice(i, 1);
+  const j = d.before ? ids.indexOf(d.before) : -1; ids.splice(j < 0 ? ids.length : j, 0, d.id);
+  setManual(ids); update(); listSheet(true);
+}
+document.addEventListener('pointerup', endDrag); document.addEventListener('pointercancel', endDrag);
 function toAuto() { lsSet(modeKey(), 'auto'); lsSet(dayKey(), null); orderedAt = me; update(); listSheet(true); toast(`📡 Auto order from ${me ? 'your location' : 'the first stop'}`); }
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && document.getElementById('rsheet')) closeSheet(); });
 document.addEventListener('click', (ev) => {
   const f = ev.target.closest('[data-rfilter]'); if (f) { filter = f.dataset.rfilter; update(); return; }
-  const mv = ev.target.closest('[data-rmove]'); if (mv) { const [id, d] = mv.dataset.rmove.split('|'); moveStop(id, Number(d)); return; }
   const nx = ev.target.closest('[data-rnext]'); if (nx) { moveStop(nx.dataset.rnext, 'next'); return; }
   const a = ev.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;

@@ -36,7 +36,7 @@ export function loadDemo(S, today) {
       waterSource: src, pressurePsi: int(18, 70), rawTds: src === 'Municipal tap' ? int(60, 190) : int(260, 420), purifiedTds: int(20, 120),
       flow: Math.round((0.9 + r() * 0.45) * 10) / 10, deviceSerial: 'TQ26' + String(int(10000, 99999)), installDate: d, signUpDate: R.addDays(d, -int(0, 5)),
       plan: r() < 0.9 ? 'Standard' : 'Standard + Backup Power', checks: [], agent: 'Tara', status: 'Active',
-      gps: { lat: la + (r() - 0.5) * 0.012, lng: lo + (r() - 0.5) * 0.014, acc: int(5, 25) }, notes: '', tags: r() < 0.15 ? pick(['dog', 'landlord', 'hard water', 'call before visit', 'prefers WhatsApp']) : '',
+      gps: { lat: la + (r() - 0.5) * 0.012, lng: lo + (r() - 0.5) * 0.014, acc: int(5, 25) }, notes: r() < 0.15 ? pick(['dog in the yard', 'landlord must be present', 'hard water', 'call before coming', 'prefers WhatsApp']) : '',
       updatedAt: { toMillis: () => R.parseD(inst).getTime() + 10 * 3600e3 },
     });
     custs.push(c);
@@ -68,7 +68,7 @@ export function loadDemo(S, today) {
       if (R.monthsBetween(lastUV, date) >= 12) { filters.push('UV'); lastUV = date; }
       const next = R.suggestNextVisit(c.installDate, date);
       put('visits', { customerId: c.id, customerCode: c.code, customerName: c.name, date, sanitised: R.monthsBetween(c.installDate, date) % 3 === 2 || R.monthsBetween(c.installDate, date) >= 6 ? 'Yes' : 'No', visitType: filters.length ? 'Filter change' : pick(['Routine check', 'Routine check', 'Sanitisation']), status: '✅ Completed', filters, ppColor: ppCol,
-        tdsBefore: int(40, 160), tdsAfter: int(20, 110), flow: Math.round((0.9 + r() * 0.4) * 10) / 10, oldCollected: filters.length ? true : null, oldCount: filters.length || null, nextVisitDate: next, technician: 'Tara', transport: 'Motorbike', durationMin: int(15, 45), filterCost: 0, updatedAt: { toMillis: () => R.parseD(date).getTime() + 13 * 3600e3 } });
+        tdsBefore: int(40, 160), tdsAfter: int(20, 110), flow: Math.round((0.9 + r() * 0.4) * 10) / 10, oldCollected: filters.length ? true : null, oldCount: filters.length || null, nextVisitDate: next, technician: 'Tara', durationMin: int(15, 45), updatedAt: { toMillis: () => R.parseD(date).getTime() + 13 * 3600e3 } });
       last = date;
     }
   }
@@ -79,17 +79,15 @@ export function loadDemo(S, today) {
     for (const v of done) {
       if (q() < 0.5) v.omwAt = new Date(R.parseD(v.date).getTime() + 10 * 3600e3).toISOString();
       if (q() < 0.16) { const d = R.addDays(v.date, -1 - Math.floor(q() * 3)); const sent = q() < 0.25;
-        put('visits', { customerId: v.customerId, customerCode: v.customerCode, customerName: v.customerName, date: d, visitType: v.visitType, status: '🚪 Nobody home', noShowReason: why[Math.floor(q() * why.length)], waitedMin: 5 + Math.floor(q() * 15), retryDate: v.date, technician: v.technician, transport: 'Motorbike', filters: [], ...(sent ? { omwAt: new Date(R.parseD(d).getTime() + 10 * 3600e3).toISOString() } : {}), updatedAt: { toMillis: () => R.parseD(d).getTime() + 11 * 3600e3 } }); }
+        put('visits', { customerId: v.customerId, customerCode: v.customerCode, customerName: v.customerName, date: d, visitType: v.visitType, status: '🚪 Nobody home', noShowReason: why[Math.floor(q() * why.length)], waitedMin: 5 + Math.floor(q() * 15), retryDate: v.date, technician: v.technician, filters: [], ...(sent ? { omwAt: new Date(R.parseD(d).getTime() + 10 * 3600e3).toISOString() } : {}), updatedAt: { toMillis: () => R.parseD(d).getTime() + 11 * 3600e3 } }); }
     }
   }
   // check-ins
   for (const c of custs) for (const o of R.ONBOARD) {
     const due = R.addDays(c.installDate, o.days); if (due > today) continue;
-    const pr = { D7: 0.97, D30: 0.9, D60: 0.85, D90: 0.8 }[o.k]; if (r() > pr) continue;
-    put('checkins', { customerId: c.id, kind: o.k, date: R.addDays(due, int(0, 3)), by: o.k === 'D7' ? 'Tara' : pick(['Tara', 'Sister (happy call)']), result: r() < 0.9 ? 'OK' : 'Issue found', satisfaction: String(int(3, 5)) });
+    const pr = { D7: 0.97 }[o.k]; if (r() > pr) continue;
+    put('checkins', { customerId: c.id, kind: o.k, date: R.addDays(due, int(0, 3)), by: 'Tara', result: r() < 0.9 ? 'OK' : 'Issue found', satisfaction: String(int(3, 5)) });
   }
-  // quarterly happy calls (G-1 §3-2) for most customers past day 90
-  for (const c of custs) { let q = R.addDays(c.installDate, 90 + 91); while (q < today) { if (r() < 0.8) put('checkins', { customerId: c.id, kind: 'Quarterly call', date: q, by: 'Sister (happy call)', result: 'OK', satisfaction: String(int(3, 5)) }); q = R.addDays(q, 91); } }
   // two customers left → recovery cases; two paused
   const leavers = custs.slice(2, 4);
   leavers.forEach((c, i) => {
@@ -166,7 +164,7 @@ export function loadDemo(S, today) {
   ev({ lane: 'Company', kind: 'Campaign', kindCo: 'Campaign', title: 'Facebook campaign (demo)', date: R.addDays(today, -75), endDate: R.addDays(today, -45), status: 'Done' }); // v0.8 #11 chart notes
   // v0.7 demo: today's work for the field-live board (records saved with a spot, times relative to now)
   const nowMs = Date.now(); const near = (c, k) => ({ lat: c.gps.lat + 0.0004 * k, lng: c.gps.lng - 0.0003 * k, acc: 12 });
-  const mk = (who, list, minsAgo) => list.forEach((c, i) => { const ms = nowMs - minsAgo[i] * 60000; const at = { ...near(c, i), t: ms };
+  const mk = (who, list, minsAgo) => list.forEach((c, i) => { const ms = Math.max(nowMs - minsAgo[i] * 60000, R.parseD(today).getTime() + 300000); const at = { ...near(c, i), t: ms }; /* v0.11: never before today 00:05 — after midnight the board dropped 'yesterday' records (2 flaky desk tests) */
     put('visits', { customerId: c.id, customerCode: c.code, customerName: c.name, date: today, visitType: 'Routine check', status: '✅ Completed', filters: [], technician: who, savedAt: at, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms } });
     if (i % 2 === 0) put('payments', { customerId: c.id, date: today, type: 'Monthly subscription', amount: 1400, method: who === 'Ramesh' && i === 0 ? 'Cash' : 'Fonepay QR', by: who, savedAt: { ...at, t: ms + 90000 }, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms + 90000 } }); });
   const withGps = (who) => custs.filter((c) => c.status === 'Active' && c.assignee === who && c.gps && Number.isFinite(c.gps.lat));
@@ -176,14 +174,14 @@ export function loadDemo(S, today) {
   recentV.forEach((v, i) => { const d = R.addDays(v.date, i ? 12 : 6); put('requests', { customerId: v.customerId, type: i ? 'Water quality' : 'Leak', priority: 'Normal', status: 'Done', receivedAt: d + 'T10:15', receivedAtMs: R.parseD(d).getTime() + 10 * 3600e3, receivedDate: d, description: i ? 'water tastes of plastic since the visit' : 'dripping under the filter housing after the change', agent: 'Tara', resolution: 'fitting re-tightened', doneDate: R.addDays(d, 1) }); });
   // v0.8 demo: why payments were late (two kinds that need different fixes)
   const lateLog = ['Money not come in yet', 'Money not come in yet', 'No money this month', 'Forgot', 'Money not come in yet'];
-  [...S.D.checkins.values()].filter((q) => q.kind === 'D30').slice(0, lateLog.length).forEach((q, i) => { q.lateReason = lateLog[i]; });
+  [...S.D.checkins.values()].filter((q) => q.kind === 'D7').slice(0, lateLog.length).forEach((q, i) => { q.lateReason = lateLog[i]; });
   mk('Ramesh', withGps('Ramesh').slice(0, 2), [300, 150]);
   // v0.8 #8 demo: 3 pilot homes from 13–15 months ago (their month-14 step shows in the billing moves) + 1 home that came back after leaving
   { const q = rng(8082026); const qi = (a2, b2) => a2 + Math.floor(q() * (b2 - a2 + 1));
     const paidUp = (c, from = 1) => { for (let k = from; k <= 60; k++) { const due = R.billDue(c.installDate, k); if (due > today) break; const b = R.billAmount(k); put('payments', { customerId: c.id, date: due, type: k === 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: b.amount, method: 'Fonepay QR', ref: 'TXN' + qi(100000, 999999), billNo: String(9000 + qi(1, 999)), updatedAt: { toMillis: () => R.parseD(due).getTime() + 12 * 3600e3 } }); } };
-    const home = (inst, tole, phone) => { const [la, lo] = TOLES[tole]; const c = put('customers', { code: 'KC-P' + qi(100, 999), name: `${FIRST[qi(0, FIRST.length - 1)]} ${LAST[qi(0, LAST.length - 1)]}`, phone: phone || '+97798' + qi(10000000, 99999999), zone: 'Zone_A', ward: String(qi(1, 33)), tole, houseDetail: 'pilot home', householdSize: qi(3, 6), prevWater: 'Jar (20L delivery)', referral: 'Tara_Direct', waterSource: 'Municipal tap', pressurePsi: qi(30, 60), rawTds: qi(60, 180), purifiedTds: qi(20, 90), flow: 1.1, deviceSerial: 'TQ25' + qi(10000, 99999), installDate: inst, signUpDate: inst, plan: 'Standard', checks: [], agent: 'Tara', status: 'Active', gps: { lat: la + (q() - 0.5) * 0.01, lng: lo + (q() - 0.5) * 0.012, acc: 10 }, notes: '', tags: '', updatedAt: { toMillis: () => R.parseD(inst).getTime() } });
+    const home = (inst, tole, phone) => { const [la, lo] = TOLES[tole]; const c = put('customers', { code: 'KC-P' + qi(100, 999), name: `${FIRST[qi(0, FIRST.length - 1)]} ${LAST[qi(0, LAST.length - 1)]}`, phone: phone || '+97798' + qi(10000000, 99999999), zone: 'Zone_A', ward: String(qi(1, 33)), tole, houseDetail: 'pilot home', householdSize: qi(3, 6), prevWater: 'Jar (20L delivery)', referral: 'Tara_Direct', waterSource: 'Municipal tap', pressurePsi: qi(30, 60), rawTds: qi(60, 180), purifiedTds: qi(20, 90), flow: 1.1, deviceSerial: 'TQ25' + qi(10000, 99999), installDate: inst, signUpDate: inst, plan: 'Standard', checks: [], agent: 'Tara', status: 'Active', gps: { lat: la + (q() - 0.5) * 0.01, lng: lo + (q() - 0.5) * 0.012, acc: 10 }, notes: '', updatedAt: { toMillis: () => R.parseD(inst).getTime() } });
       let vd = R.addDays(today, -qi(10, 25)); if (vd <= inst) vd = R.addDays(inst, 1); if (vd >= today) vd = null;
-      if (vd) put('visits', { customerId: c.id, customerCode: c.code, customerName: c.name, date: vd, visitType: 'Filter change', status: '✅ Completed', filters: ['PP', 'CTO', 'UV'], ppColor: 'Brown', tdsBefore: 90, tdsAfter: 40, flow: 1.1, oldCollected: true, oldCount: 3, sanitised: 'Yes', nextVisitDate: R.addMonths(vd, 3), technician: 'Tara', transport: 'Motorbike', durationMin: 30, filterCost: 0, updatedAt: { toMillis: () => R.parseD(vd).getTime() + 12 * 3600e3 } });
+      if (vd) put('visits', { customerId: c.id, customerCode: c.code, customerName: c.name, date: vd, visitType: 'Filter change', status: '✅ Completed', filters: ['PP', 'CTO', 'UV'], ppColor: 'Brown', tdsBefore: 90, tdsAfter: 40, flow: 1.1, oldCollected: true, oldCount: 3, sanitised: 'Yes', nextVisitDate: R.addMonths(vd, 3), technician: 'Tara', durationMin: 30, updatedAt: { toMillis: () => R.parseD(vd).getTime() + 12 * 3600e3 } });
       for (const o of R.ONBOARD) { const d2 = R.addDays(inst, o.days); if (d2 <= today) put('checkins', { customerId: c.id, kind: o.k, date: d2, by: 'Tara', result: 'OK', satisfaction: '5' }); }
       return c; };
     for (const back of [15, 14, 13]) paidUp(home(R.addDays(R.addMonths(today, -back), -qi(2, 12)), ['Lakeside', 'Newroad', 'Baidam'][back - 13]));
@@ -197,7 +195,7 @@ export function loadDemo(S, today) {
       put('leads', { name: c.name, phone: c.phone, tole: c.tole, ward: c.ward, channel: c.referral === 'Word of mouth' ? 'Word of mouth' : c.referral, outcome: 'Signed', demoDate: demo, stageDates: { New: lead, 'Demo booked': R.addDays(demo, -qi(0, 2)) < lead ? lead : R.addDays(demo, -qi(0, 2)), Signed: sign }, customerId: c.id, followUpDate: '', notes: '', createdAt: { toMillis: () => R.parseD(lead).getTime() + 9 * 3600e3 }, updatedAt: { toMillis: () => R.parseD(sign).getTime() + 9 * 3600e3 } });
     }
     // v0.8 #10: the 0–10 recommend question on some calls (NPS)
-    const q10 = rng(10102026); for (const ck of [...S.D.checkins.values()].filter((x) => ['D30', 'D60', 'D90', 'Quarterly call'].includes(x.kind))) if (q10() < 0.6) { const r10 = q10(); ck.nps = String(r10 < 0.62 ? 9 + Math.floor(q10() * 2) : r10 < 0.87 ? 7 + Math.floor(q10() * 2) : Math.floor(q10() * 7)); }
+    const q10 = rng(10102026); for (const ck of [...S.D.checkins.values()].filter((x) => x.kind === 'D7')) if (q10() < 0.6) { const r10 = q10(); ck.nps = String(r10 < 0.62 ? 9 + Math.floor(q10() * 2) : r10 < 0.87 ? 7 + Math.floor(q10() * 2) : Math.floor(q10() * 7)); }
     // v0.8 #12: money actions waiting for an OK (a discount by Ramesh, a deposit refund) + one decided
     { const act = [...S.D.customers.values()].filter((c) => c.status === 'Active' && R.isDate(c.installDate)); const c1 = act[3], c2 = act[8];
       if (c1) put('payments', { customerId: c1.id, date: R.addDays(today, -1), type: 'Monthly subscription', amount: 900, discount: 500, discountReason: 'Promotion', method: 'Cash', by: 'Ramesh', approval: 'Pending' }).createdBy = 'demo-ram';
@@ -302,7 +300,7 @@ export function loadDemo(S, today) {
     const vial = (c, result, readAfter) => put('waterTests', { customerId: c.id, sampledDate: c.installDate, readDate: result ? R.addDays(c.installDate, readAfter || 2) : '', result, by: 'Tara' });
     if (recent[0]) { recent[0].waterSource = 'Municipal tap'; vial(recent[0], R.VIAL_RESULTS[0]); }
     if (recent[1]) vial(recent[1], '');
-    older.slice(0, 12).forEach((c, i) => vial(c, i % 4 === 0 ? R.VIAL_RESULTS[0] : i % 4 === 1 ? R.VIAL_RESULTS[1] : i === 10 ? R.VIAL_RESULTS[3] : R.VIAL_RESULTS[2], 1 + Math.floor(q() * 2)));
+    older.slice(0, 12).forEach((c, i) => vial(c, i % 4 === 0 ? R.VIAL_RESULTS[0] : i === 10 ? R.VIAL_RESULTS[2] : R.VIAL_RESULTS[1], 1 + Math.floor(q() * 2)));
   }
 }
 

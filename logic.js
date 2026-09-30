@@ -21,14 +21,10 @@ export const FCL = { leadTimeWeeks: 13, minBills: 30, minCollection: 0.6 };
 // Direction gate (memory kora-direction-gate): churn > 3.5%/month · 90-day retention < 85% · collection < 50%.
 // Sample needs: churn 600 household-months; collection ~220 household-months (10σ between 90% and 50%).
 export const GATE = { churnMonthly: 0.035, retention90: 0.85, collection: 0.5, churnExposure: 600, collectionExposure: 220, retentionMinCohort: 30 };
-// Onboarding: G-1 §3-1 day-7 happy call; plan §4 #7 check-ins at 7/30/60/90 days.
+// Calls: one call 7 days after the install (G-1 §3-1). Jun 2026-09-30: no day-30/60/90 check-ins, no quarterly call, no random call — visits cover those months.
 export const ONBOARD = [
-  { k: 'D7', days: 7, label: 'Day 7 happy call' },
-  { k: 'D30', days: 30, label: 'Day 30 check-in' },
-  { k: 'D60', days: 60, label: 'Day 60 check-in' },
-  { k: 'D90', days: 90, label: 'Day 90 check-in' },
+  { k: 'D7', days: 7, label: 'Day-7 call' },
 ];
-export const QUARTER_CALL_DAYS = 91; // G-1 §3-2: every 3 months
 
 // ---------- dates ----------
 const pad = (n) => String(n).padStart(2, '0');
@@ -193,7 +189,7 @@ export const DUNNING = [
   { stage: 'due', label: 'Due today — afternoon re-reminder', short: 'Due today', color: 'yellow' },
   { stage: 'late', label: 'Late 1–2 days — re-remind', short: 'Late', color: 'yellow' },
   { stage: 'call', label: 'Late 3–6 days — Tara calls', short: 'Call', color: 'orange' },
-  { stage: 'visit', label: 'Late 7+ days — home visit (contract §2.7)', short: 'Visit', color: 'red' },
+  { stage: 'visit', label: 'Late 7+ days — home visit', short: 'Visit', color: 'red' },
 ];
 export function dunning(led, today) {
   const b = led.bills.find((x) => x.status !== 'paid' && x.due <= addDays(today, 3)) || (led.nextBill && led.nextBill.due <= addDays(today, 3) ? led.nextBill : null);
@@ -454,7 +450,7 @@ export function dashainBonus(person, onDate) {
 // 🚨 Our own check only (memory kora-uv-disinfection-decision.md:137): never tell a customer the water is safe or unsafe from it — only a lab result is said out loud.
 // ENPHO before/after test needs raw water with E. coli (:75–76) · municipal water (the UV module works below hardness 120 mg/L — kora-uv-6w-verdict-2026-09-22.md:32;
 // bore wells in central Pokhara measured 300–320 — kora-pokhara-water-sources-2026-09-25.md) · within 30 days of the install (PI condition 4 — kora-uv-disinfection-decision.md:78).
-export const VIAL_RESULTS = ['Blue — E. coli', 'Pink — coliforms', 'No change', 'Spoiled — redo'];
+export const VIAL_RESULTS = ['Black — faecal contamination', 'No change', 'Spoiled — redo']; // P/A (H2S) vial from ENPHO (ECC discontinued, 2026-09-30) · black after ~48 h at room temperature
 export const VIAL = { target: 25, enphoDays: 30, readAfterDays: 2 };
 // 95% range for a share (Wilson) — honest about small samples
 export function wilson(k, n, z = 1.96) {
@@ -463,11 +459,11 @@ export function wilson(k, n, z = 1.96) {
 }
 export function vialStats(tests, customers, today) {
   const byC = new Map((customers || []).map((c) => [c.id, c])); const all = tests || [];
-  const read = all.filter((t) => t.result && t.result !== VIAL_RESULTS[3]); const pos = read.filter((t) => t.result === VIAL_RESULTS[0]);
+  const read = all.filter((t) => t.result && t.result !== VIAL_RESULTS[2]); const pos = read.filter((t) => t.result === VIAL_RESULTS[0]);
   const group = (keyOf) => { const g = {}; for (const t of read) { const k = keyOf(byC.get(t.customerId) || {}) || 'Unknown'; const r = (g[k] = g[k] || { n: 0, pos: 0 }); r.n++; if (t.result === VIAL_RESULTS[0]) r.pos++; } return g; };
   const enpho = pos.map((t) => ({ t, c: byC.get(t.customerId) })).filter((x) => x.c && x.c.status === 'Active' && x.c.waterSource === 'Municipal tap' && isDate(x.c.installDate) && daysBetween(x.c.installDate, today) <= VIAL.enphoDays)
     .map((x) => ({ ...x, until: addDays(x.c.installDate, VIAL.enphoDays) }));
-  return { started: all.length, n: read.length, pos: pos.length, coliforms: read.filter((t) => t.result === VIAL_RESULTS[1]).length, rate: read.length ? pos.length / read.length : null, ci: wilson(pos.length, read.length),
+  return { started: all.length, n: read.length, pos: pos.length, rate: read.length ? pos.length / read.length : null, ci: wilson(pos.length, read.length),
     waiting: all.filter((t) => !t.result), toRead: all.filter((t) => !t.result && isDate(t.sampledDate) && daysBetween(t.sampledDate, today) >= VIAL.readAfterDays), bySource: group((c) => c.waterSource), byTole: group((c) => c.tole === 'Other' ? c.toleOther : c.tole), enpho };
 }
 export function chaseStats(checkins, payments, from, today) {
@@ -553,10 +549,6 @@ export function onboarding(customer, checkins, today) {
     const done = mine.find((x) => x.kind === o.k);
     return { ...o, due, done: done || null, status: done ? 'done' : due > today ? 'future' : daysBetween(due, today) > 3 ? 'overdue' : 'due' };
   });
-  const calls = mine.filter((x) => x.kind === 'Quarterly call' || x.kind === 'D90').map((x) => x.date).sort();
-  const base = calls.length ? calls[calls.length - 1] : addDays(customer.installDate, 90);
-  const qDue = addDays(base, QUARTER_CALL_DAYS);
-  rows.push({ k: 'Q', label: 'Quarterly happy call', due: qDue, done: null, status: qDue > today ? 'future' : 'due' });
   return rows;
 }
 
@@ -1014,7 +1006,7 @@ export function watchScore(x, ctx, today) {
   const fo = x.fd.filter((f) => f.status === 'overdue' && f.type !== 'Sanitise'); if (fo.length) add('filter', 'service', '🧪', `filter overdue: ${fo.map((f) => f.type).join(', ')}`, 'visit');
   // life stage
   if (isDate(c.installDate) && daysBetween(c.installDate, today) <= WATCH.newDays) add('new', 'stage', '🌱', `first 90 days (day ${daysBetween(c.installDate, today)})`, 'call');
-  const obLate = x.ob.filter((o) => o.status === 'overdue' && o.k !== 'Q'); if (obLate.length) add('ob', 'stage', '📞', `${obLate.map((o) => o.k).join(', ')} call overdue`, 'call');
+  const obLate = x.ob.filter((o) => o.status === 'overdue'); if (obLate.length) add('ob', 'stage', '📞', 'day-7 call overdue', 'call');
   const mv = (ctx.rel.get(c.id) || []).find((r) => ['Requested', 'Scheduled'].includes(r.status)); if (mv) add('move', 'stage', '🚚', `moving ${mv.moveDate || ''}`.trim(), 'relocation');
   if (led.contractEnded) add('contract', 'stage', '📝', 'contract ended — renew', 'call');
   if (x.status === 'Paused') add(isDate(c.pausedUntil) && c.pausedUntil < today ? 'pauseEnd' : 'paused', 'stage', '⏸️', isDate(c.pausedUntil) && c.pausedUntil < today ? `pause ended ${c.pausedUntil} — restart?` : 'paused', 'call');
@@ -1343,7 +1335,7 @@ export function approvalQueue(D) {
 // ---------- dispatch ----------
 // Who goes to a home: a cover (another person until a date, e.g. someone is sick) beats the regular assignee.
 export const assigneeOf = (c, today) => (c && c.cover && c.cover.to && c.cover.until >= today ? c.cover.to : (c && c.assignee) || '');
-export function pickRandom(list, n) {
+export function pickRandom(list, n) { /* kept for tests · the random happy call was dropped (Jun 2026-09-30) */
   const a = list.slice(); const r = new Uint32Array(a.length); (globalThis.crypto || { getRandomValues: (x) => x.map(() => Math.random() * 2 ** 32) }).getRandomValues(r);
   for (let i = a.length - 1; i > 0; i--) { const j = r[i] % (i + 1); [a[i], a[j]] = [a[j], a[i]]; }
   return a.slice(0, n);

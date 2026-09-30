@@ -323,7 +323,7 @@ function pageCommand(m) {
   const vatNow = m.vat.find((r) => r.month === R.monthKey(t));
   const act = activity(m);
   const obDone = [...m.cust.values()].filter((x) => x.status === 'Active');
-  const obPct = ['D7', 'D30', 'D60', 'D90'].map((k) => { const elig = obDone.filter((x) => x.ob.find((o) => o.k === k && o.status !== 'future')); const done = elig.filter((x) => x.ob.find((o) => o.k === k && o.status === 'done')); return { k, n: elig.length, d: done.length }; });
+  const obPct = ['D7'].map((k) => { const elig = obDone.filter((x) => x.ob.find((o) => o.k === k && o.status !== 'future')); const done = elig.filter((x) => x.ob.find((o) => o.k === k && o.status === 'done')); return { k, n: elig.length, d: done.length }; });
   const ag = R.agingBuckets(m.ledgers, activeIds(m), t); const out = R.cashOutlook(m.D.customers, m.ledgers, t, 28);
   const dq = dataQuality(m);
   return `<div class="cc">
@@ -714,7 +714,7 @@ function pageReports() {
   return `<div class="panel" style="--i:0"><div class="ph"><span class="t"><b>Reports</b> · open on the right</span></div><div class="heat" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
     ${t('capack', '🧾', 'CA pack', 'sales + purchase book · Excel', 0, money)}${t('expenses', '🧾', 'Expenses', 'bills · input VAT', 0, can('expense') || money)}${t('payments', '💵', 'Payments', 'all money in', 0, money)}${t('vat', '🧾', 'VAT by month', 'AD months · CSV', 0, money)}${t('deposits', '🏦', 'Deposit book', 'liability per home', 0, money)}
     ${t('devices', '📦', 'Devices', 'every serial')}${t('relocations', '🚚', 'Relocations', 'moving house', 1)}${t('contract', '📜', 'Contract events', 'notice · transfer · lost', 1)}${t('screenings', '🔎', 'Screenings', 'sign-up checks', 1)}${t('proof', '✍️', 'Proof of visit', 'signatures · 30 days', 1)}${t('water', '🧫', 'Raw-water vials', 'E. coli · PoC', 1)}${t('claims', '📮', 'Supplier claims', 'defects → PI', 1, can('stock'))}${t('quality', '🩺', 'Data to fix', 'missing GPS · bill no.')}${t('gate', '🧭', 'Direction gate', 'with sample sizes', 0, money)}${t('stock', '📦', 'Stock & FCL', 'order signal', 0, can('stock'))}${t('learning', '🧪', 'Filter learning', 'real intervals')}
-    ${t('referrals', '🎁', 'Referrals', 'G-1 §4 rewards')}${t('leavers', '🚪', 'Leavers', 'why homes left')}${t('capacity', '👷', 'Field capacity', 'jobs vs hands')}${t('funnel', '⏳', 'Sales stage days', 'lead → first payment')}${t('perform', '📑', 'Grant KPIs', 'PAYGo PERFORM', 0, money)}${t('billing', '🌊', 'Billing moves', 'new · left · month 14', 0, money)}${t('noshows', '🚪', 'Wasted trips', 'nobody home')}${t('callbacks', '🔁', 'Callbacks', 'problems soon after a job')}${t('trainings', '🎓', 'Trainings', 'records')}${t('leads', '🧲', 'Leads', 'pipeline', 1)}
+    ${t('referrals', '🎁', 'Referrals', 'G-1 §4 rewards')}${t('leavers', '🚪', 'Leavers', 'why homes left')}${t('capacity', '👷', 'Field capacity', 'jobs vs hands')}${t('funnel', '⏳', 'Sales stage days', 'lead → first payment')}${t('perform', '📑', 'Grant KPIs', 'PAYGo PERFORM', 0, money)}${t('billing', '🌊', 'Billing moves', 'new · left · month 14', 0, money)}${t('noshows', '🚪', 'Wasted trips', 'nobody home')}${t('callbacks', '🔁', 'Callbacks', 'problems soon after a job')}${t('trainings', '🎓', 'Trainings', 'records', 0, !!S.isAdmin)}${t('leads', '🧲', 'Leads', 'pipeline', 1)}
     ${t('help', '❓', 'How to use', 'staff one-pager')}${t('recoveries', '📦', 'Recoveries', 'cases', 1)}${t('paused', '⏸️', 'Paused', 'customers', 1)}${t('tomorrow', '📅', 'Bills tomorrow', 'reminders', 1)}
     ${isBoss() ? t('handover', '🆘', 'If Jun cannot work', 'handover page') + t('payroll', '💼', 'Payroll', 'SSF · TDS · payslips') : ''}${isBoss() ? t('users', '🪪', 'Staff & permissions', 'who can do what') + t('bank', '🏧', 'Bank CSV match', 'plan #2') + t('settings', '⚙️', 'Settings', 'company · calendar · techs') : ''}${t('export', '💾', 'Export all data', 'backup', 0, can('export'))}
   </div></div>`;
@@ -1349,7 +1349,7 @@ function palItems(q) {
     { ic: '한', t: '한국어', s: 'language', run: () => { setLang('ko'); render(true); } },
     { ic: 'ने', t: 'नेपाली', s: 'language', run: () => { setLang('ne'); render(true); } },
   ];
-  const custs = q ? [...m.cust.values()].filter((x) => [x.c.name, x.c.code, x.c.phone, toleOf(x.c), x.c.deviceSerial, x.c.tags].some((s) => String(s || '').toLowerCase().includes(q))).slice(0, 8).map((x) => ({ ic: '👤', t: x.c.name, s: `${x.c.code} · ${toleOf(x.c)}${x.led.overdue ? ' · ' + R.npr(x.led.overdue) + ' due' : ''}`, run: () => nav('customers', 'detail', { id: x.c.id }) })) : [];
+  const custs = q ? [...m.cust.values()].filter((x) => [x.c.name, x.c.code, x.c.phone, toleOf(x.c), x.c.deviceSerial, x.c.notes].some((s) => String(s || '').toLowerCase().includes(q))).slice(0, 8).map((x) => ({ ic: '👤', t: x.c.name, s: `${x.c.code} · ${toleOf(x.c)}${x.led.overdue ? ' · ' + R.npr(x.led.overdue) + ' due' : ''}`, run: () => nav('customers', 'detail', { id: x.c.id }) })) : [];
   const a2 = acts.filter((a) => !q || (a.t + ' ' + a.s).toLowerCase().includes(q));
   return [...custs, ...a2].slice(0, 14);
 }

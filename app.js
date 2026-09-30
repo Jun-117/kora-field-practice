@@ -15,7 +15,7 @@ import * as CA from './capack.js';
 import * as B from './bs.js';
 import * as CAL from './cal.js';
 
-export const APP_VERSION = 'kf-v0.10.2 (2026-09-29)';
+export const APP_VERSION = 'kf-v0.11.0 (2026-09-30)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -49,14 +49,14 @@ export const OPT = {
   yesNo: ['Yes', 'No'],
   visitType: ['Routine check', 'Filter change', 'Repair', 'Sanitisation'],
   visitStatus: ['🔵 Scheduled', '🟡 In progress', '✅ Completed', '🚪 Nobody home', '🔴 Cancelled', '🟠 On hold'],
-  transport: ['Motorbike', 'Pickup · Taxi', 'Walk', 'Bicycle'],
   reqType: ['Breakdown', 'Water quality', 'Leak', 'Install request', 'Claim', 'Other'],
   priority: ['Urgent', 'Normal', 'Low'],
   reqStatus: ['Received', 'In progress', 'Done', 'On hold'],
   leadOutcome: ['New', 'Thinking', 'Demo booked', 'Signed', 'Rejected'],
   recOutcome: ['In progress', 'Recovered', 'Partial', 'Failed – no contact', 'Failed – refused', 'Failed – lost or damaged'],
   yesNoUnknown: ['Yes', 'No', 'Unknown'],
-  checkinKind: ['D7', 'D30', 'D60', 'D90', 'Quarterly call', 'Random happy call', 'Follow-up call', R.CHASE_KIND],
+  checkinKind: ['D7', 'Follow-up call', R.CHASE_KIND], /* v0.11: one call at day 7 · a follow-up when needed · payment chases (Jun 2026-09-30) */
+  checkinKindLabel: { D7: 'Day-7 call' },
   result: ['OK', 'Issue found'],
   stars: ['1', '2', '3', '4', '5'],
   topic: ['Install SOP (E-1)', 'A/S SOP (E-2)', 'Field rules (G-1)', 'Cash & payments', 'App use', 'Other'],
@@ -85,7 +85,7 @@ export const PERMS = [
   ['install', 'New installs'],
   ['visit', 'Visits · requests · calls · relocations'],
   ['pay', 'Record payments'],
-  ['cash', 'Take cash (G-1 §1-1: only Tara)'],
+  ['cash', 'Take cash (only Tara)'],
   ['editCust', 'Edit any customer'],
   ['money', 'See money & reports (VAT, deposits, CA pack, history)'],
   ['expense', 'Record & see expenses'],
@@ -416,11 +416,11 @@ export function model() {
   const filtersAll = act.flatMap((x) => x.fd.filter((f) => f.status !== 'none').map((f) => ({ ...f, x })));
   // Alerts: things that need a person today (each links to its list)
   const alerts = [];
-  const pastReply = openReq.filter((o) => Date.now() > o.sla.replyBy).length; if (pastReply) alerts.push({ lvl: 'bad', ic: '📋', t: `${pastReply} request(s) past the reply time (G-1 §2-4)`, list: 'requests' });
+  const pastReply = openReq.filter((o) => Date.now() > o.sla.replyBy).length; if (pastReply) alerts.push({ lvl: 'bad', ic: '📋', t: `${pastReply} request(s) past the reply time`, list: 'requests' });
   const late7 = collections.filter((x) => x.dn.stage === 'visit' && !(x.pr && x.pr.status === 'waiting')).length; if (late7) alerts.push({ lvl: 'bad', ic: '💰', t: `${late7} home(s) 7+ days late — home visit`, list: 'collections' });
   const broken = collections.filter((x) => x.pr && x.pr.status === 'broken').length; if (broken) alerts.push({ lvl: 'bad', ic: '🤝', key: 'promise:broken', t: `${broken} payment promise(s) broken`, list: 'collections' });
   const fOver = filtersAll.filter((f) => f.status === 'overdue').length; if (fOver) alerts.push({ lvl: 'warn', ic: '🧪', t: `${fOver} filter(s) past the booking date`, list: 'filters' });
-  const callsOver = calls.filter((x) => x.o.status === 'overdue').length; if (callsOver) alerts.push({ lvl: 'warn', ic: '📞', t: `${callsOver} onboarding call(s) overdue`, list: 'calls' });
+  const callsOver = calls.filter((x) => x.o.status === 'overdue').length; if (callsOver) alerts.push({ lvl: 'warn', ic: '📞', t: `${callsOver} day-7 call(s) overdue`, list: 'calls' });
   if (metrics.fcl.ready) alerts.push({ lvl: 'ok', ic: '📦', t: 'FCL#1: all order conditions met — order now', report: 'stock' });
   else if (metrics.fcl.stockSignal) alerts.push({ lvl: 'warn', ic: '📦', t: 'Stock is at the FCL#1 order point', report: 'stock' });
   for (const [k, g] of Object.entries(metrics.gate)) if (g.judgeable && g.bad) alerts.push({ lvl: 'bad', ic: '🧭', t: `Direction gate: ${k} crossed its trigger`, report: 'gate' });
@@ -522,7 +522,7 @@ function field(f, v) {
   switch (f.t) {
     case 'chips': {
       const sel = f.multi ? (Array.isArray(val) ? val : []) : [val];
-      input = `<div class="chips" data-group="${f.k}" data-multi="${f.multi ? 1 : 0}">` + opts.map((o) => `<button type="button" class="chip${sel.includes(o) ? ' on' : ''}" data-v="${esc(o)}">${esc(o)}</button>`).join('') + '</div>'; break;
+      input = `<div class="chips" data-group="${f.k}" data-multi="${f.multi ? 1 : 0}">` + opts.map((o) => `<button type="button" class="chip${sel.includes(o) ? ' on' : ''}" data-v="${esc(o)}">${esc((f.lbl && f.lbl[o]) || o)}</button>`).join('') + '</div>'; break; /* lbl = what is shown; the saved value stays o */
     }
     case 'checks': {
       const sel = Array.isArray(val) ? val : [];
@@ -632,25 +632,23 @@ FORMS.install = {
     { k: 'tole', l: 'Tole', t: 'select', o: OPT.tole, req: 1 },
     { k: 'toleOther', l: 'Tole name', t: 'text', show: (v) => v.tole === 'Other' },
     { k: 'houseDetail', l: 'How to find the house', t: 'textarea', ph: 'e.g. next to the blue-gate shop, 2nd floor' },
-    { k: 'householdSize', l: 'People in the household', t: 'number' },
-    { k: 'prevWater', l: 'Drinking water before KORA', t: 'chips', o: OPT.prevWater },
     { k: 'referral', l: 'How they heard about KORA', t: 'select', o: OPT.referral, req: 1 },
-    { k: 'referrerId', l: 'Referred by (existing customer)', t: 'customer', show: (v) => v.referral === 'Word of mouth', hint: 'Referral rewards follow G-1 §4: 1 month free for both (referrer after 3 months).' },
+    { k: 'referrerId', l: 'Referred by (existing customer)', t: 'customer', show: (v) => v.referral === 'Word of mouth', hint: '1 month free for both — the new home off bill 2, the referrer after 3 months.' },
     { k: 'referrerName', l: 'Referred by (name, if not a customer)', t: 'text', show: (v) => v.referral === 'Word of mouth' },
-    { t: 'section', l: 'Water & site', hint: 'E-1 step 1 — measure before installing.' },
+    { t: 'section', l: 'Water & site', hint: 'Measure before installing.' },
     { k: 'waterSource', l: 'Water source', t: 'chips', o: OPT.waterSource, req: 1 },
-    { k: 'pressurePsi', l: 'Water pressure (PSI)', t: 'number', hint: '30–80 normal · 20–30 low (pump needed) · <20 very low · >80 needs a reducer (E-1)' },
+    { k: 'pressurePsi', l: 'Water pressure (PSI)', t: 'number', hint: '30–80 normal · 20–30 low (pump needed) · <20 very low · >80 needs a reducer' },
     { k: 'rawTds', l: 'Raw water TDS', t: 'number', req: 1 },
     { t: 'section', l: 'Device' },
     { k: 'deviceSerial', l: 'Device serial number', t: 'text', req: 1 },
-    { k: 'installDate', l: 'Install date', t: 'date', req: 1, def: today, hint: 'Monthly bill is on this same day every month (G-1 §1-3).' },
+    { k: 'installDate', l: 'Install date', t: 'date', req: 1, def: today, hint: 'The monthly bill falls on this same day every month.' },
     { k: 'signUpDate', l: 'Sign-up date', t: 'date', req: 1, def: today },
     { k: 'plan', l: 'Plan', t: 'chips', o: OPT.plan, req: 1, def: 'Standard' },
-    { t: 'section', l: 'Final checks', hint: 'E-1 final checklist — all must be ticked. Plan #8: flow and water source are required.' },
+    { t: 'section', l: 'Final checks', hint: 'All must be ticked. Flow and water source are required.' },
     { k: 'checks', l: 'Checklist', t: 'checks', o: OPT.installChecks, req: 1 },
     { k: 'purifiedTds', l: 'Purified water TDS', t: 'number', req: 1 },
-    { k: 'flow', l: 'Flow at the tap (L/min)', t: 'number', step: 0.1, req: 1, ph: 'e.g. 1.1', hint: 'UV 6W passes at 1.2 L/min or less (verdict 2026-09-22).' },
-    { t: 'section', l: 'First-day payment', hint: 'Day 1 = NPR 4,900 (install fee incl. first month). G-1 §1-1: do not finish the install before the payment is confirmed.' },
+    { k: 'flow', l: 'Flow at the tap (L/min)', t: 'number', step: 0.1, req: 1, ph: 'e.g. 1.1', hint: 'The UV lamp is safe at 1.2 L/min or less.' },
+    { t: 'section', l: 'First-day payment', hint: 'Day 1 = NPR 4,900 (install fee incl. first month). Do not finish the install before the payment is confirmed.' },
     { k: 'firstPay', l: 'First-day payment', t: 'chips', o: OPT.firstPay, req: 1 },
     { k: 'payMethod', l: 'Paid by', t: 'chips', o: OPT.method, show: (v) => String(v.firstPay).startsWith('Received') },
     { k: 'payRef', l: 'Transaction ID', t: 'text', show: (v) => String(v.firstPay).startsWith('Received') },
@@ -661,16 +659,21 @@ FORMS.install = {
     { k: 'signName', l: 'Signed by (name)', t: 'text' },
     { k: 'sign', l: '', t: 'sign' },
     { k: 'noSign', l: 'No signature — why?', t: 'chips', o: OPT.noSign, show: (v) => !v.sign },
-    { t: 'section', l: 'Photos', hint: 'G-1 §2-1: device as installed · TDS meter (raw vs purified) · signed contract.' },
+    { t: 'section', l: 'Photos', hint: 'Device as installed · TDS meter (raw vs purified) · signed contract.' },
     { k: 'photos', l: 'Photos (3 required)', t: 'photos' },
     { t: 'section', l: 'Other' },
     { k: 'gps', l: 'House location', t: 'gps' },
     { k: 'agent', l: 'Installed by', t: 'chips', o: techNames, req: 1, def: myName },
-    { k: 'tags', l: 'Tags (comma separated)', t: 'text', ph: 'e.g. dog, landlord, hard water' },
-    { k: 'buyerPan', l: 'Buyer PAN (business customers only)', t: 'text', ph: '9 digits — leave empty for homes', hint: 'Printed in the IRD sales book. Hotels, shops, offices usually have one.' },
-    { k: 'notes', l: 'Notes', t: 'textarea', ph: 'hard water, options added, …' },
+    ...(editingForm() ? [{ k: 'buyerPan', l: 'Buyer PAN (business customers only)', t: 'text', ph: '9 digits — leave empty for homes', hint: 'Printed in the IRD sales book. Hotels, shops, offices usually have one.' }] : []), /* v0.11 (Tara 2026-09-30): not on a new install — the office adds it when a business asks for it */
+    { k: 'notes', l: 'Special comment', t: 'textarea', ph: 'e.g. dog in the yard · call before coming · landlord must be present' },
     { k: 'privateNotes', l: '🔒 Private notes (only admin sees)', t: 'textarea', admin: 1 },
   ],
+  // v0.11: from a lead (the id travels with the screen, never a global — a cancelled convert must not fill a later install) and its sign-up screening
+  prefill(p) {
+    const l = p.lead ? S.D.leads.get(p.lead) : null; S.convertLead = l ? l.id : '';
+    const sc = l ? R.findScreening(arr('screenings'), l.id, normPhone(l.phone)) : null;
+    return { ...(l ? { name: l.name || '', phone: String(l.phone || '').replace('+977', ''), tole: l.tole || '', ward: l.ward || '', referral: l.channel || '', referrerId: l.referrerId || '' } : {}), ...(sc && sc.waterSource ? { waterSource: sc.waterSource } : {}) };
+  },
   check(v, confirmed) {
     const errs = {}, warns = {};
     if (!v.name || v.name.length < 2) errs.name = 'Enter the customer name.';
@@ -682,22 +685,22 @@ FORMS.install = {
     if (!inRange(v.householdSize, 1, 40)) errs.householdSize = 'Check this number (1–40).';
     need(errs, v, 'referral', 'Choose one.'); need(errs, v, 'waterSource', 'Choose the water source.');
     if (!inRange(v.pressurePsi, 0, 200)) errs.pressurePsi = 'Check the pressure (0–200 PSI).';
-    else if (v.pressurePsi !== null && !confirmed && (v.pressurePsi < 20 || v.pressurePsi > 80)) warns.pressurePsi = v.pressurePsi < 20 ? 'Very low pressure — tell the customer flow may be slow (E-1).' : 'High pressure — a reducing valve is needed (E-1).';
+    else if (v.pressurePsi !== null && !confirmed && (v.pressurePsi < 20 || v.pressurePsi > 80)) warns.pressurePsi = v.pressurePsi < 20 ? 'Very low pressure — tell the customer flow may be slow.' : 'High pressure — a reducing valve is needed.';
     if (v.rawTds === null) errs.rawTds = 'Measure the raw water TDS.'; else if (!inRange(v.rawTds, 0, 5000)) errs.rawTds = 'Check the TDS number (0–5000).';
-    else if (v.rawTds >= 250 && !confirmed) warns.rawTds = 'TDS 250+ → offer the Siliphos option (E-1).';
+    else if (v.rawTds >= 250 && !confirmed) warns.rawTds = 'TDS 250+ → offer the Siliphos option.';
     need(errs, v, 'deviceSerial', 'Enter the device serial.'); need(errs, v, 'installDate', 'Enter the date.'); need(errs, v, 'signUpDate', 'Enter the date.'); need(errs, v, 'plan', 'Choose a plan.');
-    if ((v.checks || []).length < OPT.installChecks.length && !v._edit) errs.checks = `Tick all ${OPT.installChecks.length} checks before finishing (E-1).`;
+    if ((v.checks || []).length < OPT.installChecks.length && !v._edit) errs.checks = `Tick all ${OPT.installChecks.length} checks before finishing.`;
     if (v.purifiedTds === null && !v._edit) errs.purifiedTds = 'Measure the purified water TDS.'; else if (!inRange(v.purifiedTds, 0, 5000)) errs.purifiedTds = 'Check the TDS number.';
-    if (v.flow === null && !v._edit) errs.flow = 'Measure the flow (plan #8).'; else if (!inRange(v.flow, 0, 10)) errs.flow = 'Check the flow (0–10 L/min).';
+    if (v.flow === null && !v._edit) errs.flow = 'Measure the flow.'; else if (!inRange(v.flow, 0, 10)) errs.flow = 'Check the flow (0–10 L/min).';
     else if (v.flow > UV_FLOW_LIMIT && !confirmed) warns.flow = `Above ${UV_FLOW_LIMIT} L/min the UV margin is thin — tighten the flow restrictor.`;
     if (!v._edit) {
       need(errs, v, 'firstPay', 'Choose one.');
       if (String(v.firstPay).startsWith('Received') && !v.payMethod) errs.payMethod = 'How was it paid?';
-      if (v.firstPay === 'Not yet' && !confirmed) warns.firstPay = 'G-1 §1-1: the install is not finished until the payment is confirmed. It will show as due today.';
-      if (v.payMethod === 'Cash' && !mayTakeCash() && !confirmed) warns.payMethod = 'G-1 §1-1: only Tara may take cash.';
+      if (v.firstPay === 'Not yet' && !confirmed) warns.firstPay = 'The install is not finished until the payment is confirmed. It will show as due today.';
+      if (v.payMethod === 'Cash' && !mayTakeCash() && !confirmed) warns.payMethod = 'Only Tara may take cash.';
       const np = S.formPhotos.length;
-      if (!np) errs.photos = 'Add the photos (G-1 §2-1: a visit without photos does not count).';
-      else if (np < 3 && !confirmed) warns.photos = `G-1 §2-1 asks for 3 photos — you have ${np}.`;
+      if (!np) errs.photos = 'Add the photos — a visit without photos does not count.';
+      else if (np < 3 && !confirmed) warns.photos = `3 photos are needed — you have ${np}.`;
     }
     need(errs, v, 'agent', 'Who installed?');
     if (!v._edit && !confirmed && S.settings.screenWarn === 'Yes' && phone && !R.findScreening(arr('screenings'), S.convertLead, phone)) warns.name = 'No sign-up screening for this phone yet — do one first (🔎 New → Sign-up screening), or save anyway.';
@@ -713,6 +716,9 @@ FORMS.install = {
     delete data.firstPay; delete data.payMethod; delete data.payRef; delete data.payBillNo; delete data.sign; const vial = data.vialStarted === 'Yes'; delete data.vialStarted;
     if (isNew) { data.signed = !!sig; if (sig) data.noSign = ''; } else { delete data.signName; delete data.noSign; } /* the edit form has no signature box */
     if (isNew) { data.code = newCode(); data.status = 'Active'; }
+    // v0.11: household size and the water they drank before come from the sign-up screening (asked once, there) — sales statistics, blank when there was no screening
+    const scr0 = isNew ? R.findScreening(arr('screenings'), S.convertLead, phone) : null;
+    if (scr0) { if (data.householdSize === undefined || data.householdSize === null) data.householdSize = scr0.householdSize ?? null; if (!data.prevWater) data.prevWater = scr0.prevWater || ''; }
     // converted from a lead → link both ways and mark the lead signed (sales stage days)
     const lead0 = isNew && S.convertLead ? S.D.leads.get(S.convertLead) : null; // the same person only (a cancelled convert must not link a later install)
     const lead = lead0 && (lead0.phone ? normPhone(lead0.phone) === phone : String(lead0.name || '').trim() === String(v.name || '').trim()) ? lead0 : null;
@@ -737,17 +743,20 @@ FORMS.customerEdit = {
     // v0.9 #2: each pause is one line in the home's pause history (start · why · planned restart · restarted)
     { k: 'pausedFrom', l: 'Paused from', t: 'date', def: () => ((editedCust() || {}).status === 'Paused' ? '' : today()), show: (v) => v.status === 'Paused', hint: 'Empty is fine for a home that was paused before this box existed.' },
     { k: 'pauseReason', l: 'Why paused', t: 'chips', o: OPT.pauseReason, show: (v) => v.status === 'Paused' },
-    { k: 'pausedUntil', l: 'Paused until', t: 'date', show: (v) => v.status === 'Paused', hint: 'Empty = the skipped bill day + 1 month − 1 day. At most 1 month (Jun 2026-09-29).' },
+    { k: 'pausedUntil', l: 'Paused until', t: 'date', show: (v) => v.status === 'Paused', hint: 'Empty = the skipped bill day + 1 month − 1 day. At most 1 month.' },
     { k: 'pauseInfo', t: 'info', show: (v) => v.status === 'Paused' },
     { k: 'resumedOn', l: 'Restarted on', t: 'date', def: today, show: (v) => v.status === 'Active' && (editedCust() || {}).status === 'Paused' },
     ...FORMS.install.spec().filter((f) => !['checks', 'purifiedTds', 'flow', 'firstPay', 'payMethod', 'payRef', 'payBillNo', 'photos', 'signName', 'sign', 'noSign', 'vialStarted'].includes(f.k) && !(f.t === 'section' && ['Final checks', 'First-day payment', 'Photos', 'Customer signature', 'Raw-water vial (PoC)'].includes(f.l))),
+    { t: 'section', l: 'Household', hint: 'Usually filled from the sign-up screening.' },
+    { k: 'householdSize', l: 'People in the household', t: 'number' },
+    { k: 'prevWater', l: 'Drinking water before KORA', t: 'chips', o: OPT.prevWater },
     { k: 'photos', l: 'Add photos', t: 'photos' },
   ],
   info(v) {
     const c = (v._id && S.D.customers.get(v._id)) || editedCust(); if (!c || v.status !== 'Paused') return '';
     const line = (x) => `<div>${esc(x)}</div>`; const E = R.pauseEligibility(c, model().ledgers.get(c.id), today(), { from: v.pausedFrom, reason: v.pauseReason, until: v.pausedUntil });
     return (E.skipDue ? line(`Skipped bill: ${E.skipDue} · paused until ${v.pausedUntil || E.until}`) : '') + line('Back within 15 days of that bill day → that bill is charged. Either way it is the one pause for 12 months.') + line('Collect the cartridges at the start · fit new ones at the restart visit.')
-      + (E.why.length ? `<div class="warn" style="margin-top:6px">⚠️ ${E.why.map(esc).join('<br>')}</div>` : line('✅ All pause rules met (Jun 2026-09-29).'));
+      + (E.why.length ? `<div class="warn" style="margin-top:6px">⚠️ ${E.why.map(esc).join('<br>')}</div>` : line('✅ All pause rules met.'));
   },
   check(v, confirmed) {
     const r = FORMS.install.check({ ...v, _edit: true }, confirmed); if (v.status === 'Churned' && !v.churnDate) r.errs.churnDate = 'When did they leave?';
@@ -786,30 +795,28 @@ FORMS.visit = {
     { k: 'noShowReason', l: 'What happened?', t: 'chips', o: OPT.noShowReason, show: (v) => R.isNoShow(v) },
     { k: 'waitedMin', l: 'Minutes you waited or called', t: 'number', show: (v) => R.isNoShow(v) },
     { k: 'retryDate', l: 'Try again on', t: 'date', show: (v) => R.isNoShow(v), hint: 'The visit stays owed — this date becomes the next visit. After saving, send the "sorry we missed you" message from the customer page.' },
-    { t: 'section', k: 'secFilters', l: 'Filters', hint: 'E-2: booking intervals only — decide by what you see. PP brown/black → replace now.', show: (v) => !R.isNoShow(v) },
+    { t: 'section', k: 'secFilters', l: 'Filters', hint: 'Booking intervals are a guide — decide by what you see. PP brown/black → replace now.', show: (v) => !R.isNoShow(v) },
     { k: 'filters', l: 'Filters changed', t: 'chips', multi: 1, o: OPT.filters, show: (v) => !R.isNoShow(v) },
     { k: 'ppColor', l: 'Old PP filter colour', t: 'chips', o: OPT.ppColor, show: (v) => !R.isNoShow(v) },
     { k: 'oldCollected', l: 'Old filters taken back?', t: 'chips', o: OPT.yesNo, show: (v) => !R.isNoShow(v) && (v.filters || []).length > 0 },
-    { k: 'oldCount', l: 'How many old filters', t: 'number', show: (v) => !R.isNoShow(v) && (v.filters || []).length > 0, hint: 'G-1 §2-2: one old filter back for each new one.' },
+    { k: 'oldCount', l: 'How many old filters', t: 'number', show: (v) => !R.isNoShow(v) && (v.filters || []).length > 0, hint: 'One old filter back for each new one.' },
     { t: 'section', k: 'secMeasure', l: 'Measurements', show: (v) => !R.isNoShow(v) },
     { k: 'tdsBefore', l: 'TDS before', t: 'number', show: (v) => !R.isNoShow(v) },
-    { k: 'tdsAfter', l: 'TDS after', t: 'number', hint: 'Required to complete a visit (G-1 §2-3).', show: (v) => !R.isNoShow(v) },
+    { k: 'tdsAfter', l: 'TDS after', t: 'number', hint: 'Required to complete a visit.', show: (v) => !R.isNoShow(v) },
     { k: 'flow', l: 'Flow (L/min)', t: 'number', step: 0.1, ph: 'e.g. 1.1', show: (v) => !R.isNoShow(v) },
     { k: 'parts', l: 'Parts used', t: 'counts', o: partsList, show: (v) => !R.isNoShow(v), hint: 'Tap a part once for each one used (tap again = 2). − takes one off. Counted off stock.' },
-    { k: 'issuedFrom', l: 'Parts came from', t: 'chips', o: ['my bag', 'shelf'], def: 'my bag', show: (v) => !R.isNoShow(v) && (v.parts || []).length > 0, hint: 'My bag = issued to me this morning (G-1 §5-3). Shelf = taken straight from stock.' },
+    { k: 'issuedFrom', l: 'Parts came from', t: 'chips', o: ['my bag', 'shelf'], def: 'my bag', show: (v) => !R.isNoShow(v) && (v.parts || []).length > 0, hint: 'My bag = issued to me this morning. Shelf = taken straight from stock.' },
     { k: 'partsUsed', l: 'Other parts / extra quantity', t: 'text', ph: 'e.g. O-ring ×2, fitting ×1', show: (v) => !R.isNoShow(v) },
-    { k: 'sanitised', l: 'Pipes sanitised on this visit?', t: 'chips', o: OPT.yesNo, hint: 'E-2: full pipe sanitisation every 3 months (quarterly).', show: (v) => !R.isNoShow(v) },
+    { k: 'sanitised', l: 'Pipes sanitised on this visit?', t: 'chips', o: OPT.yesNo, hint: 'Full pipe sanitisation every 3 months.', show: (v) => !R.isNoShow(v) },
     { t: 'section', l: 'Next & who' },
-    { k: 'nextVisitDate', l: 'Next visit date', t: 'date', hint: 'Required to complete (G-1 §2-3). Suggested: monthly for 6 months after install, then every 3 months.', show: (v) => !R.isNoShow(v) },
+    { k: 'nextVisitDate', l: 'Next visit date', t: 'date', hint: 'Required to complete. Suggested: monthly for 6 months after install, then every 3 months.', show: (v) => !R.isNoShow(v) },
     { k: 'technician', l: 'Technician', t: 'chips', o: techNames, req: 1, def: myName },
-    { k: 'transport', l: 'Transport', t: 'chips', o: OPT.transport, def: 'Motorbike' },
     { k: 'durationMin', l: 'Time at the house (minutes)', t: 'number', show: (v) => !R.isNoShow(v) },
-    { k: 'filterCost', l: 'Filter cost (NPR)', t: 'number', def: 0, show: (v) => !R.isNoShow(v) },
     { t: 'section', k: 'secSign', l: 'Customer signature', hint: 'Proof we were there — the customer signs with a finger (saved like a photo). No signature → say why.', show: (v) => !R.isNoShow(v) },
     { k: 'signName', l: 'Signed by (name)', t: 'text', show: (v) => !R.isNoShow(v) },
     { k: 'sign', l: '', t: 'sign', show: (v) => !R.isNoShow(v) },
     { k: 'noSign', l: 'No signature — why?', t: 'chips', o: OPT.noSign, show: (v) => !R.isNoShow(v) && !v.sign },
-    { t: 'section', l: 'Photos', hint: 'G-1 §2-1 filter change: old filter · device after · TDS after. Repair: fault close-up · working after.' },
+    { t: 'section', l: 'Photos', hint: 'Filter change: old filter · device after · TDS after. Repair: fault close-up · working after.' },
     { k: 'photos', l: 'Photos', t: 'photos' },
     { k: 'notes', l: 'Notes', t: 'textarea', ph: 'complaints, symptoms, anything to remember' },
   ],
@@ -820,16 +827,16 @@ FORMS.visit = {
     need(errs, v, 'date'); need(errs, v, 'visitType'); need(errs, v, 'status'); need(errs, v, 'technician', 'Who did the visit?');
     const done = isDone(v.status);
     if (done && v.visitType === 'Filter change' && !(v.filters || []).length) errs.filters = 'Which filters did you change?';
-    if (done && v.tdsAfter === null) errs.tdsAfter = 'Measure TDS after (G-1 §2-3).';
-    if (done && !v.nextVisitDate) errs.nextVisitDate = 'Enter the next visit date (G-1 §2-3).';
+    if (done && v.tdsAfter === null) errs.tdsAfter = 'Measure TDS after.';
+    if (done && !v.nextVisitDate) errs.nextVisitDate = 'Enter the next visit date.';
     if (!inRange(v.tdsBefore, 0, 5000)) errs.tdsBefore = 'Check the TDS number (0–5000).';
     if (!inRange(v.tdsAfter, 0, 5000)) errs.tdsAfter = 'Check the TDS number (0–5000).';
     if (!inRange(v.flow, 0, 10)) errs.flow = 'Check the flow (0–10 L/min).';
     else if (v.flow !== null && v.flow > UV_FLOW_LIMIT && !confirmed) warns.flow = `Above ${UV_FLOW_LIMIT} L/min the UV margin is thin — check the flow restrictor.`;
     if (!inRange(v.oldCount, 0, 20)) errs.oldCount = 'Check this number (0–20).';
     const nf = (v.filters || []).length;
-    if (nf && !confirmed && (v.oldCollected !== 'Yes' || (v.oldCount !== null && v.oldCount < nf))) warns.oldCount = `G-1 §2-2: ${nf} new filter(s) → ${nf} old filter(s) back.`;
-    if (['Brown', 'Black'].includes(v.ppColor) && !(v.filters || []).includes('PP') && !confirmed) warns.ppColor = `PP is ${v.ppColor.toLowerCase()} — E-2 says replace now.`;
+    if (nf && !confirmed && (v.oldCollected !== 'Yes' || (v.oldCount !== null && v.oldCount < nf))) warns.oldCount = `${nf} new filter(s) → ${nf} old filter(s) back.`;
+    if (['Brown', 'Black'].includes(v.ppColor) && !(v.filters || []).includes('PP') && !confirmed) warns.ppColor = `PP is ${v.ppColor.toLowerCase()} — replace it now.`;
     if (!inRange(v.durationMin, 0, 600)) errs.durationMin = 'Check the minutes (0–600).';
     if (R.isNoShow(v)) {
       if (!v.noShowReason) errs.noShowReason = 'What happened at the door?';
@@ -837,9 +844,8 @@ FORMS.visit = {
       else if (v.retryDate <= v.date) errs.retryDate = 'Pick a day after the visit.';
       if (!inRange(v.waitedMin, 0, 240)) errs.waitedMin = 'Check the minutes (0–240).';
     }
-    if (!inRange(v.filterCost, 0, 100000)) errs.filterCost = 'Check the cost.';
     if (done && !v._edit && !v.sign && !v.noSign && !confirmed && S.settings.signAsk === 'Yes') warns.noSign = 'No signature — ask the customer to sign, or say why.';
-    if (done && !v._edit) { const np = S.formPhotos.length; if (!np) errs.photos = 'G-1 §2-1: a visit without photos does not count as done.'; else if (np < 3 && !confirmed && ['Filter change', 'Repair'].includes(v.visitType)) warns.photos = `G-1 §2-1 lists 3 photos for this visit — you have ${np}.`; }
+    if (done && !v._edit) { const np = S.formPhotos.length; if (!np) errs.photos = 'A visit without photos does not count as done.'; else if (np < 3 && !confirmed && ['Filter change', 'Repair'].includes(v.visitType)) warns.photos = `3 photos for this visit — you have ${np}.`; }
     return { errs, warns };
   },
   save(v, id, isNew) {
@@ -888,7 +894,7 @@ FORMS.payment = {
     if (v.amount === null || !inRange(v.amount, 1, 200000)) errs.amount = 'Enter the amount.';
     if (!inRange(v.discount, 0, 50000)) errs.discount = 'Check the discount.';
     if (v._edit && !isBoss()) { const old = S.D.payments.get(v._id) || {}; for (const k of ['amount', 'date', 'type', 'method', 'discount', 'customerId']) if (String(old[k] ?? '') !== String(v[k] ?? '') && !(old[k] == null && (v[k] === '' || v[k] === null))) errs[k === 'customerId' ? 'customerId' : k] = 'A saved payment can only be changed by Jun — tell him what is wrong.'; }
-    if (v.method === 'Cash' && !mayTakeCash() && !confirmed) warns.method = 'G-1 §1-1: only Tara may take cash. Save anyway only if Tara took it.';
+    if (v.method === 'Cash' && !mayTakeCash() && !confirmed) warns.method = 'Only Tara may take cash. Save anyway only if Tara took it.';
     const x = v.customerId && model().cust.get(v.customerId);
     if (x && v.amount && !confirmed && v.type === 'Monthly subscription') { const owed = x.led.overdue > 0 ? x.led.overdue : x.led.nextBill ? x.led.nextBill.amount - x.led.nextBill.paid : 0; if (owed > 0 && v.amount > owed * 3) warns.amount = `That is more than 3 months (${R.npr(owed)} owed now). Prepayment is fine — check the number.`; }
     if (v.type === 'Referral credit' && !v.referralFor) errs.referralFor = 'Which new customer is this for?';
@@ -909,12 +915,12 @@ FORMS.request = {
     { k: 'type', l: 'Problem', t: 'chips', o: OPT.reqType, req: 1 },
     { k: 'priority', l: 'Priority', t: 'chips', o: OPT.priority, req: 1, def: 'Normal' },
     { k: 'status', l: 'Status', t: 'chips', o: OPT.reqStatus, req: 1, def: 'Received' },
-    { k: 'receivedAt', l: 'Received at', t: 'datetime-local', req: 1, def: nowLocal, hint: 'G-1 §2-4: office hours → reply within 2 h, visit same or next day.' },
+    { k: 'receivedAt', l: 'Received at', t: 'datetime-local', req: 1, def: nowLocal, hint: 'Office hours → reply within 2 h, visit same or next day.' },
     { k: 'description', l: 'What the customer said', t: 'textarea', req: 1 },
     { k: 'agent', l: 'Handled by', t: 'chips', o: techNames, def: myName },
     { k: 'resolution', l: 'What we did', t: 'textarea', show: (v) => v.status === 'Done' || v.status === 'In progress' },
     { k: 'doneDate', l: 'Done on', t: 'date', show: (v) => v.status === 'Done', def: today },
-    { k: 'ourFault', l: 'Whose fault was it?', t: 'chips', o: ['Our unit / our work', 'No — power, water supply or the customer'], def: 'Our unit / our work', show: (v) => v.status === 'Done' && R.REPAIR.types.includes(v.type), hint: 'Billing goes on. Not fixed within 7 days of the report → every day from the report comes off the next bill (Jun 2026-09-29).' },
+    { k: 'ourFault', l: 'Whose fault was it?', t: 'chips', o: ['Our unit / our work', 'No — power, water supply or the customer'], def: 'Our unit / our work', show: (v) => v.status === 'Done' && R.REPAIR.types.includes(v.type), hint: 'Billing goes on. Not fixed within 7 days of the report → every day from the report comes off the next bill.' },
   ],
   prefill(p) { return { customerId: p.cid || '', type: p.type || '' }; },
   check(v) {
@@ -1007,9 +1013,9 @@ FORMS.checkin = {
   col: 'checkins', title: 'Check-in call', icon: '📞',
   spec: () => [
     custPicker,
-    { k: 'kind', l: 'Which call', t: 'chips', o: OPT.checkinKind, req: 1 },
+    { k: 'kind', l: 'Which call', t: 'chips', o: OPT.checkinKind, lbl: OPT.checkinKindLabel, req: 1 },
     { k: 'date', l: 'Date', t: 'date', req: 1, def: today },
-    { k: 'by', l: 'Called by', t: 'chips', o: () => [...techNames(), 'Sister (happy call)'], req: 1, def: myName },
+    { k: 'by', l: 'Called by', t: 'chips', o: techNames, req: 1, def: myName },
     // v0.9 #1 payment chase: how, who answered, and the day they will pay
     { k: 'channel', l: 'How', t: 'chips', o: R.CHASE_CHANNELS, req: 1, def: 'Phone', show: isChase },
     { k: 'reached', l: 'Did you reach them?', t: 'chips', o: R.REACHED, req: 1, show: isChase },
@@ -1038,7 +1044,7 @@ FORMS.checkin = {
       if (v.promiseAmount !== null && v.promiseAmount !== undefined && !(v.promiseAmount >= 0)) errs.promiseAmount = 'Amount cannot be negative.';
     } else {
       need(errs, v, 'result');
-      if (v.result === 'Issue found' && !v.notes) errs.notes = 'Write the issue (G-1 §3-2: complaint → book a visit).';
+      if (v.result === 'Issue found' && !v.notes) errs.notes = 'Write the issue — a complaint means a visit gets booked.';
     }
     return { errs, warns };
   },
@@ -1067,7 +1073,7 @@ FORMS.stock = {
   col: 'stockMoves', title: 'Stock movement', icon: '📦',
   spec: () => [
     { k: 'item', l: 'Item', t: 'chips', o: stockItems, req: 1 },
-    { k: 'type', l: 'Movement', t: 'chips', o: OPT.stockType, req: 1, def: 'In', hint: 'Installs and filter changes are subtracted automatically. Issue = a person takes parts for the day, Return = brings back what is left (G-1 §5-3).' },
+    { k: 'type', l: 'Movement', t: 'chips', o: OPT.stockType, req: 1, def: 'In', hint: 'Installs and filter changes are subtracted automatically. Issue = a person takes parts for the day, Return = brings back what is left.' },
     { k: 'person', l: 'Person', t: 'chips', o: techNames, show: (v) => ['Issue', 'Return'].includes(v.type) },
     { k: 'signName', l: 'Signed by (name)', t: 'text', show: (v) => ['Issue', 'Return'].includes(v.type) },
     { k: 'sign', l: 'Signed receipt', t: 'sign', show: (v) => ['Issue', 'Return'].includes(v.type) },
@@ -1186,7 +1192,7 @@ FORMS.contract = {
     }
     if (v.kind === 'Transfer to a new holder') return line('🔴 Draft §2.11 (transfer / succession) is still [TBC] with the lawyer — this only records it. Saving puts the new name and phone on the customer; the old ones stay in this record.');
     const LS = R.lostSettlement(c, model().ledgers.get(c.id), v.lostDate || v.date);
-    return line(`Settlement (Jun 2026-09-29): early-ending charge ${R.npr(LS.fee)} + the unit's value ${R.npr(LS.residual)} − deposit paid ${R.npr(LS.deposit)} = ${R.npr(LS.total)}`) + line(`Draft §2.5(b): the customer tells us within ${R.CONTRACT.lostNotifyDays} days.`) + (c.deviceSerial ? line(`Saving marks the device ${c.deviceSerial} as “Lost / stolen”.`) : '');
+    return line(`Settlement: early-ending charge ${R.npr(LS.fee)} + the unit's value ${R.npr(LS.residual)} − deposit paid ${R.npr(LS.deposit)} = ${R.npr(LS.total)}`) + line(`Draft §2.5(b): the customer tells us within ${R.CONTRACT.lostNotifyDays} days.`) + (c.deviceSerial ? line(`Saving marks the device ${c.deviceSerial} as “Lost / stolen”.`) : '');
   },
   prefill(p) { return { customerId: p.cid || '', kind: p.kind || '' }; },
   check(v) {
@@ -1234,7 +1240,7 @@ FORMS.screening = {
     { k: 'date', l: 'Date', t: 'date', req: 1, def: today },
     { t: 'section', l: 'Home', hint: '🔴 First-guess rules (G-1 has no sign-up rule yet) — the verdict only advises; you decide at the end.' },
     { k: 'housing', l: 'Own house or rent?', t: 'chips', o: ['Own house', 'Renting'], req: 1 },
-    { k: 'mount', l: 'Unit on the wall or on a stand?', t: 'chips', o: ['Stand', 'Wall'], def: 'Stand', show: (v) => v.housing === 'Renting', hint: 'Wall = drilling. Renting + wall needs the landlord\'s written OK (Civil Code §396(1)).' },
+    { k: 'mount', l: 'Unit on the wall or on a stand?', t: 'chips', o: ['Stand', 'Wall'], def: 'Stand', show: (v) => v.housing === 'Renting', hint: 'Wall = drilling. Renting + wall needs the landlord\'s written OK.' },
     { k: 'landlordOk', l: 'Landlord agreed in writing?', t: 'chips', o: OPT.yesNo, show: (v) => v.housing === 'Renting' && v.mount === 'Wall' },
     { k: 'landlordName', l: 'Landlord — name', t: 'text', show: (v) => v.housing === 'Renting' },
     { k: 'landlordPhone', l: 'Landlord — mobile', t: 'tel', ph: '98XXXXXXXX', show: (v) => v.housing === 'Renting' },
@@ -1246,12 +1252,12 @@ FORMS.screening = {
     { k: 'waterSpend', l: 'Spent on drinking water a month (NPR)', t: 'number' },
     { k: 'income', l: 'Main income', t: 'chips', o: R.SCREEN_INCOME, hint: 'Only the kind — do not ask the amount.' },
     { k: 'remitMonths', l: 'Months the money usually comes', t: 'text', ph: 'e.g. Baisakh, Kartik', show: (v) => v.income === 'Money from abroad', hint: 'For the bill day — not a reason to hold.' },
-    { k: 'cashDay1', l: 'First-day 4,900 in cash on the install day?', t: 'chips', o: OPT.yesNo, req: 1, hint: 'No = hold. The first day is not split, owed or waived (Jun 2026-09-29).' },
+    { k: 'cashDay1', l: 'First-day 4,900 in cash on the install day?', t: 'chips', o: OPT.yesNo, req: 1, hint: 'No = hold. The first day is not split, owed or waived.' },
     { t: 'section', l: 'Checks' },
     { k: 'phone2', l: 'Second phone (family)', t: 'tel' },
     { k: 'phone2Who', l: 'Whose is it', t: 'text', ph: 'e.g. husband, son abroad' },
     { k: 'referee', l: 'Referee — name · relation · phone', t: 'text', ph: 'a neighbour, ward person or relative', hint: 'Needed when there is only one phone, or renting here under a year.' },
-    { k: 'consentSigned', l: 'Consent form signed?', t: 'chips', o: OPT.yesNo, hint: 'Needed before we tell a family number or referee about a late bill (Privacy Act §12).' },
+    { k: 'consentSigned', l: 'Consent form signed?', t: 'chips', o: OPT.yesNo, hint: 'Needed before we tell a family number or referee about a late bill.' },
     { k: 'verifyBy', l: 'Check call made by', t: 'text', ph: 'someone other than the seller — usually Tara' },
     { k: 'verifyDate', l: 'Check call on', t: 'date' },
     { k: 'idSeen', l: 'Citizenship card / ID seen?', t: 'chips', o: OPT.yesNo, req: 1, hint: 'Tick only — do not write the number or photograph it.' },
@@ -1351,14 +1357,14 @@ FORMS.tool = {
     { k: 'cost', l: 'Cost (NPR)', t: 'number' },
     { k: 'holder', l: 'Who has it', t: 'chips', o: () => [...techNames(), 'Office'], req: 1, def: 'Office' },
     { k: 'status', l: 'State', t: 'chips', o: R.TOOL_STATUS, req: 1, def: 'OK' },
-    { k: 'fault', l: 'How it happened', t: 'chips', o: R.TOOL_FAULT, show: (v) => ['Broken', 'Lost', 'Needs repair'].includes(v.status) },
+    { k: 'fault', l: 'How it happened', t: 'chips', o: R.TOOL_FAULT, lbl: { [R.TOOL_FAULT[1]]: 'Carelessness (person pays half)' }, show: (v) => ['Broken', 'Lost', 'Needs repair'].includes(v.status) },
     { k: 'repairCost', l: 'Repair or replacement cost (NPR)', t: 'number', show: (v) => ['Broken', 'Lost', 'Needs repair'].includes(v.status) },
     { k: 'calibrated', l: 'Last checked / calibrated', t: 'date', hint: 'For meters (TDS, flow): the day it was checked against a known value.' },
     { k: 'notes', l: 'Notes', t: 'textarea' },
   ],
   check(v) {
     const errs = {}, warns = {}; if (!v.name || v.name.length < 2) errs.name = 'Name the tool.'; need(errs, v, 'holder'); need(errs, v, 'status');
-    if (['Broken', 'Lost'].includes(v.status) && !v.fault) errs.fault = 'How did it happen? (G-1 §5-3)';
+    if (['Broken', 'Lost'].includes(v.status) && !v.fault) errs.fault = 'How did it happen?';
     if (!inRange(v.cost, 0, 1000000)) errs.cost = 'Check the cost.'; if (!inRange(v.repairCost, 0, 1000000)) errs.repairCost = 'Check the cost.';
     return { errs, warns };
   },
@@ -1408,9 +1414,9 @@ FORMS.waterTest = {
   col: 'waterTests', title: 'Raw-water vial', icon: '🧫',
   spec: () => [
     custPicker,
-    { k: 'sampledDate', l: 'Filled on', t: 'date', req: 1, def: today, hint: 'Kitchen tap, before the unit is connected. Keep the vial warm (35 °C pocket incubator).' },
+    { k: 'sampledDate', l: 'Filled on', t: 'date', req: 1, def: today, hint: 'Kitchen tap, before the unit is connected. Keep the vial indoors at room temperature and read it after 2 days.' },
     { k: 'readDate', l: 'Read on', t: 'date' },
-    { k: 'result', l: 'Colour', t: 'chips', o: R.VIAL_RESULTS, hint: 'Blue = E. coli · pink = coliforms · no change = none seen. 🚨 Our own check — never tell the customer the water is safe or unsafe from it.' },
+    { k: 'result', l: 'Colour', t: 'chips', o: R.VIAL_RESULTS, hint: 'Black = faecal contamination · no change = none seen. 🚨 Our own check — never tell the customer the water is safe or unsafe from it.' },
     { k: 'photos', l: 'Photo of the vial', t: 'photos' },
     { k: 'notes', l: 'Notes', t: 'textarea' },
   ],
@@ -1745,37 +1751,35 @@ export function statusCard() {
   return `<div class="card"><div class="status"><span class="dot live ${s.c}" data-sync-dot></span><span data-sync-text>${esc(s.t)}</span></div>
     <div class="muted" style="margin-top:6px">${navigator.onLine ? 'Online' : 'Offline'} · last server contact ${esc(ago(S.lastServer))}</div></div>`;
 }
-export const tagList = (c) => String((c && c.tags) || '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 8);
+// v0.11 phone lists (Tara 2026-09-30 "too colourful · too bold"): grouped rows like the iPhone Settings app — a small coloured icon box, plain text, a number, › on the right
+export const rowsHtml = (groups) => groups.filter((g) => g.rows.length).map((g) => `${g.title ? `<div class="sec">${esc(g.title)}</div>` : ''}<div class="card flush rows">${g.rows.map((r) => `<button class="rowb ${r.tone || g.tone || ''}" ${r.attr}><span class="ric">${r.ic}</span><span class="rl">${esc(r.l)}${r.s ? `<small>${esc(r.s)}</small>` : ''}</span>${r.n !== undefined && r.n !== '' ? `<span class="rn">${r.n}</span>` : ''}${r.b ? `<span class="rb">${r.b}</span>` : ''}<span class="rc">›</span></button>`).join('')}</div>`).join('');
 export const cItem = (x, right) => `<div class="item" data-cust="${esc(x.c.id)}"><span class="dot ${x.dot}"></span><div class="main"><div class="t">${esc(custLabel(x.c))}${x.c._pending ? ' <span class="pill warn">on phone</span>' : ''}</div>
-  <div class="s">${esc(toleOf(x.c))} · Ward ${esc(x.c.ward || '–')}${x.led.overdue ? ` · <span style="color:var(--bad)">${R.npr(x.led.overdue)} due</span>` : ''}${tagList(x.c).length ? ' · ' + tagList(x.c).map((g) => '#' + esc(g)).join(' ') : ''}</div></div>${right ? `<div class="r">${right}</div>` : '<div class="r">›</div>'}</div>`;
+  <div class="s">${esc(toleOf(x.c))} · Ward ${esc(x.c.ward || '–')}${x.led.overdue ? ` · <span style="color:var(--bad)">${R.npr(x.led.overdue)} due</span>` : ''}</div></div>${right ? `<div class="r">${right}</div>` : '<div class="r">›</div>'}</div>`;
 
 function viewToday() {
   const m = model(); const t = m.t;
   const chase = chaseFirst(m); const late = chase.filter((x) => ['call', 'visit'].includes(x.dn.stage)).length; /* v0.9 fix: promised homes wait until their day */
   const reqLate = m.openReq.filter((x) => Date.now() > x.sla.replyBy).length;
-  const tiles = [
-    ['collections', '💰', 'Collections', chase.length, late ? `${late} need a call/visit` : 'reminders', late ? 'bad' : chase.length ? 'warn' : 'ok'],
-    ['visits', '🔧', 'Visits due', m.visitsDue.length, 'by tole', m.visitsDue.length ? 'warn' : 'ok'],
-    ['calls', '📞', 'Calls', m.calls.length, 'onboarding & happy calls', m.calls.length ? 'warn' : 'ok'],
-    ['requests', '📋', 'Requests', m.openReq.length, reqLate ? `${reqLate} past reply time` : 'open', reqLate ? 'bad' : m.openReq.length ? 'warn' : 'ok'],
-    ['tomorrow', '📅', 'Bills tomorrow', m.tomorrowBills.length, 'send reminders', ''],
-    ['leads', '🧲', 'Leads to follow', m.leadsDue.length, 'follow-up due', m.leadsDue.length ? 'warn' : ''],
-  ];
-  const sec = (title, items, empty, list) => `<h2>${title}${list ? `<button class="btn small ghost" style="margin-left:auto" data-list="${list}">All</button>` : ''}</h2><div class="card flush">${items || `<div class="empty">${empty}</div>`}</div>`;
-  const s = syncState(); const tones = { collections: 'tone-money', visits: 'tone-field', calls: 'tone-call', requests: 'tone-req', tomorrow: 'tone-bill', leads: 'tone-lead' };
+  const watch = m.watch.filter((w) => w.lvl !== 'low');
+  const s = syncState();
   const hr = new Date().getHours(); const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+  // v0.11: one list, one number per line, a red badge only where someone must act today (Tara 2026-09-30)
+  const rows = [
+    { attr: 'data-list="collections"', ic: '💰', l: 'Collections', n: chase.length, b: late || '', tone: 'tone-money' },
+    { attr: 'data-list="visits"', ic: '🔧', l: 'Visits due', n: m.visitsDue.length, tone: 'tone-field' },
+    { attr: 'data-list="calls"', ic: '📞', l: 'Calls', n: m.calls.length, tone: 'tone-call' },
+    { attr: 'data-list="requests"', ic: '📋', l: 'Requests', n: m.openReq.length, b: reqLate || '', tone: 'tone-req' },
+    { attr: 'data-list="tomorrow"', ic: '📅', l: 'Bills tomorrow', n: m.tomorrowBills.length, tone: 'tone-bill' },
+    { attr: 'data-list="leads"', ic: '🧲', l: 'Leads to follow', n: m.leadsDue.length, tone: 'tone-lead' },
+    ...(watch.length ? [{ attr: 'data-list="watch"', ic: '⚠️', l: 'Look after this week', n: watch.length, tone: 'tone-req' }] : []),
+  ];
   return `<div class="hero">
     <div class="top"><div><div class="hello">${esc(greet)}, ${esc(myName() || 'team')}</div><div class="date">${esc(fmtDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }))}</div></div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">${langSeg()}<span class="syncpill"><span class="dot live ${s.c}" data-sync-dot></span><span data-sync-text>${esc(s.t)}</span></span></div></div>
-    <div class="stats"><button data-list="visits"><b>${m.visitsDue.length}</b><span>Visits due</span></button><button data-list="collections"><b>${chase.length}</b><span>To collect</span></button><button data-list="calls"><b>${m.calls.length}</b><span>Calls</span></button></div>
     <button class="cta" data-tab-go="route">🗺️ Open today's route</button>
   </div>
-  <div class="grid2 stagger" style="margin-top:12px">${tiles.map(([k, ic, l, n, sub, cls], i) => `<button class="tile ${cls} ${tones[k]}" data-list="${k}" style="--i:${i}"><span class="ic">${ic}</span><span class="n">${n}</span><span>${l}</span><span class="s">${esc(sub)}</span></button>`).join('')}</div>
-  ${sec('💰 Chase first', chase.slice(0, 5).map((x) => dunItem(x)).join(''), 'Nobody to chase today 🎉', 'collections')}
-  ${m.watch.some((w) => w.lvl !== 'low') ? sec('⚠️ Look after this week', m.watch.filter((w) => w.lvl !== 'low').slice(0, 3).map((w) => watchItem(w, { max: 2 })).join(''), '', 'watch') : ''}
-  ${sec('🔧 Visits due', m.visitsDue.slice(0, 5).map((x) => cItem(x, `<span class="pill ${x.due < t ? 'bad' : 'warn'}">${esc(x.filterOnly ? 'filter' : x.due === t ? 'today' : x.due)}</span>`)).join(''), 'No visits due', 'visits')}
-  ${sec('📋 Open requests', m.openReq.slice(0, 4).map(reqItem).join(''), 'No open requests', 'requests')}
-  <div class="row" style="margin-top:6px"><button class="btn" data-go-form="visit">🔧 Visit</button><button class="btn" data-go-form="payment">💵 Payment</button></div>`;
+  ${rowsHtml([{ title: 'Today', rows }])}
+  <div class="sec">Chase first</div><div class="card flush">${chase.slice(0, 3).map((x) => dunItem(x)).join('') || '<div class="empty">Nobody to chase today 🎉</div>'}</div>`;
 }
 export function dunItem(x) {
   const d = x.dn; const cls = { reminder: 'blue', due: 'warn', late: 'warn', call: 'orange', visit: 'bad' }[d.stage];
@@ -1783,8 +1787,12 @@ export function dunItem(x) {
   // v0.9 #1: tries since the money went late (or in the last 30 days) + the promise, if any
   const t0 = today(); const tries = (x.chases || []).filter((q) => q.date >= (x.led.overdueSince || R.addDays(t0, -30))); const last = tries[0];
   const pr = x.pr && ['waiting', 'broken'].includes(x.pr.status) ? x.pr : null;
-  const prLine = pr ? `<div class="s chase-${pr.status}">${pr.status === 'broken' ? '🤝❌' : '🤝'} <span>${esc(pr.status === 'broken' ? `promise broken (${pr.date})` : `promised by ${pr.date}`)}</span>${pr.amount ? ` · ${R.npr(pr.amount)}` : ''}</div>` : '';
-  const chLine = tries.length ? `<div class="s chase-tries">📞 <span>${esc(`${tries.length} ${tries.length === 1 ? 'try' : 'tries'}`)}</span> · <span>${esc('last: ' + (last.reached || last.channel || '—'))}</span> · <span>${esc(last.date === t0 ? 'today' : `${R.daysBetween(last.date, t0)} d ago`)}</span></div>` : '';
+  const prLine = pr ? `<div class="s chase-${pr.status}">${S.desk ? (pr.status === 'broken' ? '🤝❌ ' : '🤝 ') : ''}<span>${esc(pr.status === 'broken' ? `promise broken (${pr.date})` : `promised by ${pr.date}`)}</span>${pr.amount ? ` · ${R.npr(pr.amount)}` : ''}</div>` : '';
+  const chLine = tries.length ? `<div class="s chase-tries">${S.desk ? '📞 ' : ''}<span>${esc(`${tries.length} ${tries.length === 1 ? 'try' : 'tries'}`)}</span> · <span>${esc('last: ' + (last.reached || last.channel || '—'))}</span> · <span>${esc(last.date === t0 ? 'today' : `${R.daysBetween(last.date, t0)} d ago`)}</span></div>` : '';
+  // v0.11 phone (Tara 2026-09-30): one accent per card (the stage pill), plain text, the three actions on their own line so the text keeps its width
+  if (!S.desk) return `<div class="item dun" data-cust="${esc(x.c.id)}"><div class="main"><div class="t">${esc(x.c.name)} <span class="pill ${cls}">${esc(d.short)}</span></div>
+    <div class="s">${R.npr(d.owed)} · ${esc(when)} · ${esc(toleOf(x.c))}</div>${prLine}${chLine}
+    <div class="dun-acts"><a class="btn small ghost" href="tel:${esc(x.c.phone)}" data-stop>📞 Call</a><a class="btn small ghost" href="${esc(waLink(x.c.phone, dunText(x)))}" target="_blank" rel="noopener" data-stop>💬 WhatsApp</a>${canForm('checkin') ? `<button class="btn small ghost" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(R.CHASE_KIND)}" title="Log a payment chase">📝 Log</button>` : ''}</div></div></div>`;
   return `<div class="item" data-cust="${esc(x.c.id)}"><span class="dot ${x.dot}"></span><div class="main"><div class="t">${esc(x.c.name)} <span class="pill ${cls}">${esc(d.short)}</span></div>
     <div class="s">${R.npr(d.owed)} · ${esc(when)} · ${esc(toleOf(x.c))}</div>${prLine}${chLine}</div>
     <div class="acts">${canForm('checkin') ? `<button class="icon-btn" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(R.CHASE_KIND)}" title="Log a payment chase">📝</button>` : ''}<a class="icon-btn" href="${esc(waLink(x.c.phone, dunText(x)))}" target="_blank" rel="noopener" data-stop>💬</a><a class="icon-btn" href="tel:${esc(x.c.phone)}" data-stop>📞</a></div></div>`;
@@ -1811,7 +1819,7 @@ export function collectionGroups(xs) {
   const st = (x) => (x.pr ? x.pr.status : ''); const broken = xs.filter((x) => st(x) === 'broken'); const waiting = xs.filter((x) => st(x) === 'waiting').sort((a, b) => a.pr.date.localeCompare(b.pr.date));
   const rest = xs.filter((x) => !['broken', 'waiting'].includes(st(x)));
   const steps = R.DUNNING.map((d) => ({ key: d.stage, label: d.label, xs: rest.filter((x) => x.dn.stage === d.stage) })).filter((g) => g.xs.length).reverse();
-  return [...(broken.length ? [{ key: 'broken', label: '🤝❌ Promise broken — call or visit now', xs: broken }] : []), ...steps, ...(waiting.length ? [{ key: 'waiting', label: '🤝 Promised — wait until their day', xs: waiting }] : [])];
+  return [...(broken.length ? [{ key: 'broken', label: 'Promise broken — call or visit now', xs: broken }] : []), ...steps, ...(waiting.length ? [{ key: 'waiting', label: 'Promised — wait until their day', xs: waiting }] : [])];
 }
 // Filter order dates: when each filter runs out on the shelf and the last day to order (lead time + safety) — settings hold the guesses.
 // v0.9 #7 parts on the shelf and with people · tools
@@ -1819,9 +1827,9 @@ export function partsCard(m) {
   const st = m.metrics.stock; const min = Number(S.settings.partsMin) > 0 ? Number(S.settings.partsMin) : R.PARTS_MIN; const ppl = R.partsWithPeople(m.D.stockMoves, m.D.visits);
   const who = Object.keys(ppl).filter((w) => Object.values(ppl[w]).some((n) => n));
   const tools = m.D.tools.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  return `<div class="card"><div class="status" style="font-size:15px">🔩 Parts</div><div class="muted" style="margin:4px 0 8px">Shelf = in − out − issued + returned − used from the shelf. Order more below ${min} (🔴 first guess · Settings). G-1 §5-3: issue in the morning, return in the evening — both signed.</div>
+  return `<div class="card"><div class="status" style="font-size:15px">🔩 Parts</div><div class="muted" style="margin:4px 0 8px">Shelf = in − out − issued + returned − used from the shelf. Order more below ${min} (🔴 first guess · Settings). Issue in the morning, return in the evening — both signed.</div>
     <div class="scroll-x"><table class="tbl"><tr><th>Part</th><th class="n">Shelf</th>${who.map((w) => `<th class="n">${esc(w)}</th>`).join('')}<th></th></tr>
-    ${partsList().map((p) => { const n = st['Part: ' + p] ?? 0; return `<tr><td>${esc(p)}</td><td class="n">${n}</td>${who.map((w) => { const h = ppl[w][p] || 0; return `<td class="n"${h < 0 ? ' style="color:var(--bad)"' : ''}>${h}</td>`; }).join('')}<td>${n < min ? '<span class="pill warn">order</span>' : ''}</td></tr>`; }).join('')}</table></div>${who.some((w) => Object.values(ppl[w]).some((h) => h < 0)) ? `<div class="hint" style="color:var(--bad)">${esc('A negative number = used from the bag with no issue record — record the morning issue (G-1 §5-3).')}</div>` : ''}</div>
+    ${partsList().map((p) => { const n = st['Part: ' + p] ?? 0; return `<tr><td>${esc(p)}</td><td class="n">${n}</td>${who.map((w) => { const h = ppl[w][p] || 0; return `<td class="n"${h < 0 ? ' style="color:var(--bad)"' : ''}>${h}</td>`; }).join('')}<td>${n < min ? '<span class="pill warn">order</span>' : ''}</td></tr>`; }).join('')}</table></div>${who.some((w) => Object.values(ppl[w]).some((h) => h < 0)) ? `<div class="hint" style="color:var(--bad)">${esc('A negative number = used from the bag with no issue record — record the morning issue.')}</div>` : ''}</div>
     <div class="card"><div class="status" style="font-size:15px">🧰 Tools</div>${tools.length ? `<div class="scroll-x"><table class="tbl"><tr><th>Tool</th><th>With</th><th>State</th><th>Last check</th><th class="n">Staff pays</th></tr>${tools.map((x) => `<tr data-edit="tool" data-id="${esc(x.id)}" style="cursor:pointer"><td>${esc(x.name)}${x.serial ? ' <span class="muted">' + esc(x.serial) + '</span>' : ''}</td><td>${esc(x.holder || '')}</td><td><span class="pill ${x.status === 'OK' ? 'ok' : x.status === 'Needs repair' ? 'warn' : 'bad'}">${esc(x.status || '')}</span></td><td class="mono">${esc(x.calibrated || '—')}</td><td class="n">${x.staffShare ? R.npr(x.staffShare) : '—'}</td></tr>`).join('')}</table></div>` : '<div class="empty">No tools recorded yet</div>'}</div>`;
 }
 export function filterOrderCard(m) {
@@ -1872,18 +1880,16 @@ function withApproval(col, id, data) {
 }
 
 
-export const canForm = (f) => (f === 'payPerson' ? isBoss() : !FORM_PERM[f] || can(FORM_PERM[f])); /* payroll: Jun and the deputy only */
+export const canForm = (f) => (f === 'payPerson' ? isBoss() : f === 'training' ? !!S.isAdmin : !FORM_PERM[f] || can(FORM_PERM[f])); /* payroll: Jun and the deputy only · training records: admin accounts only (Jun 2026-09-30 "내 화면에만") */
 function viewNew() {
-  const list = [
-    ['install', 'New install', 'customer + device + day-1 payment'], ['visit', 'Visit', 'filters · TDS · flow · repair'],
-    ['payment', 'Payment', 'monthly bill · repair'], ['request', 'Service request', 'breakdown · leak · claim'],
-    ['lead', 'Lead', 'interested household'], ['checkin', 'Check-in call', 'day 7/30/60/90 · happy call'],
-    ['relocation', 'Relocation', 'customer moves house'], ['recovery', 'Recovery case', 'customer left — get the device'],
-    ['expense', 'Expense', 'bill · receipt · VAT'], ['device', 'Device event', 'arrival · check · refurbish'],
-    ['photo', 'Add photos', 'house · device · contract'], ['training', 'Training', 'who learned what'], ['stock', 'Stock', 'devices & filters in/out'],
-    ['contract', 'Contract event', 'notice · transfer · lost'], ['screening', 'Sign-up screening', 'before an install'], ['claim', 'Supplier claim', 'defect → replace or credit'], ['tool', 'Tool', 'who has it · repairs'], ['waterTest', 'Raw-water vial', 'E. coli check (PoC)'],
-  ].filter(([f]) => canForm(f));
-  return `<h1>New</h1><div class="tiles-new stagger">${list.map(([f, l, sub], i) => `<button class="tile" data-go-form="${f}" style="--i:${i}"><span class="ic">${FORMS[f].icon}</span><span>${l}</span><span class="s">${sub}</span></button>`).join('')}</div>`;
+  // v0.11: grouped rows instead of 18 coloured tiles (Tara 2026-09-30) · the group colour is the icon box
+  const row = (f, l, s) => (canForm(f) ? [{ attr: `data-go-form="${f}"`, ic: FORMS[f].icon, l, s }] : []);
+  return `<h1>New</h1>` + rowsHtml([
+    { title: 'Every day', tone: 'tone-field', rows: [...row('visit', 'Visit', 'filters · TDS · flow · repair'), ...row('payment', 'Payment', 'monthly bill · repair'), ...row('install', 'New install', 'customer + device + day-1 payment'), ...row('request', 'Service request', 'breakdown · leak · claim'), ...row('checkin', 'Check-in call', 'day-7 call · follow-up · payment chase')] },
+    { title: 'Sales', tone: 'tone-lead', rows: [...row('lead', 'Lead', 'interested household'), ...row('screening', 'Sign-up screening', 'before an install')] },
+    { title: 'Sometimes', tone: 'tone-call', rows: [...row('relocation', 'Relocation', 'customer moves house'), ...row('recovery', 'Recovery case', 'customer left — get the device'), ...row('contract', 'Contract event', 'notice · transfer · lost'), ...row('photo', 'Add photos', 'house · device · contract'), ...row('waterTest', 'Raw-water vial', 'P/A check (PoC)')] },
+    { title: 'Office', tone: 'tone-bill', rows: [...row('expense', 'Expense', 'bill · receipt · VAT'), ...row('device', 'Device event', 'arrival · check · refurbish'), ...row('stock', 'Stock', 'devices & filters in/out'), ...row('claim', 'Supplier claim', 'defect → replace or credit'), ...row('tool', 'Tool', 'who has it · repairs'), ...row('training', 'Training', 'who learned what')] },
+  ]);
 }
 export function custListHtml(p) {
   const m = model(); const q = String(p.q || '').toLowerCase(); const f = p.f || 'all';
@@ -1893,7 +1899,7 @@ export function custListHtml(p) {
   if (f === 'paused') list = list.filter((x) => x.status === 'Paused');
   if (f === 'churned') list = list.filter((x) => x.status === 'Churned');
   if (f === 'all') list = list.filter((x) => x.status !== 'Churned');
-  if (q) list = list.filter((x) => [x.c.name, x.c.code, x.c.phone, toleOf(x.c), x.c.deviceSerial, x.c.tags].some((s) => String(s || '').toLowerCase().includes(q)));
+  if (q) list = list.filter((x) => [x.c.name, x.c.code, x.c.phone, toleOf(x.c), x.c.deviceSerial, x.c.notes].some((s) => String(s || '').toLowerCase().includes(q)));
   list.sort((a, b) => String(a.c.name).localeCompare(String(b.c.name)));
   const more = list.length > 200;
   return (list.slice(0, 200).map((x) => cItem(x)).join('') + (more ? `<div class="empty">+${list.length - 200} more — search to narrow</div>` : '')) || '<div class="empty">No customers</div>';
@@ -1930,7 +1936,7 @@ function viewDetail(p) {
   if (x.dn && ['call', 'visit', 'late', 'due'].includes(x.dn.stage)) todo.push({ lvl: x.dn.stage === 'visit' || x.dn.stage === 'call' ? 'bad' : 'warn', ic: '💰', t: `Collect ${R.npr(led.overdue || x.dn.owed)}`, s: `${x.dn.label}${led.overdueSince ? ' · since ' + led.overdueSince : ''}`, a: `<a class="btn small ok" href="${esc(waLink(c.phone, dunText(x)))}" target="_blank" rel="noopener">💬 Remind</a>${canForm('checkin') ? `<button class="btn small ghost" data-go-form="checkin" data-cid="${esc(c.id)}" data-kind="${esc(R.CHASE_KIND)}">📝 Log chase</button>` : ''}<button class="btn small" data-go-form="payment" data-cid="${esc(c.id)}">💵 Pay</button>` });
   if (x.pr && x.pr.status === 'waiting') todo.push({ lvl: 'info', ic: '🤝', t: `promised by ${x.pr.date}`, s: `${x.pr.amount ? R.npr(x.pr.amount) + ' · ' : ''}${x.pr.by ? 'told ' + x.pr.by + ' · ' : ''}${x.pr.madeOn}` });
   else if (x.pr && x.pr.status === 'broken') todo.push({ lvl: 'bad', ic: '🤝', t: `promise broken (${x.pr.date})`, s: `${x.pr.amount ? R.npr(x.pr.amount) + ' promised · ' : ''}${R.npr(x.pr.paid)} paid by then` });
-  else if (x.dn && x.dn.stage === 'reminder') todo.push({ lvl: 'info', ic: '💰', t: `Bill ${R.npr(x.dn.owed)} due ${x.dn.bill.due}`, s: 'G-1 §1-3: send the reminder 3 days before', a: `<a class="btn small ghost" href="${esc(waLink(c.phone, dunText(x)))}" target="_blank" rel="noopener">💬 Remind</a>` });
+  else if (x.dn && x.dn.stage === 'reminder') todo.push({ lvl: 'info', ic: '💰', t: `Bill ${R.npr(x.dn.owed)} due ${x.dn.bill.due}`, s: 'Send the reminder 3 days before', a: `<a class="btn small ghost" href="${esc(waLink(c.phone, dunText(x)))}" target="_blank" rel="noopener">💬 Remind</a>` });
   const fo = x.fd.filter((f) => f.status === 'overdue');
   const ns = x.nv && x.nv.noShow; // 🚪 nobody home on the last try (v0.8 #7)
   if (ns && String(ns.date).slice(0, 10) === t) todo.push({ lvl: 'warn', ic: '🚪', t: 'Nobody home today', s: `${ns.noShowReason || 'Nobody home'} · trying again ${ns.retryDate}`, a: c.phone ? `<a class="btn small ghost" href="${esc(waLink(c.phone, missText(c, ns)))}" target="_blank" rel="noopener">💬 Sorry we missed you</a>` : '' });
@@ -1942,7 +1948,7 @@ function viewDetail(p) {
   for (const wt of m.vials.waiting.filter((q) => q.customerId === c.id)) todo.push({ lvl: 'info', ic: '🧫', t: 'Read the water vial', s: `filled ${wt.sampledDate || '?'}`, a: `<button class="btn small ghost" data-edit="waterTest" data-id="${esc(wt.id)}">🧫 Read</button>` });
   if (led.contractEnded) todo.push({ lvl: 'warn', ic: '📝', t: 'Contract ended — renew', s: `${R.PRICES.contractMonths} months since ${c.installDate}` });
   for (const o of m.contractOpen.filter((q) => q.e.customerId === c.id)) todo.push(o.kind === 'notice' ? { lvl: o.overdue || o.soon ? 'bad' : 'warn', ic: '📜', t: `ending on ${o.e.endDate || '?'} — book the recovery`, s: o.e.early ? `before 36 months · deposit paid ${R.npr(o.e.depositPaid || 0)} is kept (draft §2.2)` : 'after 36 months · deposit back with the unit (draft §2.2)', a: can('visit') ? `<button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start recovery</button>` : '' } : { lvl: 'warn', ic: '📜', t: 'device lost or stolen — not settled', s: `${o.e.fault || ''}${o.lateNotice ? ' · told us late (draft §2.5(b))' : ''}`, a: canForm('contract') ? `<button class="btn small ghost" data-edit="contract" data-id="${esc(o.e.id)}">Settle</button>` : '' });
-  for (const r of refs.filter((q) => q.ready)) todo.push({ lvl: 'info', ic: '🎁', t: r.role === 'referee' ? 'Referral: 1 month free (off bill 2)' : 'Referral reward: 1 month free', s: 'G-1 §4', a: isBoss() ? `<a href="#" class="btn small ghost" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">Apply</a>` : '' });
+  for (const r of refs.filter((q) => q.ready)) todo.push({ lvl: 'info', ic: '🎁', t: r.role === 'referee' ? 'Referral: 1 month free (off bill 2)' : 'Referral reward: 1 month free', s: 'referral reward', a: isBoss() ? `<a href="#" class="btn small ghost" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">Apply</a>` : '' });
   const worst = todo.some((q) => q.lvl === 'bad') ? 'bad' : todo.some((q) => q.lvl === 'warn') ? 'warn' : todo.length ? 'info' : 'ok';
   const nowCard = x.status === 'Churned' ? `<div class="card now lv-info"><div class="now-h">⚫ Customer has left${c.churnDate ? ` <span class="muted">${esc(c.churnDate)}</span>` : ''}</div>${recs.length ? '' : `<div class="now-i lv-warn"><span class="ic">📦</span><div class="main"><div class="t">No recovery case yet</div><div class="s">get the device back and settle the deposit</div></div><div class="acts"><button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start</button></div></div>`}</div>`
     : `<div class="card now lv-${worst}"><div class="now-h">${worst === 'ok' ? '✅ Nothing due here' : '⚡ Do now'}<span class="sp"></span>${worst === 'ok' ? `<span class="muted">${x.nv ? `next visit ${esc(x.nv.date)} · ` : ''}${led.nextBill ? 'next bill ' + esc(led.nextBill.due) : ''}</span>` : ''}</div>
@@ -1952,7 +1958,6 @@ function viewDetail(p) {
   <div class="det-h"><span class="dot ${x.dot}" style="width:16px;height:16px"></span><h1 style="margin:0">${esc(c.name)}</h1></div>
   <div class="muted">${esc(c.code)} · ${esc(toleOf(c))} · Ward ${esc(c.ward || '–')} · <span class="pill ${stPill}">${esc(x.status)}</span>${c._pending ? ' <span class="pill warn">on phone</span>' : ''}</div>
   ${assignLine(c, t)}
-  ${tagList(c).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${tagList(c).map((g) => `<span class="pill blue">#${esc(g)}</span>`).join('')}</div>` : ''}
   <div class="links">
     <a href="tel:${esc(c.phone)}">📞 Call</a><a href="${esc(waLink(c.phone))}" target="_blank" rel="noopener">💬 WhatsApp</a>
     ${hasGps ? `<a href="${esc(G.dirUrl(dest))}" data-nav="${esc(dest)}" target="_blank" rel="noopener">🧭 Navigate</a>` : ''}
@@ -1970,7 +1975,7 @@ function viewDetail(p) {
     ${kv([['Find the house', c.houseDetail], ['Tole · ward · zone', `${toleOf(c)} · Ward ${c.ward || '–'} · ${c.zone || '–'}`], ['Phone', `<a href="tel:${esc(c.phone)}">${esc(c.phone || '–')}</a>`, 1]])}
   </div>
   <div class="sec">Customer</div>
-  <div class="card">${kv([['Household', c.householdSize], ['Water before', c.prevWater], ['Water source', c.waterSource], ['Plan', c.plan], ['Signed up', c.signUpDate], ['Screening', (() => { const sc = R.findScreening(m.D.screenings, c.leadId, c.phone); return sc ? `${sc.verdict} · ${sc.decision || ''} · ${sc.date || ''}` : undefined; })()], ['Heard via', (c.referral || '') + (c.referrerName ? ' — ' + c.referrerName : '') + (c.referrerId && S.D.customers.get(c.referrerId) ? ' — ' + S.D.customers.get(c.referrerId).name : '')], ...(c.buyerPan ? [['Buyer PAN', c.buyerPan]] : []), ['Notes', c.notes]])}</div>
+  <div class="card">${kv([['Household', c.householdSize], ['Water before', c.prevWater], ['Water source', c.waterSource], ['Plan', c.plan], ['Signed up', c.signUpDate], ['Screening', (() => { const sc = R.findScreening(m.D.screenings, c.leadId, c.phone); return sc ? `${sc.verdict} · ${sc.decision || ''} · ${sc.date || ''}` : undefined; })()], ['Heard via', (c.referral || '') + (c.referrerName ? ' — ' + c.referrerName : '') + (c.referrerId && S.D.customers.get(c.referrerId) ? ' — ' + S.D.customers.get(c.referrerId).name : '')], ...(c.buyerPan ? [['Buyer PAN', c.buyerPan]] : []), ['Special comment', c.notes]])}</div>
   ${isBoss() ? `<div class="card"><label for="privNotes">🔒 Private notes</label><textarea id="privNotes" placeholder="loading…"></textarea><button class="btn ghost" data-act="privSave" data-cid="${esc(c.id)}">Save private notes</button></div>` : ''}
   ${isBoss() ? (() => { const atOf = (a) => (a.createdAt && a.createdAt.toMillis ? new Date(a.createdAt.toMillis()).toISOString() : String(a.at || '')); const ch = arr('audit').filter((a) => a.customerId === c.id).map((a) => ({ ...a, at: atOf(a), by: userName(a.createdBy, a.createdBy ? '' : a.by) })).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 15); return ch.length ? `<div class="sec">🕵️ Changes to this home</div><div class="card">${ch.map((a) => `<div class="muted" style="margin:4px 0" data-noi18n><b>${esc(String(a.at || '').slice(0, 16).replace('T', ' '))}</b> · ${esc(a.by || '—')} · ${esc(a.col)} — ${(a.fields || []).map((f) => `${esc(f)}: ${esc((a.before || {})[f] || '—')} → ${esc((a.after || {})[f] || '—')}`).join(' · ')}</div>`).join('')}</div>` : ''; })() : ''}
   <div class="sec">Device & filters</div>
@@ -2004,8 +2009,8 @@ function viewDetail(p) {
   ${reqs.length ? `<div class="sec">Requests</div><div class="card flush">${reqs.map((r) => `<div class="item" data-edit="request" data-id="${esc(r.id)}"><div class="main"><div class="t">${esc(r.type)} · ${esc(r.status)}</div><div class="s">${esc(String(r.receivedAt || '').replace('T', ' '))} · ${esc(String(r.description || '').slice(0, 70))}</div></div><div class="r">›</div></div>`).join('')}</div>` : ''}
   <div class="sec">Onboarding & calls</div>
   <div class="card"><div class="progress-steps" style="margin-bottom:10px">${x.ob.slice(0, 4).map((o) => `<i class="${o.status === 'done' ? 'on' : ''}" title="${esc(o.label)}"></i>`).join('')}</div>
-    ${x.ob.map((o) => `<div class="item" data-go-form="checkin" data-cid="${esc(c.id)}" data-kind="${esc(o.k === 'Q' ? 'Quarterly call' : o.k)}"><div class="main"><div class="t">${esc(o.label)}</div><div class="s">${esc(o.due)}${o.done ? ' · ' + esc(o.done.result) + ' by ' + esc(o.done.by) : ''}</div></div><div class="r"><span class="pill ${o.status === 'done' ? 'ok' : o.status === 'overdue' ? 'bad' : o.status === 'due' ? 'warn' : 'grey'}">${o.status}</span></div></div>`).join('')}
-    ${chks.filter((q) => !['D7', 'D30', 'D60', 'D90', R.CHASE_KIND].includes(q.kind)).map((q) => `<div class="muted">📞 ${esc(q.date)} ${esc(q.kind)} · ${esc(q.result)}${q.satisfaction ? ' · ' + '★'.repeat(Math.max(0, Math.min(5, Math.round(Number(q.satisfaction) || 0)))) : ''}</div>`).join('')}</div>
+    ${x.ob.map((o) => `<div class="item" data-go-form="checkin" data-cid="${esc(c.id)}" data-kind="${esc(o.k)}"><div class="main"><div class="t">${esc(o.label)}</div><div class="s">${esc(o.due)}${o.done ? ' · ' + esc(o.done.result) + ' by ' + esc(o.done.by) : ''}</div></div><div class="r"><span class="pill ${o.status === 'done' ? 'ok' : o.status === 'overdue' ? 'bad' : o.status === 'due' ? 'warn' : 'grey'}">${o.status}</span></div></div>`).join('')}
+    ${chks.filter((q) => !['D7', R.CHASE_KIND].includes(q.kind)).map((q) => `<div class="muted">📞 ${esc(q.date)} ${esc(q.kind)} · ${esc(q.result)}${q.satisfaction ? ' · ' + '★'.repeat(Math.max(0, Math.min(5, Math.round(Number(q.satisfaction) || 0)))) : ''}</div>`).join('')}</div>
   ${(() => { const ce = arr('contractEvents').filter((e) => e.customerId === c.id).sort((a, b) => String(b.date).localeCompare(String(a.date))); return ce.length ? `<div class="sec">📜 Contract events (${ce.length})</div><div class="card flush">${ce.map(contractItem).join('')}</div>` : ''; })()}
   ${recs.length ? `<div class="sec">Recovery</div><div class="card flush">${recs.map((r) => `<div class="item" data-edit="recovery" data-id="${esc(r.id)}"><div class="main"><div class="t">${esc(r.outcome)}</div><div class="s">started ${esc(r.startedDate)} · attempts ${esc(r.attempts ?? '–')}${r.daysToClose !== null && r.daysToClose !== undefined ? ' · ' + r.daysToClose + ' days' : ''}</div></div><div class="r">›</div></div>`).join('')}</div>` : ''}
   ${custTimeline(c, m)}
@@ -2174,20 +2179,20 @@ function viewList(p) {
   const head = (title, sub) => `<button class="back" data-back>‹ Back</button><h1>${title}</h1>${sub ? `<div class="muted">${sub}</div>` : ''}`;
   if (k === 'collections') {
     const groups = collectionGroups(m.collections); const cs = R.chaseStats(m.D.checkins, m.D.payments, R.addDays(t, -90), t);
-    return head('💰 Collections', 'G-1 §1-3: 3 days before → reminder · due day → re-remind · +3 → Tara calls · +7 → home visit') +
+    return head('Collections', 'Reminder 3 days before · on the day · 3 days late: Tara calls · 7 days late: home visit') +
       (groups.map((g) => `<h2>${esc(g.label)} <span class="pill">${g.xs.length}</span></h2><div class="card flush">${g.xs.map((x) => dunItem(x)).join('')}</div>`).join('') || '<div class="card empty">Nobody to chase 🎉</div>') +
       `<div class="hint">📝 = log a call or visit about the money (who answered, the day they will pay). A home that gave a day waits in “Promised” until then.</div>${chaseStatsLine(cs)}`;
   }
   if (k === 'visits') {
     const byTole = {}; for (const x of m.visitsDue) (byTole[toleOf(x.c)] = byTole[toleOf(x.c)] || []).push(x);
     const toles = Object.entries(byTole).sort((a, b) => b[1].length - a[1].length);
-    return head('🔧 Visits due', 'Grouped by tole so one day covers one area (plan #6). Monthly for 6 months after install, then every 3 months; filter dues pull a visit earlier.') +
+    return head('Visits due', 'Grouped by tole so one day covers one area. Monthly for 6 months after install, then every 3 months; filter dues pull a visit earlier.') +
       (toles.map(([tole, xs]) => `<h2>📍 ${esc(tole)} <span class="pill">${xs.length}</span>${routeLink(xs)}</h2><div class="card flush">${xs.map((x) => cItem(x, `<span class="pill ${x.due < t ? 'bad' : 'warn'}">${esc(x.filterOnly ? 'filter ' + x.due : x.due)}</span>`)).join('')}</div>`).join('') || '<div class="card empty">No visits due</div>');
   }
   if (k === 'calls') {
-    return head('📞 Calls', 'Day 7 happy call (G-1 §3-1) · day 30/60/90 check-ins (plan #7) · quarterly happy call (G-1 §3-2)') +
-      `<div class="card flush">${m.calls.map((x) => `<div class="item" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(x.o.k === 'Q' ? 'Quarterly call' : x.o.k)}"><span class="dot ${x.o.status === 'overdue' ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(x.c.name)} · ${esc(x.o.label)}</div><div class="s">due ${esc(x.o.due)} · ${esc(x.c.phone)}</div></div><div class="acts"><a class="icon-btn" href="tel:${esc(x.c.phone)}" data-stop>📞</a></div></div>`).join('') || '<div class="empty">No calls due</div>'}</div>
-      <h2>🎲 Random happy call</h2><div class="card"><div class="muted">Plan #12: pick 3 active customers not called in the last 30 days — for the sister's check.</div><button class="btn ghost" data-act="pickRandom">Pick 3</button><div id="randomBox"></div></div>`;
+    return head('Calls', 'One call 7 days after the install: is the water fine, anything to fix, would a neighbour like a demo?') +
+      `<div class="card flush">${m.calls.map((x) => `<div class="item" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(x.o.k)}"><span class="dot ${x.o.status === 'overdue' ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(x.c.name)} · ${esc(x.o.label)}</div><div class="s">due ${esc(x.o.due)} · ${esc(x.c.phone)}</div></div><div class="acts"><a class="icon-btn" href="tel:${esc(x.c.phone)}" data-stop>📞</a></div></div>`).join('') || '<div class="empty">No calls due</div>'}</div>
+      <button class="btn ghost" data-go-form="checkin">📞 Log a call</button>`;
   }
   if (k === 'watch') {
     const g = [['high', '🔴 Look after first'], ['watch', '🟠 Keep an eye on'], ['low', '🔵 Small signs']];
@@ -2195,10 +2200,10 @@ function viewList(p) {
       + g.map(([lv, l]) => { const xs = m.watch.filter((w) => w.lvl === lv); return xs.length ? `<h2>${l} <span class="pill">${xs.length}</span></h2><div class="card flush">${xs.map((w) => watchItem(w)).join('')}</div>` : ''; }).join('')
       + (m.watch.length ? '' : '<div class="card empty">Nobody to worry about 🎉</div>') + (m.watchChecked ? `<div class="muted" style="margin-top:8px">✓ ${m.watchChecked} checked this week · <a href="#" data-act="watchShowAll">show again</a></div>` : '');
   }
-  if (k === 'requests') return head('📋 Open requests', 'G-1 §2-4 deadlines · 3+ days = red') + `<div class="card flush">${m.openReq.map(reqItem).join('') || '<div class="empty">No open requests</div>'}</div><button class="btn" data-go-form="request">📋 New request</button>`;
+  if (k === 'requests') return head('Open requests', 'Reply within 2 hours in office hours · 3+ days = red') + `<div class="card flush">${m.openReq.map(reqItem).join('') || '<div class="empty">No open requests</div>'}</div><button class="btn" data-go-form="request">📋 New request</button>`;
   if (k === 'tomorrow') {
     const byTole = {}; for (const x of m.tomorrowBills) (byTole[toleOf(x.c)] = byTole[toleOf(x.c)] || []).push(x);
-    return head('📅 Bills due tomorrow', R.addDays(t, 1) + ' · G-1 §1-3 asks for the reminder 3 days before — this is the last easy chance') + (Object.entries(byTole).map(([tole, xs]) => `<h2>📍 ${esc(tole)}</h2><div class="card flush">${xs.map((x) => (x.dn ? dunItem(x) : cItem(x, R.npr(x.led.nextBill.amount - x.led.nextBill.paid)))).join('')}</div>`).join('') || '<div class="card empty">No bills tomorrow</div>');
+    return head('Bills due tomorrow', R.addDays(t, 1) + ' · the reminder goes out 3 days before — this is the last easy chance') + (Object.entries(byTole).map(([tole, xs]) => `<h2>📍 ${esc(tole)}</h2><div class="card flush">${xs.map((x) => (x.dn ? dunItem(x) : cItem(x, R.npr(x.led.nextBill.amount - x.led.nextBill.paid)))).join('')}</div>`).join('') || '<div class="card empty">No bills tomorrow</div>');
   }
   if (k === 'leads') {
     const groups = OPT.leadOutcome.map((o) => ({ o, xs: m.D.leads.filter((l) => (l.outcome || 'New') === o) }));
@@ -2210,7 +2215,7 @@ function viewList(p) {
   if (k === 'recoveries') return head('📦 Recovery cases', 'Recovered / failed / days / cost / why it failed') + `<div class="card flush">${m.D.recoveries.map((r) => { const c = S.D.customers.get(r.customerId); return `<div class="item" data-edit="recovery" data-id="${esc(r.id)}"><span class="dot ${r.outcome === 'Recovered' ? 'g' : String(r.outcome).startsWith('Failed') ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(c ? c.name : '?')} · ${esc(r.outcome)}</div><div class="s">started ${esc(r.startedDate)} · attempts ${esc(r.attempts ?? '–')}${r.failReason ? ' · ' + esc(r.failReason) : ''}</div></div><div class="r">›</div></div>`; }).join('') || '<div class="empty">No recovery cases</div>'}</div>`;
   if (k === 'filters') {
     const rows = m.filtersAll.filter((f) => f.status !== 'ok').sort((a, b) => String(a.due).localeCompare(String(b.due)));
-    return head('🧪 Filter status', 'E-2 booking intervals (PP 4 / monsoon 3 · CTO 8 · UV 12 · UF 24 months · sanitise 3) — the verdict is what you see on site') +
+    return head('Filter status', 'Booking intervals (PP 4 / monsoon 3 · CTO 8 · UV 12 · UF 24 months · sanitise 3) — the verdict is what you see on site') +
       `<div class="card flush">${rows.map((f) => `<div class="item" data-cust="${esc(f.x.c.id)}"><span class="dot ${f.status === 'overdue' ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(f.type)} · ${esc(f.x.c.name)}</div><div class="s">${esc(f.why)}</div></div><div class="r"><span class="pill ${f.status === 'overdue' ? 'bad' : 'warn'}">${esc(f.due)}</span></div></div>`).join('') || '<div class="empty">All filters on schedule</div>'}</div>`;
   }
   if (k === 'approvals') {
@@ -2231,12 +2236,12 @@ function viewList(p) {
     const grp = (g) => `<div class="scroll-x"><table class="tbl"><tr><th></th><th class="n">Read so far</th><th class="n">E. coli</th><th class="n">Share</th></tr>${Object.entries(g).sort((a, b) => b[1].n - a[1].n).map(([k2, r]) => `<tr><td>${esc(k2)}</td><td class="n">${r.n}</td><td class="n">${r.pos}</td><td class="n">${pc(r.pos / r.n)}${r.n < 5 ? ' <span class="pill grey">few</span>' : ''}</td></tr>`).join('')}</table></div>`;
     const cn = (id) => esc((S.D.customers.get(id) || {}).name || '?');
     return head('🧫 Raw-water vials', '🚨 Our own check only — never tell a customer the water is safe or unsafe from it; only a lab result is said out loud. Every second install in the PoC (about 25 homes).') +
-      `<div class="card"><div class="kv"><div class="k">Vials filled</div><div class="v num">${V.started} / ${tgt}</div><div class="k">Read so far</div><div class="v num">${V.n}</div><div class="k">E. coli (blue)</div><div class="v num">${V.pos} · ${pc(V.rate)}${V.ci ? ` <span class="muted">(${esc(`95% range ${R.pct(V.ci[0])}–${R.pct(V.ci[1])}`)})</span>` : ''}</div><div class="k">Coliforms (pink)</div><div class="v num">${V.coliforms}</div><div class="k">Waiting to be read</div><div class="v num">${V.waiting.length}</div></div>
+      `<div class="card"><div class="kv"><div class="k">Vials filled</div><div class="v num">${V.started} / ${tgt}</div><div class="k">Read so far</div><div class="v num">${V.n}</div><div class="k">Turned black</div><div class="v num">${V.pos} · ${pc(V.rate)}${V.ci ? ` <span class="muted">(${esc(`95% range ${R.pct(V.ci[0])}–${R.pct(V.ci[1])}`)})</span>` : ''}</div><div class="k">Waiting to be read</div><div class="v num">${V.waiting.length}</div></div>
         <div class="muted" style="margin-top:6px">${esc('Dry-season results — the monsoon can differ. Areas with fewer than 5 read vials cannot be compared.')}</div>
-        <div class="hint" style="margin-top:6px">${esc('🛑 Stop at 2–3 blue homes — that is enough to pick the ENPHO test home (Jun 2026-09-29). If none turn blue, test anyway: it then shows only that the water out meets the standard.')}</div></div>
+        <div class="hint" style="margin-top:6px">${esc('🛑 Stop at 2–3 black vials — that is enough to pick the ENPHO test home. If none turn black, test anyway: it then shows only that the water out meets the standard.')}</div></div>
       <h2>🔬 ENPHO test candidates <span class="pill">${V.enpho.length}</span></h2><div class="card flush">${V.enpho.map((x) => `<div class="item" data-cust="${esc(x.c.id)}"><span class="dot g"></span><div class="main"><div class="t">${esc(x.c.name)}</div><div class="s">${esc(x.c.installDate)} · <span>${esc('test by ' + x.until)}</span> · ${esc(x.c.tole || '')}</div></div></div>`).join('') || `<div class="empty">${esc('None yet — needs blue (E. coli), municipal water and an install within 30 days (PI condition 4).')}</div>`}</div>
       <div class="card"><div class="sec-mini">By water source</div>${grp(V.bySource)}<div class="sec-mini">By area</div>${grp(V.byTole)}</div>
-      <h2>Vials <span class="pill">${m.D.waterTests.length}</span></h2><div class="card flush">${m.D.waterTests.slice().sort((a, b) => String(b.sampledDate).localeCompare(String(a.sampledDate))).map((w) => `<div class="item" data-edit="waterTest" data-id="${esc(w.id)}"><span class="dot ${w.result === R.VIAL_RESULTS[0] ? 'r' : w.result === R.VIAL_RESULTS[1] ? 'y' : w.result ? 'g' : 'b'}"></span><div class="main"><div class="t">${cn(w.customerId)} · <span>${esc(w.result || 'not read yet')}</span></div><div class="s">${esc(w.sampledDate || '')}${w.readDate ? ' → ' + esc(w.readDate) : ''}</div></div><div class="r">›</div></div>`).join('') || '<div class="empty">No vials yet</div>'}</div>
+      <h2>Vials <span class="pill">${m.D.waterTests.length}</span></h2><div class="card flush">${m.D.waterTests.slice().sort((a, b) => String(b.sampledDate).localeCompare(String(a.sampledDate))).map((w) => `<div class="item" data-edit="waterTest" data-id="${esc(w.id)}"><span class="dot ${w.result === R.VIAL_RESULTS[0] ? 'r' : w.result === R.VIAL_RESULTS[2] ? 'y' : w.result ? 'g' : 'b'}"></span><div class="main"><div class="t">${cn(w.customerId)} · <span>${esc(w.result || 'not read yet')}</span></div><div class="s">${esc(w.sampledDate || '')}${w.readDate ? ' → ' + esc(w.readDate) : ''}</div></div><div class="r">›</div></div>`).join('') || '<div class="empty">No vials yet</div>'}</div>
       <button class="btn" data-go-form="waterTest">🧫 New vial</button>`;
   }
   if (k === 'claims') {
@@ -2294,7 +2299,10 @@ function viewList(p) {
 function viewStatus() {
   const m = model(); const M = m.metrics;
   const j = myJournal(); const pend = j.filter((e) => e.state === 'pending'), rej = j.filter((e) => e.state === 'rejected');
-  const rep = (r, ic, l, s) => `<button class="tile" data-report="${r}"><span class="ic">${ic}</span><span>${l}</span><span class="s">${s}</span></button>`;
+  // v0.11: grouped rows (iPhone Settings style) instead of 37 tiles in one block (Tara 2026-09-30 "too bold · like Instagram settings" · Jun keeps the icon colours)
+  const rep = (r, ic, l, s, ok = true) => (ok ? [{ attr: `data-report="${r}"`, ic, l, s }] : []);
+  const lst = (r, ic, l, s, ok = true) => (ok ? [{ attr: `data-list="${r}"`, ic, l, s }] : []);
+  const money = can('money');
   return `<h1>Status</h1>${statusCard()}
   <div class="card"><div class="status" style="font-size:15px;justify-content:space-between"><span data-noi18n>🌐 Language · 언어 · भाषा</span> ${langSeg()}</div>${!S.desk && window.innerWidth >= 600 ? '<div class="muted" style="margin-top:6px">🖥️ The command centre opens when this window is at least 960 px wide — make the browser window wider (or full screen).</div>' : ''}</div>
   <h2>🔔 Alerts <span class="pill ${m.alerts.length ? 'bad' : 'ok'}">${m.alerts.length}</span></h2><div class="card flush">${alertsHtml(m)}</div>
@@ -2310,37 +2318,23 @@ function viewStatus() {
     ${rej.map((e) => `<div class="warn">Refused: ${esc(e.path)} (${esc(e.err)}) — the data is kept on this phone. Tell Jun.</div>`).join('')}
     <div class="row"><button class="btn ghost" data-act="sync">↻ Send now</button><button class="btn ghost" data-act="full">⟳ Reload all</button></div>
     <button class="btn ghost" data-act="persist">🛡️ Protect phone storage</button></div>
-  <h2>Lists & reports</h2>
-  <div class="grid2">
-    ${can('money') ? rep('payments', '💵', 'Payments', 'all money in') + rep('vat', '🧾', 'VAT by month', 'export CSV') : ''}
-    ${can('money') ? rep('capack', '🧾', 'CA pack', 'IRD sales book · Excel') : ''}${rep('quality', '🩺', 'Data to fix', 'missing GPS · bill no.')}
-    ${can('expense') || can('money') ? rep('expenses', '🧾', 'Expenses', 'bills · input VAT') : ''}${rep('devices', '📦', 'Devices', 'every serial')}
-    <button class="tile" data-list="relocations"><span class="ic">🚚</span><span>Relocations</span><span class="s">moving house</span></button>
-    ${isBoss() ? rep('handover', '🆘', 'If Jun cannot work', 'handover page') + rep('payroll', '💼', 'Payroll', 'SSF · TDS · payslips') : ''}
-    ${can('stock') ? `<button class="tile" data-list="claims"><span class="ic">📮</span><span>Supplier claims</span><span class="s">${m.claimsSt.open.length ? m.claimsSt.open.length + ' open' : 'defects → PI'}</span></button>` : ''}
-    <button class="tile" data-list="water"><span class="ic">🧫</span><span>Raw-water vials</span><span class="s">${m.vials.started} filled · PoC</span></button>
-    <button class="tile" data-list="proof"><span class="ic">✍️</span><span>Proof of visit</span><span class="s">signatures · 30 days</span></button>
-    <button class="tile" data-list="screenings"><span class="ic">🔎</span><span>Screenings</span><span class="s">sign-up checks</span></button>
-    <button class="tile" data-list="contract"><span class="ic">📜</span><span>Contract events</span><span class="s">${m.contractOpen.length ? m.contractOpen.length + ' to do' : 'notice · transfer · lost'}</span></button>
-    ${m.approvals.pending.length || isApprover() ? `<button class="tile" data-list="approvals"><span class="ic">✋</span><span>Money approvals</span><span class="s">${m.approvals.pending.length ? m.approvals.pending.length + ' waiting' : 'discounts · refunds'}</span></button>` : ''}
-    ${can('money') ? rep('billing', '🌊', 'Billing moves', 'new · left · month 14') + rep('deposits', '🏦', 'Deposit book', 'what we hold') + rep('gate', '🧭', 'Direction gate', 'churn · retention · collection') : ''}
-    ${can('stock') ? rep('stock', '📦', 'Stock & FCL', 'order signal') : ''}${rep('learning', '🧪', 'Filter learning', 'real intervals')}${rep('leavers', '🚪', 'Leavers', 'why homes left')}${m.capacity ? rep('capacity', '👷', 'Field capacity', 'jobs vs hands') : ''}${rep('callbacks', '🔁', 'Callbacks', 'problems soon after a job')}${rep('noshows', '🚪', 'Wasted trips', 'nobody home')}${rep('funnel', '⏳', 'Sales stage days', 'lead → first payment')}${can('money') ? rep('perform', '📑', 'Grant KPIs', 'PAYGo PERFORM') : ''}
-    <button class="tile" data-list="map"><span class="ic">🗺️</span><span>Map</span><span class="s">all customers</span></button>
-    <button class="tile" data-list="filters"><span class="ic">🧪</span><span>Filter status</span><span class="s">due & overdue</span></button>
-    <button class="tile" data-list="leads"><span class="ic">🧲</span><span>Leads</span><span class="s">pipeline</span></button>
-    <button class="tile" data-list="recoveries"><span class="ic">📦</span><span>Recoveries</span><span class="s">devices back</span></button>
-    ${rep('trainings', '🎓', 'Trainings', 'records')}${rep('referrals', '🎁', 'Referrals', 'rewards due')}
-    ${rep('help', '❓', 'How to use', 'one page for staff')}
-    ${S.isAdmin ? rep('bank', '🏧', 'Bank CSV match', 'plan #2') + rep('users', '🪪', 'Staff & permissions', 'who can do what') + rep('settings', '⚙️', 'Settings', 'company · calendar · techs') : ''}${can('export') ? rep('export', '💾', 'Export all data', 'backup') : ''}
-  </div>
+  ${rowsHtml([
+    { title: 'Money', tone: 'tone-money', rows: [...rep('payments', '💵', 'Payments', 'all money in', money), ...rep('vat', '🧾', 'VAT by month', 'export CSV', money), ...rep('capack', '🧾', 'CA pack', 'IRD sales book · Excel', money), ...rep('expenses', '🧾', 'Expenses', 'bills · input VAT', can('expense') || money), ...rep('deposits', '🏦', 'Deposit book', 'what we hold', money), ...rep('billing', '🌊', 'Billing moves', 'new · left · month 14', money), ...lst('approvals', '✋', 'Money approvals', m.approvals.pending.length ? m.approvals.pending.length + ' waiting' : 'discounts · refunds', !!(m.approvals.pending.length || isApprover())), ...rep('bank', '🏧', 'Bank CSV match', 'statement → payments', !!S.isAdmin)] },
+    { title: 'Customers', tone: 'tone-field', rows: [...lst('map', '🗺️', 'Map', 'all customers'), ...lst('leads', '🧲', 'Leads', 'pipeline'), ...lst('screenings', '🔎', 'Screenings', 'sign-up checks'), ...lst('contract', '📜', 'Contract events', m.contractOpen.length ? m.contractOpen.length + ' to do' : 'notice · transfer · lost'), ...lst('relocations', '🚚', 'Relocations', 'moving house'), ...lst('recoveries', '📦', 'Recoveries', 'devices back'), ...rep('referrals', '🎁', 'Referrals', 'rewards due'), ...rep('leavers', '🚪', 'Leavers', 'why homes left')] },
+    { title: 'Field work', tone: 'tone-call', rows: [...lst('filters', '🧪', 'Filter status', 'due & overdue'), ...lst('proof', '✍️', 'Proof of visit', 'signatures · 30 days'), ...rep('callbacks', '🔁', 'Callbacks', 'problems soon after a job'), ...rep('noshows', '🚪', 'Wasted trips', 'nobody home'), ...rep('capacity', '👷', 'Field capacity', 'jobs vs hands', !!m.capacity), ...lst('water', '🧫', 'Raw-water vials', `${m.vials.started} filled · PoC`), ...rep('learning', '🧪', 'Filter learning', 'real intervals')] },
+    { title: 'Devices & stock', tone: 'tone-dev', rows: [...rep('devices', '📦', 'Devices', 'every serial'), ...rep('stock', '📦', 'Stock & FCL', 'order signal', can('stock')), ...lst('claims', '📮', 'Supplier claims', m.claimsSt.open.length ? m.claimsSt.open.length + ' open' : 'defects → PI', can('stock'))] },
+    { title: 'Reports', tone: 'tone-rep', rows: [...rep('gate', '🧭', 'Direction gate', 'churn · retention · collection', money), ...rep('funnel', '⏳', 'Sales stage days', 'lead → first payment'), ...rep('perform', '📑', 'Grant KPIs', 'PAYGo PERFORM', money), ...rep('quality', '🩺', 'Data to fix', 'missing GPS · bill no.')] },
+    { title: 'Company', tone: 'tone-co', rows: [...rep('users', '🪪', 'Staff & permissions', 'who can do what', !!S.isAdmin), ...rep('settings', '⚙️', 'Settings', 'company · calendar · techs', !!S.isAdmin), ...rep('payroll', '💼', 'Payroll', 'SSF · TDS · payslips', isBoss()), ...rep('handover', '🆘', 'If Jun cannot work', 'handover page', isBoss()), ...rep('trainings', '🎓', 'Trainings', 'records', !!S.isAdmin), ...rep('export', '💾', 'Export all data', 'backup', can('export'))] },
+    { title: 'Help', tone: 'tone-co', rows: [...rep('help', '❓', 'How to use', 'one page for staff')] },
+  ])}
   <div class="card"><div class="row"><button class="btn ghost" data-act="theme">🌓 Theme</button>${window.innerWidth >= 960 ? '<button class="btn ghost" data-act="deskOn">🖥️ Command centre</button>' : ''}</div></div>
-  <div class="card"><div class="status" style="font-size:15px">Diagnostics</div><div class="diag" id="diag">…</div></div>
+  <details class="card diagbox"><summary class="status" style="font-size:15px;cursor:pointer">Diagnostics</summary><div class="diag" id="diag">…</div></details>
   <button class="btn ghost" data-act="signOut">Sign out</button>`;
 }
-const REPORT_PERM = { payroll: 'admin', handover: 'admin', backup: 'admin', payments: 'money', vat: 'money', capack: 'money', deposits: 'money', gate: 'money', billing: 'money', perform: 'money', expenses: 'expenseOrMoney', stock: 'stock', bank: 'admin', users: 'admin', settings: 'admin', export: 'export' };
+const REPORT_PERM = { payroll: 'admin', handover: 'admin', backup: 'admin', payments: 'money', vat: 'money', capack: 'money', deposits: 'money', gate: 'money', billing: 'money', perform: 'money', expenses: 'expenseOrMoney', stock: 'stock', bank: 'admin', users: 'admin', settings: 'admin', export: 'export', trainings: 'adminOnly' };
 export function viewReport(p) {
   const m = model(); const k = p.r;
-  const need2 = REPORT_PERM[k]; const allowed = !need2 || (need2 === 'admin' ? isBoss() : need2 === 'expenseOrMoney' ? can('expense') || can('money') : can(need2));
+  const need2 = REPORT_PERM[k]; const allowed = !need2 || (need2 === 'admin' ? isBoss() : need2 === 'adminOnly' ? !!S.isAdmin : need2 === 'expenseOrMoney' ? can('expense') || can('money') : can(need2));
   if (!allowed) return `<button class="back" data-back>‹ Back</button><div class="card empty">Nothing here.</div>`; // staff must not learn what exists beyond their rights
   const head = (t, s) => `<button class="back" data-back>‹ Back</button><h1>${t}</h1>${s ? `<div class="muted">${s}</div>` : ''}`;
   const custName = (id) => { const c = S.D.customers.get(id); return c ? c.name : '?'; };
@@ -2366,9 +2360,9 @@ export function viewReport(p) {
       (can('stock') ? '<div class="row wrap"><button class="btn" data-go-form="stock">📦 Record stock movement</button><button class="btn ghost" data-go-form="tool">🧰 Add a tool</button></div>' : '') +
       `<h2>Movements</h2><div class="card flush">${m.D.stockMoves.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((s) => `<div class="item" data-edit="stock" data-id="${esc(s.id)}"><div class="main"><div class="t">${esc(s.type)} ${esc(s.qty)} × ${esc(s.item)}</div><div class="s">${esc(s.date)} · ${esc(s.ref || '')}</div></div></div>`).join('') || '<div class="empty">No movements yet</div>'}</div>`;
   }
-  if (k === 'learning') return head('🧪 Filter learning', 'Real days between changes, across all households (plan #9). The booking intervals are E-2 values; PoC data decides the final ones.') +
+  if (k === 'learning') return head('🧪 Filter learning', 'Real days between changes, across all households. The booking intervals are first values; PoC data decides the final ones.') +
     `<div class="card scroll-x"><table class="tbl"><tr><th>Filter</th><th class="n">Booking</th><th class="n">Observed</th><th class="n">Samples</th></tr>${m.learning.map((l) => `<tr><td>${esc(l.type)}</td><td class="n">${l.bookingMonths ? l.bookingMonths + ' mo' : '—'}</td><td class="n">${l.avgMonths ? l.avgMonths.toFixed(1) + ' mo' : '—'}</td><td class="n">${l.n}</td></tr>`).join('')}</table></div>`;
-  if (k === 'trainings') return head('🎓 Training records', 'Plan #12 — name · date · topic · trainer · signed sheet') + `<div class="card flush">${m.D.trainings.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((q) => `<div class="item" data-edit="training" data-id="${esc(q.id)}"><div class="main"><div class="t">${esc(q.person)} · ${esc((q.topic || []).join(', '))}</div><div class="s">${esc(q.date)} · by ${esc(q.trainer)}${q.durationMin ? ' · ' + q.durationMin + ' min' : ''}</div></div></div>`).join('') || '<div class="empty">No training records</div>'}</div><button class="btn" data-go-form="training">🎓 New record</button>`;
+  if (k === 'trainings') return head('🎓 Training records', 'name · date · topic · trainer · signed sheet') + `<div class="card flush">${m.D.trainings.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((q) => `<div class="item" data-edit="training" data-id="${esc(q.id)}"><div class="main"><div class="t">${esc(q.person)} · ${esc((q.topic || []).join(', '))}</div><div class="s">${esc(q.date)} · by ${esc(q.trainer)}${q.durationMin ? ' · ' + q.durationMin + ' min' : ''}</div></div></div>`).join('') || '<div class="empty">No training records</div>'}</div><button class="btn" data-go-form="training">🎓 New record</button>`;
   if (k === 'perform') {
     if (!can('money')) return head('📑 Grant KPIs', '') + '<div class="card"><div class="empty">Money rights needed.</div></div>';
     const pp = p.pp || 'q'; const per = performPeriod(pp, m.t); const P = R.performKpis(m.D, m.ledgers, per.from, per.to, m.t, { back: R.billingMoves(m.D.customers, m.D.recoveries, [], m.t).back });
@@ -2396,7 +2390,7 @@ export function viewReport(p) {
     return head('🌊 Billing moves', 'Recurring billing each month (VAT incl.) and why it moved: new homes, homes that came back (same phone as a home that left), homes that left, and the month-14 step (1,400 → 1,100 when the 300 deposit part ends — planned, not lost).') +
       `<div class="card scroll-x"><table class="tbl"><tr><th>Month</th><th class="n">Start</th><th class="n">+ New</th><th class="n">+ Came back</th><th class="n">+ Deposit starts</th><th class="n">− Left</th><th class="n">− Month 14</th><th class="n">End</th><th class="n">Net change</th></tr>
       ${BM.rows.slice().reverse().map((r) => `<tr><td class="mono">${esc(r.month)}</td><td class="n">${n(r.start)}</td><td class="n">${r.newAmt ? `${n(r.newAmt)} <span class="muted">(${r.newN})</span>` : '·'}</td><td class="n">${r.backAmt ? `${n(r.backAmt)} <span class="muted">(${r.backN})</span>` : '·'}</td><td class="n">${r.upAmt ? `${n(r.upAmt)} <span class="muted">(${r.upN})</span>` : '·'}</td><td class="n">${r.leftAmt ? `${n(r.leftAmt)} <span class="muted">(${r.leftN})</span>` : '·'}</td><td class="n">${r.stepAmt ? `${n(r.stepAmt)} <span class="muted">(${r.stepN})</span>` : '·'}</td><td class="n"><b>${n(r.end)}</b></td><td class="n"><span class="pill ${r.net < 0 ? 'bad' : r.net > 0 ? 'ok' : 'grey'}">${r.net > 0 ? '+' : ''}${n(r.net)}</span></td></tr>`).join('')}</table>
-      <div class="hint">Start + new + came back + deposit starts − left − month 14 = end. Install month = 1,100 (inside the 4,900), bills 2–13 = 1,400, then 1,100. The deposit part is held, not earned (G-1 §1-2).</div></div>
+      <div class="hint">Start + new + came back + deposit starts − left − month 14 = end. Install month = 1,100 (inside the 4,900), bills 2–13 = 1,400, then 1,100. The deposit part is held, not earned.</div></div>
       <h2>Month-14 steps coming</h2><div class="card"><div class="kv">${BM.ahead.map((a) => `<div class="k">${esc(a.month)}</div><div class="v num">${a.n ? `${a.n} homes · −${n(a.amt)}` : '—'}</div>`).join('')}</div></div>`;
   }
   if (k === 'noshows') {
@@ -2416,8 +2410,8 @@ export function viewReport(p) {
     const lastTrain = {}; for (const q of m.D.trainings) if (q.person && (!lastTrain[q.person] || q.date > lastTrain[q.person])) lastTrain[q.person] = q.date;
     const cn = (id) => (S.D.customers.get(id) || {}).name || '?';
     return head('🔁 Callbacks', `A breakdown, leak or water-quality request within ${days} days after a visit or install at the same home counts against whoever did that job. Last 90 days of jobs.`) +
-      `<div class="card scroll-x"><table class="tbl"><tr><th>Who</th><th class="n">Jobs</th><th class="n">Visits</th><th class="n">Installs</th><th class="n">Callbacks</th><th class="n">Rate</th><th>Last training</th></tr>
-      ${C.people.map((p) => `<tr><td><b>${esc(p.name)}</b></td><td class="n">${p.jobs}</td><td class="n">${p.visits}</td><td class="n">${p.installs}</td><td class="n">${p.callbacks}</td><td class="n">${p.rate === null ? '—' : `<span class="pill ${p.rate > 0.1 ? 'bad' : p.rate > 0.05 ? 'warn' : 'ok'}">${R.pct(p.rate, 1)}</span>`}</td><td class="mono">${esc(lastTrain[p.name] || '—')}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No jobs in 90 days</td></tr>'}</table>
+      `<div class="card scroll-x"><table class="tbl"><tr><th>Who</th><th class="n">Jobs</th><th class="n">Visits</th><th class="n">Installs</th><th class="n">Callbacks</th><th class="n">Rate</th>${S.isAdmin ? '<th>Last training</th>' : ''}</tr>
+      ${C.people.map((p) => `<tr><td><b>${esc(p.name)}</b></td><td class="n">${p.jobs}</td><td class="n">${p.visits}</td><td class="n">${p.installs}</td><td class="n">${p.callbacks}</td><td class="n">${p.rate === null ? '—' : `<span class="pill ${p.rate > 0.1 ? 'bad' : p.rate > 0.05 ? 'warn' : 'ok'}">${R.pct(p.rate, 1)}</span>`}</td>${S.isAdmin ? `<td class="mono">${esc(lastTrain[p.name] || '—')}</td>` : ''}</tr>`).join('') || '<tr><td colspan="7" class="muted">No jobs in 90 days</td></tr>'}</table>
       <div class="hint">Few jobs = the rate jumps around; read it with the numbers next to it. Colours: over 10 % red · over 5 % orange (🔴 first guess).</div></div>
       <h2>Callbacks · ${C.callbacks.length}</h2><div class="card flush">${C.callbacks.map((x) => `<div class="item" data-edit="request" data-id="${esc(x.r.id)}"><span class="dot ${x.days <= 7 ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(cn(x.r.customerId))} · ${esc(x.r.type)}</div><div class="s">${x.days} days after ${esc(x.job.what)} on ${esc(x.job.date)} by ${esc(x.who)}${x.r.description ? ' · ' + esc(String(x.r.description).slice(0, 60)) : ''}</div></div></div>`).join('') || '<div class="empty">No callbacks 🎉</div>'}</div>`;
   }
@@ -2440,9 +2434,9 @@ export function viewReport(p) {
       ${L.rows.map((x) => `<tr ${x.r ? `data-edit="recovery" data-id="${esc(x.r.id)}"` : `data-cust="${esc(x.c.id)}"`} style="cursor:pointer"><td class="mono">${esc(x.end)}</td><td><b>${esc(x.c.name)}</b></td><td class="n">${x.tenure}</td><td>${x.reason === 'Not recorded' ? '<span class="pill warn">Not recorded</span>' : esc(x.reason)}</td><td class="muted">${esc(x.detail)}</td><td>${esc(x.outcome || '—')}</td><td class="n">${R.npr(x.lostContract)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nobody has left 🎉</td></tr>'}</table></div>
       <h2>⏰ Why payments were late · last 12 months</h2><div class="card">${Object.keys(lateN).length ? `<div class="kv">${R.LATE_REASONS.filter((k2) => lateN[k2]).map((k2) => `<div class="k">${esc(k2)}</div><div class="v num">${lateN[k2].total}</div>`).join('')}</div>` : '<div class="empty">No late reasons recorded yet</div>'}<div class="hint">Asked when a late home pays or on a follow-up call. "Money not come in yet" → move the bill day to when money arrives · "No money this month" → a different talk.</div></div>`;
   }
-  if (k === 'referrals') return head('🎁 Referral rewards', 'G-1 §4: new customer — 1 month free (taken off bill 2) · referrer — 1 month free 3 months later, only after install + fee paid · no cash') +
+  if (k === 'referrals') return head('🎁 Referral rewards', 'New customer — 1 month free (taken off bill 2) · referrer — 1 month free 3 months later, only after install + fee paid · no cash') +
     `<div class="card flush">${m.referrals.map((r) => `<div class="item"><div class="main"><div class="t">${esc(r.who.name)} · ${r.role === 'referee' ? 'new customer' : 'referrer'}</div><div class="s">${R.npr(r.amount)} · ${r.done ? 'applied ✅' : r.ready ? 'ready' : esc(r.waiting)}</div></div>${!r.done && r.ready && isBoss() ? `<button class="btn small" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">Apply</button>` : ''}</div>`).join('') || '<div class="empty">No referrals yet</div>'}</div>`;
-  if (k === 'bank') return head('🏧 Bank statement match', 'Plan #2. Upload the bank/Fonepay CSV → match rows to customers by KC code, phone, or a unique amount → create payments. Nothing is saved until you tap Create.') +
+  if (k === 'bank') return head('🏧 Bank statement match', 'Upload the bank/Fonepay CSV → match rows to customers by KC code, phone, or a unique amount → create payments. Nothing is saved until you tap Create.') +
     `<div class="card"><input type="file" accept=".csv,text/csv,.xls,.xlsx" id="bankFile"><div id="bankBox" class="hint">The bank / Fonepay export format is not known yet — any CSV or Excel file with date, amount and description columns works. Send Jun one real file to tune the matching.</div></div>`;
   if (k === 'backup') return head('💾 Backup', 'Everything in one go: customers, visits, payments, expenses, devices… as Excel + JSON.') + backupHtml();
   if (k === 'export') return head('💾 Export all data', 'Backup to this computer (Firestore scheduled backups need the Blaze plan).') +
@@ -2486,7 +2480,7 @@ export function viewReport(p) {
   if (k === 'settings') return head('⚙️ Settings', 'Prices are fixed by the contract (2026-09-03) and shown for reference.') +
     `<form class="card" id="settingsForm"><label>FCL lead time (weeks)</label><input name="leadTimeWeeks" type="number" value="${esc(S.settings.leadTimeWeeks || R.FCL.leadTimeWeeks)}"><div class="hint">Default 13 = the "25 units" rule (8/month × 13 weeks).</div>
       <label>Extra technician names (comma separated)</label><input name="techNames" value="${esc(S.settings.techNames || '')}" placeholder="e.g. Ramesh, Sita">
-      <label>Extra days the office is closed (YYYY-MM-DD, comma separated)</label><textarea name="holidays" placeholder="e.g. 2026-10-12, 2026-10-13">${esc(S.settings.holidays || '')}</textarea><div class="hint">Saturdays and the official 2083 public holidays (Home Ministry + Gandaki notices) are already in the calendar. Add only your own extra days off. Used for the calendar and the G-1 §2-4 breakdown clock.</div>
+      <label>Extra days the office is closed (YYYY-MM-DD, comma separated)</label><textarea name="holidays" placeholder="e.g. 2026-10-12, 2026-10-13">${esc(S.settings.holidays || '')}</textarea><div class="hint">Saturdays and the official 2083 public holidays (Home Ministry + Gandaki notices) are already in the calendar. Add only your own extra days off. Used for the calendar and the breakdown reply clock.</div>
       <h3>🧪 Filters (order dates)</h3>
       <label>Filter lead time — order to shelf (weeks)</label><input name="filterLeadWeeks" type="number" min="0" value="${esc(S.settings.filterLeadWeeks ?? '')}" placeholder="${R.FILTER_ORDER.leadWeeks} (guess)"><div class="hint">🔴 Filters may come from China or India — put the real number after the first order.</div>
       <label>Safety weeks before running out</label><input name="filterSafetyWeeks" type="number" min="0" value="${esc(S.settings.filterSafetyWeeks ?? '')}" placeholder="${R.FILTER_ORDER.safetyWeeks}">
@@ -2534,10 +2528,11 @@ export function viewReport(p) {
   if (k === 'help') return head('❓ How to use KORA Field', 'One page for Tara and technicians') + `
     <div class="card"><h3>The dot at the top</h3><div class="kv"><div class="k"><span class="dot g"></span></div><div class="v">Everything is on the server.</div><div class="k"><span class="dot y"></span></div><div class="v">Saved on this phone. It sends by itself when there is internet — keep working.</div><div class="k"><span class="dot r"></span></div><div class="v">Something is wrong. Write it on paper and tell Jun.</div></div></div>
     <div class="card"><h3>No internet? No problem</h3>• Every save goes to the phone first, twice (two stores).<br>• Photos too — they upload later.<br>• Open the app from the <b>home-screen icon</b>, not a Safari tab.<br>• 🚨 <b>Never clear Safari history / website data</b> on this phone while records are waiting.<br>• Tap <b>Status → Protect phone storage</b> once.</div>
-    <div class="card"><h3>New install (E-1)</h3>1. Measure raw TDS and pressure first.<br>2. Install, leak test twice, pump quiet, UV lamp on.<br>3. Measure purified TDS and flow (UV: 1.2 L/min or less).<br>4. Tick all checks · take the 3 photos (device, TDS meter, signed contract).<br>5. Day-1 payment NPR 4,900 by QR — the install is not finished before it is confirmed (G-1 §1-1).</div>
-    <div class="card"><h3>Visits (E-2 · G-1 §2)</h3>• Look at the PP filter: brown or black → replace now.<br>• One old filter back for every new one.<br>• A completed visit needs photos, TDS after, and the next visit date.<br>• Sanitise pipes every 3 months — tick it on the visit.</div>
-    <div class="card"><h3>Money (G-1 §1)</h3>• Bill = same day each month as the install day. Months 2–13: 1,400 (1,100 + 300 deposit). From month 14: 1,100.<br>• 3 days before → WhatsApp reminder · due day → remind again · +3 days → Tara calls · +7 days → home visit.<br>• Only Tara takes cash. Everyone else: Khalti / eSewa / Fonepay QR.<br>• Send the receipt from the customer page — the deposit is on its own line.</div>
-    <div class="card"><h3>Breakdowns (G-1 §2-4)</h3>Office hours → reply within 2 hours, visit today or tomorrow. After 17:00 → reply today, visit tomorrow. Saturday → reply next morning. 3+ days = red.</div>`;
+    <div class="card"><h3>New install</h3>1. Measure raw TDS and pressure first.<br>2. Install, leak test twice, pump quiet, UV lamp on.<br>3. Measure purified TDS and flow (UV: 1.2 L/min or less).<br>4. Tick all checks · take the 3 photos (device, TDS meter, signed contract).<br>5. Day-1 payment NPR 4,900 by QR — the install is not finished before it is confirmed.</div>
+    <div class="card"><h3>Visits</h3>• Look at the PP filter: brown or black → replace now.<br>• One old filter back for every new one.<br>• A completed visit needs photos, TDS after, and the next visit date.<br>• Sanitise pipes every 3 months — tick it on the visit.</div>
+    <div class="card"><h3>The day-7 call</h3>One call 7 days after every install — Tara calls or WhatsApps the home.<br>• Is the water fine? Anything to fix? (a fault found early is a cheap one)<br>• The home feels looked after — that is what keeps it with us.<br>• Would a neighbour or relative like a demo?<br>Log it under New → Check-in call. No other routine calls: the monthly visits cover the rest. A late bill is chased from Collections, not from here.</div>
+    <div class="card"><h3>Money</h3>• Bill = same day each month as the install day. Months 2–13: 1,400 (1,100 + 300 deposit). From month 14: 1,100.<br>• 3 days before → WhatsApp reminder · due day → remind again · +3 days → Tara calls · +7 days → home visit.<br>• Only Tara takes cash. Everyone else: Khalti / eSewa / Fonepay QR.<br>• Send the receipt from the customer page — the deposit is on its own line.</div>
+    <div class="card"><h3>Breakdowns</h3>Office hours → reply within 2 hours, visit today or tomorrow. After 17:00 → reply today, visit tomorrow. Saturday → reply next morning. 3+ days = red.</div>`;
   return head('Report', '') + '<div class="card">Unknown report</div>';
 }
 // Missing data that breaks reports or slows the field (plan: data you can trust before PoC numbers are read).
@@ -2781,14 +2776,6 @@ export function csvFor(kind) {
   if (kind.startsWith('col:')) { const col = kind.slice(4); const rows = arr(col).map(({ _pending, _localT, ...x }) => x); const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter((k) => k !== 'img'); return R.toCSV(rows, keys.map((k) => ({ key: k, get: (r) => (r[k] && r[k].toMillis ? new Date(r[k].toMillis()).toISOString() : r[k]) }))); }
   return '';
 }
-function pickRandomCalls() {
-  const m = model(); const since = R.addDays(m.t, -30);
-  const recent = new Set(m.D.checkins.filter((c) => c.date >= since).map((c) => c.customerId));
-  const pool = [...m.cust.values()].filter((x) => x.status === 'Active' && !recent.has(x.c.id));
-  const pick = R.pickRandom(pool, 3);
-  const box = $('#drawer #randomBox') || $('#randomBox');
-  if (box) box.innerHTML = pick.map((x) => `<div class="item" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="Random happy call"><div class="main"><div class="t">${esc(x.c.name)}</div><div class="s">${esc(x.c.phone)} · ${esc(toleOf(x.c))}</div></div><div class="acts"><a class="icon-btn" href="tel:${esc(x.c.phone)}" data-stop>📞</a></div></div>`).join('') || '<div class="empty">Everyone was called in the last 30 days</div>';
-}
 // Excel files are converted with SheetJS (vendored, loaded only here).
 function loadXlsx() { return window.XLSX ? Promise.resolve(window.XLSX) : new Promise((res, rej) => { const s = document.createElement('script'); s.src = './vendor/xlsx.full.min.js'; s.onload = () => res(window.XLSX); s.onerror = rej; document.head.appendChild(s); }); }
 function bankUpload(file) {
@@ -2856,7 +2843,7 @@ document.addEventListener('click', async (ev) => {
   const sideb = t.closest('[data-side]'); if (sideb) { history_.length = 0; closeDrawer(true); go(sideb.dataset.side, sideb.dataset.side, {}, true); return; }
   const gf = t.closest('[data-go-form]'); if (gf && !canForm(gf.dataset.goForm)) return; // hidden rights stay hidden (no message)
   if (gf) { ev.preventDefault(); nav(S.route.tab === 'customers' || S.route.screen === 'detail' ? 'customers' : 'new', 'form', { form: gf.dataset.goForm, cid: gf.dataset.cid, id: gf.dataset.id, lead: gf.dataset.lead, kind: gf.dataset.kind, serial: gf.dataset.serial, event: gf.dataset.kind, date: gf.dataset.date, lane: gf.dataset.lane }); return; }
-  const cv = t.closest('[data-convert]'); if (cv) { const l = S.D.leads.get(cv.dataset.convert); S.convertLead = l ? l.id : ''; nav('new', 'form', { form: 'install' }); setTimeout(() => { const f = $('#drawer #theForm') || $('#theForm'); if (f && l) { f.elements.name.value = l.name || ''; f.elements.phone.value = String(l.phone || '').replace('+977', ''); if (l.tole) f.elements.tole.value = l.tole; if (l.ward) f.elements.ward.value = l.ward; if (l.channel) f.elements.referral.value = l.channel; if (l.referrerId && f.elements.referrerId) f.elements.referrerId.value = l.referrerId; refreshConditional(f); } }, 30); return; }
+  const cv = t.closest('[data-convert]'); if (cv) { nav('new', 'form', { form: 'install', lead: cv.dataset.convert }); return; } /* v0.11: the install form prefills itself from the lead + its screening */
   const cb = t.closest('button[data-cust]'); if (cb && cb.dataset.cust) { nav('customers', 'detail', { id: cb.dataset.cust }); return; } // a button inside an edit row
   const ed = t.closest('[data-edit]'); if (ed) { nav(S.route.tab, 'form', { form: ed.dataset.edit, id: ed.dataset.id }); return; }
   const rc = t.closest('[data-receipt]'); if (rc) { nav('customers', 'detail', { id: rc.dataset.cid, receipt: rc.dataset.receipt }); return; }
@@ -2873,7 +2860,7 @@ document.addEventListener('click', async (ev) => {
   const rf = t.closest('[data-refcredit]'); if (rf) {
     ev.preventDefault(); if (!isBoss()) { toast('Only admin applies credits'); return; }
     const [cid, forId] = rf.dataset.refcredit.split('|');
-    save(`payments/${newId('payments')}`, { customerId: cid, date: today(), type: 'Referral credit', amount: R.PRICES.monthly, referralFor: forId, method: '', notes: 'Referral reward (G-1 §4)', by: myName() }, true);
+    save(`payments/${newId('payments')}`, { customerId: cid, date: today(), type: 'Referral credit', amount: R.PRICES.monthly, referralFor: forId, method: '', notes: 'Referral reward', by: myName() }, true);
     toast('🎁 Referral credit applied'); scheduleRender(); return;
   }
   if (t.closest('[data-back]')) { backClick(); return; }
@@ -2959,7 +2946,6 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'persist') { let r = false; try { r = await navigator.storage.persist(); } catch (e) {} toast('Storage protection: ' + (r ? 'ON' : 'not granted')); fillDiag(); }
   else if (act === 'swReload' && S.swWaiting) S.swWaiting.postMessage('skipWaiting');
   else if (act === 'privSave') { const ok = save(`customers/${a.dataset.cid}/private/main`, { notes: ($('#drawer #privNotes') || $('#privNotes')).value.trim() }, false); toast(ok ? 'Private notes saved' : '🔴 Could not save on phone'); }
-  else if (act === 'pickRandom') pickRandomCalls();
   else if (act === 'theme') { const k = 'kfp_theme_' + (S.desk ? 'desk' : 'phone'); const nx = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; lsSet(k, nx); render(true); }
   else if (act === 'deskOn') { lsSet('kfp_desk', true); S.route = { tab: 'command', screen: 'command', params: {} }; render(true); }
   else if (act === 'deskOff') { lsSet('kfp_desk', false); closeDrawer(true); S.route = { tab: 'today', screen: 'today', params: {} }; render(true); }
@@ -3092,7 +3078,7 @@ if (DEMO) {
   window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save};
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
-  flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag);
+  flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */
   if (!location.search.includes('empty')) import('./demo.js').then((d) => { d.loadDemo(S, practiceDay()); practiceReplay(); practiceLive(d, true); setInterval(() => practiceLive(d, false), 180000); bump(); heartbeat(true); render(true); }).catch((e) => console.warn('demo', e));
 }
 render(true);

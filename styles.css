@@ -515,6 +515,12 @@ body.desk .nav-offer { bottom:24px; }
 .rl-i .ord { display:flex; gap:4px; flex:none; }
 .rl-i .ord button { width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:var(--card2); color:var(--ink); font-size:14px; cursor:pointer; }
 .rl-i .ord button:disabled { opacity:.3; cursor:default; }
+/* v0.11 drag to reorder: ☰ handle · lifted row · drop line */
+.rl-i .ord button.rdrag { touch-action:none; cursor:grab; font-size:18px; }
+.rl-i.lifting { position:relative; z-index:5; background:var(--card); box-shadow:0 8px 24px rgba(16,24,40,.28); border-radius:12px; opacity:.96; }
+.rl-i.lifting .ord button.rdrag { cursor:grabbing; }
+.rl-i.drop-before { box-shadow: inset 0 3px 0 var(--brand); }
+.rl.drop-end { box-shadow: inset 0 -3px 0 var(--brand); }
 /* v0.5 — New screen grid fills the width · staff & permissions · PDF bills */
 .tiles-new { display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:10px; margin-top:6px; }
 .pdf-tile { width:100%; aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border-radius:10px; background:var(--card2); border:1px solid var(--line); font-size:26px; cursor:pointer; }
@@ -716,3 +722,55 @@ body.tv .side { display:none; } body.tv .shell { grid-template-columns: 1fr !imp
 /* v0.9.4 login: remember my email · stay signed in */
 label.chk-line { display:flex; align-items:center; gap:10px; margin:10px 0 0; padding:0; min-height:0; font-size:15px; font-weight:500; cursor:pointer; }
 label.chk-line input { width:20px; margin:0; min-height:0; padding:0; box-shadow:none; height:20px; accent-color:var(--brand); flex:none; }
+
+/* ================= v0.11 — calm phone (Tara 2026-09-30: "too colourful · over-stimulating · too bold" · Jun keeps the icon colours) ================= */
+/* colour lives in two places only: the icon box of a row (category) and the urgency pills/badges (red · orange). Text and backgrounds are grey/white. */
+:root:not([data-theme="dark"]) { --bg:#f2f2f7; }
+body:not(.desk) { background: var(--bg); }
+body:not(.desk) .card { border:1px solid var(--line2); box-shadow:none; }
+body:not(.desk) .hero { background:none; color:var(--ink); box-shadow:none; padding:14px 2px 4px; border-radius:0; margin:6px 0 0; }
+body:not(.desk) .hero::before, body:not(.desk) .hero::after { display:none; }
+body:not(.desk) .hero .hello { font-size:22px; font-weight:600; }
+body:not(.desk) .hero .date { color:var(--muted); opacity:1; }
+body:not(.desk) .hero .syncpill { background:var(--card); border:1px solid var(--line2); color:var(--muted); font-weight:500; backdrop-filter:none; }
+body:not(.desk) .hero .lang-seg { background:var(--card2); border-color:var(--line); }
+body:not(.desk) .hero .lang-seg button { color:var(--muted); } body:not(.desk) .hero .lang-seg button.on { background:var(--brand); color:#fff; }
+body:not(.desk) .hero .cta { background:var(--brand); color:#fff; box-shadow:none; font-weight:600; margin-top:14px; }
+body:not(.desk) h1, body:not(.desk) h2 { font-weight:600; }
+body:not(.desk) .item .t { font-weight:500; }
+body:not(.desk) label { font-weight:500; }
+body:not(.desk) .btn { font-weight:600; } body:not(.desk) .chip.on { font-weight:600; }
+body:not(.desk) .pill { font-weight:500; }
+body:not(.desk) .status { font-weight:500; }
+body:not(.desk) .bigstat .v { font-weight:600; }
+body:not(.desk) .tile { box-shadow:none; border:1px solid var(--line2); font-weight:500; } body:not(.desk) .tile::after { display:none; } body:not(.desk) .tile .n { font-weight:600; }
+body:not(.desk) .fsec { border-top:0; margin-top:18px; padding-top:0; }
+body:not(.desk) .fsec > .t { font-size:13px; font-weight:600; letter-spacing:.02em; text-transform:none; color:var(--muted); }
+body:not(.desk) input, body:not(.desk) select, body:not(.desk) textarea { min-height:50px; padding:12px 14px; font-size:17px; }
+body:not(.desk) .chip { min-height:48px; font-size:15px; }
+/* grouped rows (Today · New · Status) */
+.sec { margin:18px 4px 6px; font-weight:600; }
+.rows { padding:0 0 0 14px; }
+.rowb { display:flex; align-items:center; gap:12px; width:100%; min-height:54px; padding:8px 12px 8px 0; border:0; border-bottom:1px solid var(--line2); background:none; color:var(--ink); font-family:inherit; font-size:16px; font-weight:400; text-align:left; cursor:pointer; }
+.rowb:last-child { border-bottom:0; }
+.rowb:active { background:var(--card2); }
+.rowb .ric { width:30px; height:30px; border-radius:8px; display:grid; place-items:center; font-size:16px; flex:none; background:var(--tone-soft, var(--card2)); }
+.rowb .rl { flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.25; } .rowb .rl small { font-size:12px; color:var(--muted); margin-top:1px; }
+.rowb .rn { font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--muted); font-size:15px; }
+.rowb .rb { min-width:20px; padding:1px 7px; border-radius:99px; background:var(--bad); color:#fff; font-size:12px; font-weight:600; text-align:center; }
+.rowb .rc { color:var(--grey); font-size:18px; }
+.tone-dev { --tone:#b7791f; --tone-soft:#fbf1dc; } .tone-rep { --tone:#3b4a8a; --tone-soft:#e6e9f7; } .tone-co { --tone:#6b7280; --tone-soft:#ececef; }
+[data-theme="dark"] .tone-dev { --tone-soft:#2b220e; } [data-theme="dark"] .tone-rep { --tone-soft:#171c33; } [data-theme="dark"] .tone-co { --tone-soft:#1c2029; }
+/* collections card on the phone: one accent (the stage pill), plain text, the actions on their own line */
+body:not(.desk) .item.dun { display:block; }
+body:not(.desk) .item.dun .s.chase-broken { color:var(--ink); font-weight:400; } body:not(.desk) .item.dun .s.chase-waiting { color:var(--ink); }
+body:not(.desk) .dun-acts { display:flex; gap:8px; margin-top:8px; }
+body:not(.desk) .dun-acts > * { flex:1; margin:0; min-height:40px; font-size:14px; text-align:center; text-decoration:none; display:flex; align-items:center; justify-content:center; color:var(--ink); }
+/* diagnostics folded away */
+.diagbox summary::-webkit-details-marker { display:none; } .diagbox summary::before { content:"›"; display:inline-block; margin-right:8px; color:var(--grey); transition:transform .15s; } .diagbox[open] summary::before { transform:rotate(90deg); }
+/* tabs: only the open tab is in colour */
+body:not(.desk) nav.tabs button:not(.on) .i { filter:grayscale(1); opacity:.6; }
+/* practice / demo badge: small, at the top, scrolls away with the page (it used to float over the fields — Tara's screenshot) */
+body:not(.desk) .demo-flag, body:not(.desk) button.demo-flag { position:absolute; top:calc(env(safe-area-inset-top) + 6px); left:16px; right:auto; transform:none; font-size:10px; padding:3px 10px; box-shadow:none; }
+body:not(.desk) button.demo-flag:active { transform:scale(.97); }
+body.has-flag:not(.desk) main { padding-top:26px; }

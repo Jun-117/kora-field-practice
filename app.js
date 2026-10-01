@@ -1779,7 +1779,7 @@ export function alertsHtml(m) {
   const link = (a) => (a.list ? `data-list="${a.list}"` : a.cal ? (S.desk ? `data-cal="${a.cal}"` : '') : a.side ? (S.desk ? `data-side="${a.side}"` : '') : `data-report="${a.report}"`);
   const btns = (a) => (S.desk && a.report !== 'diag' ? `<div class="snz" data-stop><button data-snooze="${esc(alertKey(a))}" data-days="1" title="Done for today">✓</button><button data-snooze="${esc(alertKey(a))}" data-days="3" title="Hide for 3 days">💤</button></div>` : '');
   // v0.11.2 (#14) Jun: "카테고리별로 정리" — four groups, a coloured dot only for red
-  const CAT = [['money', 'Money', '💰🤝💵✋🧾🏦📅'], ['field', 'Field & customers', '📋🔧🧪📞🚪🛠️⏸️📜🚚🧫⚠️📍🧲🔎'], ['stock', 'Stock & devices', '📦🔩📮'], ['sys', 'System & office', '💾📱🔴🧭📑🏖️🏖️']];
+  const CAT = [['money', 'Money', '💰🤝💵✋🧾🏦📅'], ['field', 'Field & customers', '📋🔧🧪📞🚪🛠️⏸️📜🚚🧫⚠️📍🧲🔎'], ['stock', 'Stock & devices', '📦🔩📮'], ['sys', 'System & office', '💾📱🔴🧭📑🏖️']];
   const catOf = (a) => (CAT.find(([, , ics]) => ics.includes(a.ic)) || CAT[3])[0];
   const row = (a) => `<div class="item" ${link(a)}><span class="dot" style="background:${a.lvl === 'bad' ? col.bad : 'var(--line)'}"></span><div class="main"><div class="t" style="white-space:normal;font-weight:${a.lvl === 'bad' ? 600 : 400}">${a.ic} ${esc(a.t)}</div></div>${btns(a)}<div class="r">›</div></div>`;
   return (list.length ? CAT.map(([k, label]) => { const xs = list.filter((a) => catOf(a) === k); return xs.length ? `<div class="sec-mini">${esc(label)} · ${xs.length}</div>${xs.map(row).join('')}` : ''; }).join('') : '<div class="empty">No alerts — all clear ✨</div>')

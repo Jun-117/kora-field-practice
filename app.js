@@ -16,7 +16,7 @@ import * as B from './bs.js';
 import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
-export const APP_VERSION = 'kf-v0.12.0 (2026-10-01)';
+export const APP_VERSION = 'kf-v0.12.1 (2026-10-01)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];

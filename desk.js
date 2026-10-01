@@ -806,7 +806,7 @@ function pageCalendar(m) {
 }
 
 // ---------- 🧭 dispatch: who goes to which home (drag, or tick and send) ----------
-const dsel = new Set(); let dmode = 'perm', duntil = '', dundo = null; /* v0.11.2 (#12) Jun: moved homes go under the person's tole list — "오늘" is only for today's jobs */
+const dsel = new Set(); let dmode = 'perm', duntil = '', dundo = null, dlast = null; /* v0.12.1 (#12) Jun: a moved home goes under the person's TOLE list (not a "Today" list) — the tole opens and the moved rows glow */
 function pageDispatch(m) {
   const t = m.t; if (!duntil) duntil = R.addDays(t, 2);
   const names = techNames(); const cols = [...names, ''];
@@ -818,15 +818,14 @@ function pageDispatch(m) {
   const homes = [...m.cust.values()].filter((x) => x.status !== 'Churned');
   const byCol = Object.fromEntries(cols.map((n) => [n, []])); for (const x of homes) { const w = R.assigneeOf(x.c, t); (byCol[w] || (byCol[w] = [])).push(x); }
   const extra = Object.keys(byCol).filter((n) => !cols.includes(n)); // assigned to a name no longer in the list
-  const row = (x) => { const c = x.c; const cov = c.cover && c.cover.to && c.cover.until >= t; const w = work.get(c.id) || []; return `<div class="dp-row${dsel.has(c.id) ? ' on' : ''}" draggable="true" data-dcid="${esc(c.id)}"><span class="ck">${dsel.has(c.id) ? '✓' : ''}</span><span class="nm">${esc(c.name)}</span><span class="ics">${w.join('')}</span>${cov ? `<span class="pill warn" title="until ${esc(c.cover.until)}">↪ ${esc(c.cover.until === t ? 'today' : c.cover.until.slice(5))}</span>` : ''}<button class="op" data-cust="${esc(c.id)}" title="Open">›</button></div>`; };
+  const row = (x) => { const c = x.c; const cov = c.cover && c.cover.to && c.cover.until >= t; const w = work.get(c.id) || []; return `<div class="dp-row${dsel.has(c.id) ? ' on' : ''}${dlast && dlast.cids.has(c.id) ? ' moved' : ''}" draggable="true" data-dcid="${esc(c.id)}"><span class="ck">${dsel.has(c.id) ? '✓' : ''}</span><span class="nm">${esc(c.name)}</span><span class="ics">${w.join('')}</span>${cov ? `<span class="pill warn" title="until ${esc(c.cover.until)}">↪ ${esc(c.cover.until === t ? 'today' : c.cover.until.slice(5))}</span>` : ''}<button class="op" data-cust="${esc(c.id)}" title="Open">›</button></div>`; };
   const col = (n) => {
     const xs = byCol[n] || []; const today = xs.filter((x) => work.has(x.c.id)); const byT = {}; for (const x of xs) (byT[toleOf(x.c)] = byT[toleOf(x.c)] || []).push(x);
     const load = today.length; const lc = load > 8 ? 'bad' : load >= 4 ? 'ok' : load ? 'warn' : '';
     return `<div class="dp-col" data-dcol="${esc(n)}"><div class="dp-h"><span class="avatar">${esc(n ? n.slice(0, 1).toUpperCase() : '?')}</span><div class="main"><b>${esc(n || 'Nobody yet')}</b><div class="muted">${xs.length} homes · <span class="pill ${lc}">${load} today</span></div></div>
       ${n && today.length ? `<select data-handover="${esc(n)}" title="Give today's jobs to someone else"><option value="">↪ today's jobs to…</option>${names.filter((q) => q !== n).map((q) => `<option value="${esc(q)}">${esc(q)}</option>`).join('')}</select>` : ''}</div>
       <div class="dp-load"><i style="width:${Math.min(100, (load / 8) * 100)}%" class="${lc}"></i></div>
-      <div class="dp-sub">Today</div>${today.map(row).join('') || '<div class="empty">No jobs today</div>'}
-      <div class="dp-sub">All homes</div>${Object.entries(byT).sort((a, b) => b[1].length - a[1].length).map(([tl, ys]) => `<details${ys.length <= 4 ? ' open' : ''}><summary>📍 ${esc(tl)} <span class="pill">${ys.length}</span><button class="btn small ghost" data-dtole="${esc(tl)}" data-dfrom="${esc(n)}">select</button></summary>${ys.map(row).join('')}</details>`).join('') || '<div class="empty">—</div>'}</div>`;
+      <div class="dp-sub">Homes by tole · ${load} with a job today</div>${Object.entries(byT).sort((a, b) => b[1].length - a[1].length).map(([tl, ys]) => { const hot = dlast && dlast.to === n && ys.some((x) => dlast.cids.has(x.c.id)); const jobs = ys.filter((x) => work.has(x.c.id)).length; return `<details${ys.length <= 4 || hot || jobs ? ' open' : ''}><summary>📍 ${esc(tl)} <span class="pill">${ys.length}</span>${jobs ? `<span class="pill warn">${jobs} today</span>` : ''}<button class="btn small ghost" data-dtole="${esc(tl)}" data-dfrom="${esc(n)}">tick all</button></summary>${ys.map(row).join('')}</details>`; }).join('') || '<div class="empty">—</div>'}</div>`;
   };
   return `<div class="cc dispatch">
     <div class="panel s12 dp-bar" style="--i:0"><b>${dsel.size}</b>&nbsp;selected
@@ -846,7 +845,7 @@ function dispatchApply(cids, to, mode) {
     if (mode === 'perm' || !to || to === (c.assignee || '')) save(`customers/${cid}`, { assignee: mode === 'perm' || !to ? to : c.assignee || '', cover: null }, false);
     else save(`customers/${cid}`, { cover: { to, until: mode === 'today' ? t : duntil, from: c.assignee || '', at: t } }, false);
   }
-  dundo = undo; dsel.clear();
+  dundo = undo; dsel.clear(); dlast = { to, cids: new Set(cids) };
   toast(`${undo.length} home${undo.length > 1 ? 's' : ''} → ${to || 'nobody'}${mode === 'perm' || !to ? '' : mode === 'today' ? ' (today only)' : ' (until ' + duntil + ')'}`);
 }
 document.addEventListener('click', (ev) => {

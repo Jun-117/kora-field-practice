@@ -623,7 +623,7 @@ body.desk .nav-offer { bottom:24px; }
 .dp-load { height:5px; border-radius:9px; background:var(--line); margin:8px 0 4px; overflow:hidden; } .dp-load i { display:block; height:100%; background:var(--warn); } .dp-load i.ok { background:var(--ok); } .dp-load i.bad { background:var(--bad); }
 .dp-sub { font:800 10.5px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:10px 0 4px; }
 .dp-row { display:flex; align-items:center; gap:6px; padding:5px 6px; border-radius:9px; cursor:grab; font-size:13px; border:1px solid transparent; user-select:none; }
-.dp-row:hover { background:var(--card2); } .dp-row.on { background: color-mix(in srgb, var(--brand) 16%, var(--card)); border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); } .dp-row.drag { opacity:.4; }
+.dp-row.moved { background:#dff1fb; border-color:#9fd3f0; } .dp-row:hover { background:var(--card2); } .dp-row.on { background: color-mix(in srgb, var(--brand) 16%, var(--card)); border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); } .dp-row.drag { opacity:.4; }
 .dp-row .ck { width:16px; height:16px; border-radius:5px; border:1px solid var(--line); display:grid; place-items:center; font-size:11px; flex:none; } .dp-row.on .ck { background:var(--brand); color:#fff; border-color:var(--brand); }
 .dp-row .nm { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .dp-row .ics { font-size:12px; }
 .dp-row .op { border:0; background:none; color:var(--muted); cursor:pointer; font-size:16px; padding:0 4px; }

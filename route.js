@@ -81,7 +81,7 @@ export function routeHtml() {
     <div class="rtop">
       <div class="rsum">${chips.map(([k, l, c, col]) => `<span class="k ${filter === k ? 'on' : ''}" data-rfilter="${k}" style="color:${col}"><b>${c}</b>${l}</span>`).join('')}
         <span class="k" data-list="calls" style="color:var(--c-call)"><b>${calls}</b>Calls</span><span class="k" data-list="collections" style="color:var(--c-money)"><b>${chase}</b>To chase</span></div>
-      <div class="rmode">${routeMode() === 'auto' ? `<span class="on">📡 Auto order · from where you are${me ? '' : ' (finding you…)'}</span>` : `<span class="man">✋ Your own order</span><button data-act="rAuto">📡 Back to auto</button>`}<button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '👆 Tap pins to order'}</button></div>
+      <div class="rmode">${routeMode() === 'auto' ? `<span class="on">📡 Auto order · from where you are${me ? '' : ' (finding you…)'}</span><button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '✋ Your own order · tap the pins'}</button>` : `<span class="man">✋ Your own order</span><button data-act="rAuto">📡 Back to auto</button><button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '👆 Tap pins to re-order'}</button>`}</div>
       ${st.noGps.length ? `<div class="rsum" style="font-size:12px;color:var(--muted)">📍 ${st.noGps.length} stop(s) without GPS — open the customer and tap “Get location” next visit</div>` : ''}
     </div>
     <div class="rbot"><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext"><span class="nx">🧭 Next</span></button><button class="round" data-act="rMe" title="My location">📍</button></div>
@@ -224,7 +224,7 @@ document.addEventListener('click', (ev) => {
   const act = a.dataset.act;
   if (act === 'rClose') closeSheet();
   else if (act === 'rAuto') { picking = false; picked = []; toAuto(); }
-  else if (act === 'rPick') { picking = !picking; picked = []; closeSheet(); update(); toast(picking ? '👆 Tap the pins in the order you want to visit' : '✋ Order kept'); }
+  else if (act === 'rPick') { picking = !picking; picked = []; closeSheet(); if (picking && routeMode() === 'auto') setManual((S.routeSeq || []).map((s) => s.id)); /* v0.12.1 (#7) Jun: "직접 정한 순서" = tap the pins 1·2·3 — one button */ update(); toast(picking ? '👆 Tap the pins in the order you want to visit' : '✋ Order kept'); }
   else if (act === 'rOrder') {
     const run = () => { if (me) setHere(me); lsSet(modeKey(), 'auto'); lsSet(dayKey(), null); const seq = ordered(stopsFor(model()).withGps); lsSet(dayKey(), { ids: seq.map((s) => s.id), at: Date.now() }); draw(false); toast(`🔢 ${seq.length} stops ordered from ${me ? 'your location' : 'the first stop'} · ≈${routeKm(seq, me).toFixed(1)} km`); };
     if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => { me = { lat: p.coords.latitude, lng: p.coords.longitude }; run(); }, run, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }); else run();

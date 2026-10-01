@@ -1191,7 +1191,7 @@ Object.assign(W, {
   'Special comment': ['특이사항', 'विशेष टिप्पणी'], 'e.g. dog in the yard': ['예: 마당에 개', 'जस्तै: आँगनमा कुकुर'], 'call before coming': ['오기 전 전화', 'आउनुअघि फोन गर्ने'], 'landlord must be present': ['집주인 입회', 'घरधनी उपस्थित हुनुपर्ने'],
   'Take cash (only Tara)': ['현금 받기 (타라만)', 'नगद लिने (तारा मात्र)'],
   'day-7 calls': ['7일 전화', '७ दिने कल'],
-  '👆 Tap pins to order': ['👆 핀 눌러 순서 정하기', '👆 क्रम मिलाउन पिन थिच्नुहोस्'], '👆 Tap the pins in the order you want to visit': ['👆 갈 순서대로 핀을 누르세요', '👆 जाने क्रममा पिन थिच्नुहोस्'], '✋ Order set': ['✋ 순서 정해짐', '✋ क्रम मिल्यो'], '✋ Order kept': ['✋ 순서 유지', '✋ क्रम राखियो'],
+  '👆 Tap pins to order': ['👆 핀 눌러 순서 정하기', '👆 क्रम मिलाउन पिन थिच्नुहोस्'], '✋ Your own order · tap the pins': ['✋ 직접 정한 순서 · 핀을 누르세요', '✋ आफ्नै क्रम · पिन थिच्नुहोस्'], '👆 Tap pins to re-order': ['👆 핀 눌러 다시 정하기', '👆 फेरि क्रम मिलाउन पिन थिच्नुहोस्'], '👆 Tap the pins in the order you want to visit': ['👆 갈 순서대로 핀을 누르세요', '👆 जाने क्रममा पिन थिच्नुहोस्'], '✋ Order set': ['✋ 순서 정해짐', '✋ क्रम मिल्यो'], '✋ Order kept': ['✋ 순서 유지', '✋ क्रम राखियो'],
   'Came through a referral — 1 month free (off bill 2)': ['추천받고 가입 — 1개월 무료 (2회차에서 차감)', 'सिफारिसबाट आएको — १ महिना निःशुल्क (बिल २ बाट)'], 'apply once · comes off bill 2': ['한 번만 적용 · 2회차에서 빠짐', 'एक पटक लागू · बिल २ बाट घट्छ'], '3 months after their install · apply once': ['그 집 설치 3개월 뒤 · 한 번만 적용', 'उनको जडानको ३ महिनापछि · एक पटक'],
   'Money': ['돈', 'पैसा'], 'Field & customers': ['현장·고객', 'फिल्ड र ग्राहक'], 'System & office': ['시스템·사무', 'प्रणाली र कार्यालय'],
   'Screen first': ['먼저 심사하기', 'पहिले जाँच'],
@@ -1253,6 +1253,7 @@ Object.assign(W, {
   'Hold ☰ and drag a stop to where you want it': ['☰를 꾹 누른 채 원하는 자리로 끌어다 놓기', '☰ थिचिराखेर चाहेको ठाउँमा तान्नुहोस्'], 'Hold and drag': ['꾹 눌러 끌기', 'थिचेर तान्नुहोस्'],
 });
 P.unshift(
+  [/^Homes by tole · (\d+) with a job today$/, '동네별 집 · 오늘 일 있는 집 $1', 'टोलअनुसार घर · आज काम भएका $1'],
   [/^(\d+) more waiting behind the top 10$/, '상위 10 뒤에 $1집 대기', 'शीर्ष १० पछि $1 घर पर्खाइमा'],
   [/^💬 sent (\d{1,2}:\d{2}(?: ?[AP]M)?)$/i, '💬 보냄 $1', '💬 पठाइयो $1'],
   [/^Brought (.+) — referrer's 1 month free$/, '$1 데려옴 — 추천인 1개월 무료', '$1 ल्याउनुभयो — सिफारिसकर्ताको १ महिना निःशुल्क'],
@@ -1270,6 +1271,7 @@ P.unshift(
   [/^Shelf = in − out − issued \+ returned − used from the shelf\. Order more below (\d+) \(🔴 first guess$/, '선반 = 입고 − 출고 − 지급 + 반납 − 선반에서 씀. $1 아래면 추가 주문 (🔴 첫 추정', 'शेल्फ = भित्र − बाहिर − दिइएको + फिर्ता − शेल्फबाट प्रयोग। $1 भन्दा कम भए थप अर्डर (🔴 पहिलो अनुमान'],
 );
 
+W['tick all'] = ['전부 선택', 'सबै छान्नुहोस्'];
 W['🧾 Image receipt'] = ['🧾 이미지 영수증', '🧾 फोटो रसिद']; W['📤 Share → WhatsApp'] = ['📤 공유 → WhatsApp', '📤 सेयर → WhatsApp']; W['⬇️ Save image'] = ['⬇️ 이미지 저장', '⬇️ फोटो सेभ'];
 W['Share → choose WhatsApp → the customer'] = ['공유 → WhatsApp 선택 → 고객', 'सेयर → WhatsApp छान्नुहोस् → ग्राहक']; W['Save, then send it from WhatsApp'] = ['저장한 뒤 WhatsApp에서 보내세요', 'सेभ गरेर WhatsApp बाट पठाउनुहोस्'];
 W['Making the receipt…'] = ['영수증 만드는 중…', 'रसिद बनाउँदै…']; W['Could not make the image'] = ['이미지를 못 만들었어요', 'फोटो बनाउन सकिएन']; W['✅ Shared'] = ['✅ 공유됨', '✅ सेयर भयो'];

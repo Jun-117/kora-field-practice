@@ -35,9 +35,10 @@ export function receiptData(x, pay, co = {}) {
   const led = x.led || { splits: {}, bills: [], depositCollected: 0, nextBill: null };
   const sp = led.splits[pay.id] || {};
   const p = R.PRICES;
-  const paidBill = led.bills.find((b) => b.paidOn === pay.date) || led.bills.filter((b) => b.paid > 0 && b.due <= pay.date).slice(-1)[0] || null;
+  const paidBill = sp.extra !== undefined ? null : (led.bills.find((b) => b.paidOn === pay.date) || led.bills.filter((b) => b.paid > 0 && b.due <= pay.date).slice(-1)[0] || null);
   const shortDate = (iso) => niceDate(iso).replace(/ \d{4}$/, '');
-  const period = (b) => { if (!b) return ''; const nx = led.bills.find((q) => q.k === b.k + 1); const to = nx ? R.addDays(nx.due, -1) : R.addDays(b.due, 29); return `${shortDate(b.due)} → ${niceDate(to)}`; };
+  const after = (b) => led.bills.find((q) => q.k === b.k + 1) || (R.isDate(x.c.installDate) ? { k: b.k + 1, due: R.billDue(x.c.installDate, b.k + 1), amount: R.billAmount(b.k + 1, p).amount, paid: 0 } : null); /* the ledger stops at today — the next bill may not exist yet */
+  const period = (b) => { if (!b) return ''; const nx = after(b); const to = nx ? R.addDays(nx.due, -1) : R.addDays(b.due, 29); return `${shortDate(b.due)} → ${niceDate(to)}`; };
   const lines = [];
   if (sp.extra !== undefined) lines.push({ ic: 'credit', t: String(pay.type || 'Payment'), s: '', v: sp.extra });
   else {
@@ -49,7 +50,7 @@ export function receiptData(x, pay, co = {}) {
   const discount = Number(pay.discount) > 0 && pay.approval !== 'Rejected' ? Number(pay.discount) : 0;
   // deposit held as of this bill (an old receipt shows what was held then, not today's total)
   const held = Math.round(paidBill ? led.bills.filter((b) => b.k <= paidBill.k).reduce((t, b) => t + (b.parts ? b.parts.deposit : 0), 0) : (led.depositCollected || 0)), segs = Math.max(0, Math.min(p.depositMonths, Math.round(held / p.depositMonthly)));
-  const nb = (paidBill && led.bills.find((b) => b.k === paidBill.k + 1)) || led.nextBill;
+  const nb = (paidBill && after(paidBill)) || led.nextBill;
   return {
     name: x.c.name || '', code: x.c.code || '', no: receiptNo(pay), date: niceDate(pay.date), bs: bsText(pay.date),
     method: pay.method || '', ref: pay.ref || '', total: Number(pay.amount) || 0, lines, discount,

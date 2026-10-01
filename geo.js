@@ -63,14 +63,15 @@ export function dirUrl(dest, way, origin) {
 // · Position already known (fresh) → open Google right away, inside the click (pop-up blockers allow that).
 // · Not known → ask the browser first (the permission prompt must stay on this tab), then offer a real link
 //   (offer(url, origin)) because the click's right to open a window may have expired while the prompt was up.
+const installed = () => !!(navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches)); /* v0.12.3: Android/desktop PWAs have no navigator.standalone */
 export function openDirections(dest, way, { note, offer } = {}) {
   const o = hereNow();
-  if (o) { const url = dirUrl(dest, way, o); if (navigator.standalone) { location.href = url; return Promise.resolve(url); } /* v0.11.2 (#6): standalone → straight to the Maps app, no blank Safari sheet */ const w = window.open(url, '_blank'); if (!w && offer) offer(url, o); return Promise.resolve(url); }
+  if (o) { const url = dirUrl(dest, way, o); if (installed()) { location.href = url; return Promise.resolve(url); } /* v0.11.2 (#6): standalone → straight to the Maps app, no blank Safari sheet */ const w = window.open(url, '_blank'); if (!w && offer) offer(url, o); return Promise.resolve(url); }
   if (note) note('📍 Finding your location…');
   return getHere(60e3, 15000).then((p) => {
     if (!p && note) note(getHere.lastError === 'denied' ? '📍 Location is blocked for this site — Google will guess the start. Allow location for this site.' : '📍 Location not available — Google will guess the start.');
     const url = dirUrl(dest, way, p);
-    if (navigator.standalone) location.href = url; else if (offer) offer(url, p); else window.open(url, '_blank');
+    if (installed()) location.href = url; else if (offer) offer(url, p); else window.open(url, '_blank');
     return url;
   });
 }

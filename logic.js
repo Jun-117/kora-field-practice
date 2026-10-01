@@ -703,8 +703,9 @@ export function parseCSV(text) {
   return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
 }
 // #2 bank statement matching — finds the customer by KC code or phone digits in the description; else by a unique exact amount.
-export function matchBankRows(rows, map, customers, ledgers) {
+export function matchBankRows(rows, map, customers, ledgers, payments) {
   const num = (s) => Number(String(s).replace(/[^\d.-]/g, ''));
+  const pays = payments || [];
   return rows.map((r, i) => {
     const desc = String(r[map.desc] ?? ''); const amount = num(r[map.amount]); const date = normBankDate(r[map.date]);
     let cand = null, how = '';
@@ -712,7 +713,8 @@ export function matchBankRows(rows, map, customers, ledgers) {
     if (code) { cand = customers.find((c) => c.code === code[0]); how = cand ? 'KC code' : ''; }
     if (!cand) { const digits = desc.replace(/\D/g, ''); cand = customers.find((c) => c.phone && digits.includes(c.phone.slice(-10))); how = cand ? 'phone' : ''; }
     if (!cand && amount > 0) { const hits = customers.filter((c) => { const l = ledgers.get(c.id); return l && (l.overdue === amount || (l.nextBill && l.nextBill.amount - l.nextBill.paid === amount)); }); if (hits.length === 1) { cand = hits[0]; how = 'amount (unique)'; } }
-    return { i, date, amount, desc, customer: cand, how };
+    const dup = cand && date ? pays.some((p) => p.customerId === cand.id && Math.abs((Number(p.amount) || 0) - amount) < 0.5 && isDate(p.date) && Math.abs(daysBetween(p.date, date)) <= 3) : false; /* v0.11.1 (#15): same home · same amount · within 3 days = already in the book */
+    return { i, date, amount, desc, customer: cand, how, dup };
   });
 }
 function normBankDate(s) {

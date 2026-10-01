@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, CACHE_SIZE_UNLIMITED,
   collection, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromCache, onSnapshot, query, where,
   serverTimestamp, Timestamp, waitForPendingWrites, terminate, clearIndexedDbPersistence,
-} from './vendor/firebase-firestore.js';
+  limit as qLimit } from './vendor/firebase-firestore.js';
 import * as R from './logic.js';
 import { initLang, setLang, getLang, locale, langSegHtml, fmtDate, fmtTime } from './i18n.js';
 import * as G from './geo.js';
@@ -15,7 +15,7 @@ import * as CA from './capack.js';
 import * as B from './bs.js';
 import * as CAL from './cal.js';
 
-export const APP_VERSION = 'kf-v0.11.0 (2026-09-30)';
+export const APP_VERSION = 'kf-v0.11.1 (2026-10-01)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -168,6 +168,10 @@ const firstName = (c) => String((c && c.name) || '').trim().split(/\s+/)[0] || '
 const msgT = (k) => (S.settings && String(S.settings[k] || '').trim()) || MSG_DEFAULTS[k];
 export const omwText = (c, eta) => { const o = { name: firstName(c), tech: myName() || 'KORA CARE', eta }; return fillMsg(msgT('omwEn'), o) + '\n\n' + fillMsg(msgT('omwNe'), o); };
 export const missText = (c, v) => { const ms = (v.savedAt && v.savedAt.t) || v.savedAtT || v._localT || Date.now(); const o = { name: firstName(c), time: new Date(ms).toTimeString().slice(0, 5), retry: v.retryDate || '' }; return fillMsg(msgT('missEn'), o) + '\n\n' + fillMsg(msgT('missNe'), o); };
+// v0.11.1 (#3) a payment reminder sent by WhatsApp is remembered on this phone (per home, per day) — the list shows "sent HH:MM" and drops that home to the bottom
+const REM = 'kfp_rem';
+export function remMark(cid) { const m = lsGet(REM, {}); for (const k of Object.keys(m)) if (!m[k] || m[k].day !== today()) delete m[k]; m[cid] = { at: Date.now(), day: today() }; lsSet(REM, m); }
+export function remSent(cid) { const r = lsGet(REM, {})[cid]; return r && r.day === today() ? r : null; }
 export function omwMark(cid, eta) { const m = lsGet(OMW, {}); for (const k of Object.keys(m)) if (!m[k] || Date.now() - m[k].at > 2 * 864e5) delete m[k]; m[cid] = { at: Date.now(), day: today(), eta: Number(eta) || null, by: myName() }; lsSet(OMW, m); }
 export const omwFor = (cid, day) => { const e = lsGet(OMW, {})[cid]; return e && e.day === day ? e : null; };
 const omwClear = (cid) => { const m = lsGet(OMW, {}); if (m[cid]) { delete m[cid]; lsSet(OMW, m); } };
@@ -320,6 +324,7 @@ async function reconcile(manual) {
         try {
           const s = await getDocFromServer(doc(db, e.path));
           if (s.exists() && (e.isNew || !e.data || Object.keys(e.data).every((k) => JSON.stringify(s.get(k)) === JSON.stringify(e.data[k])))) { jMark(e.key, 'done'); if (e.photo) photoDel(e.id); }
+          else if (!e.isNew && s.exists() && s.get('updatedBy') && s.get('updatedBy') !== e.uid && s.get('updatedAt') && s.get('updatedAt').toMillis && s.get('updatedAt').toMillis() > e.t) { jMark(e.key, 'rejected', 'someone else saved this record after your edit — open it again and re-do your change'); } /* v0.11.1 (#14): no silent overwrite */
           else sendEntry(e);
         } catch (err) { if (err && err.code === 'permission-denied') jMark(e.key, 'rejected', err.code); }
       }
@@ -389,11 +394,11 @@ export function model() {
     cust.set(c.id, { c, led, dn, nv, fd, ob, vs, dot, status, chases, pr });
   }
   const act = [...cust.values()].filter((x) => x.status === 'Active');
-  const collections = act.filter((x) => x.dn).sort((a, b) => b.dn.days - a.dn.days);
   // Dispatch: once Jun gives a staff member their own homes, their field lists show those + the unassigned ones.
   const me = isBoss() ? '' : myName();
   const mineOnly = !!me && act.some((x) => R.assigneeOf(x.c, t) === me);
-  const forMe = (x) => !mineOnly || !R.assigneeOf(x.c, t) || R.assigneeOf(x.c, t) === me;
+  const forMe = (x) => !mineOnly || !x.c || !R.assigneeOf(x.c, t) || R.assigneeOf(x.c, t) === me;
+  const collections = act.filter((x) => x.dn).filter(forMe).sort((a, b) => b.dn.days - a.dn.days); /* v0.11.1 (#10): collections + requests follow the same assignment as visits */
   const visitsDue = act.filter((x) => x.nv && x.nv.date <= R.addDays(t, 0)).map((x) => ({ ...x, due: x.nv.date })).concat(
     act.filter((x) => !(x.nv && x.nv.date <= t) && x.fd.some((f) => f.status === 'overdue')).map((x) => ({ ...x, due: x.fd.filter((f) => f.status === 'overdue').map((f) => f.due).sort()[0], filterOnly: true })),
   ).filter(forMe).sort((a, b) => String(a.due).localeCompare(String(b.due)));
@@ -406,7 +411,7 @@ export function model() {
   const hm = CAL.holidayMap(S.settings.holidays);
   const isHol = (d) => CAL.isOff(hm, R.fmtD(d));
   const openReq = D.requests.filter((r) => r.status !== 'Done').map((r) => ({ r, sla: R.requestSla(r.receivedAtMs || Date.parse(r.receivedAt || '') || Date.now(), isHol), c: cust.get(r.customerId) }))
-    .sort((a, b) => a.sla.replyBy - b.sla.replyBy);
+    .filter((o) => !o.c || forMe({ c: o.c.c })).sort((a, b) => a.sla.replyBy - b.sla.replyBy);
   const leadsDue = D.leads.filter((l) => !['Signed', 'Rejected'].includes(l.outcome) && R.isDate(l.followUpDate) && l.followUpDate <= t);
   const metrics = R.metrics(D, ledgers, t, S.settings);
   const deposits = R.depositBook(D.customers, ledgers, D.recoveries);
@@ -532,7 +537,7 @@ function field(f, v) {
       input = `<select id="f_${f.k}" name="${f.k}"><option value="">— choose —</option>` + opts.map((o) => { const [ov, ol] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(ov)}"${String(ov) === String(val) ? ' selected' : ''}>${esc(ol)}</option>`; }).join('') + '</select>'; break;
     case 'customer': {
       const list = arr('customers').filter((c) => c.status !== 'Churned' || c.id === val).sort((a, b) => String(a.name).localeCompare(String(b.name)));
-      input = `<select id="f_${f.k}" name="${f.k}"><option value="">— choose customer —</option>${list.map((c) => `<option value="${esc(c.id)}"${c.id === val ? ' selected' : ''}>${esc(custLabel(c))} · ${esc(toleOf(c))}</option>`).join('')}</select>`; break;
+      input = `${list.length > 12 ? `<input type="search" class="custpick" data-for="f_${f.k}" placeholder="Search name · KC code · phone" autocomplete="off">` : ''}<select id="f_${f.k}" name="${f.k}"><option value="">— choose customer —</option>${list.map((c) => `<option value="${esc(c.id)}"${c.id === val ? ' selected' : ''}>${esc(custLabel(c))} · ${esc(toleOf(c))}</option>`).join('')}</select>`; break; /* v0.11.1 (#8): 750 homes are not a wheel */
     }
     case 'textarea': input = `<textarea id="f_${f.k}" name="${f.k}" placeholder="${esc(f.ph || '')}">${esc(val)}</textarea>`; break;
     case 'gps': {
@@ -703,6 +708,7 @@ FORMS.install = {
       else if (np < 3 && !confirmed) warns.photos = `3 photos are needed — you have ${np}.`;
     }
     need(errs, v, 'agent', 'Who installed?');
+    if (!v._edit && !confirmed && !(v.gps && Number.isFinite(Number(v.gps.lat)))) warns.gps = 'No location saved — tap “Get location now” at the door. Without it the house is missing from the map and the route.'; /* v0.11.1 (#4) */
     if (!v._edit && !confirmed && S.settings.screenWarn === 'Yes' && phone && !R.findScreening(arr('screenings'), S.convertLead, phone)) warns.name = 'No sign-up screening for this phone yet — do one first (🔎 New → Sign-up screening), or save anyway.';
     const scr = !v._edit && phone ? R.findScreening(arr('screenings'), S.convertLead, phone) : null; /* v0.10 H5: the ID must be seen by the install day */
     if (scr && !confirmed && scr.idSeen !== 'Yes') warns.name = (warns.name ? warns.name + ' ' : '') + 'ID not seen at the screening — see the ID before installing (hold).';
@@ -788,6 +794,7 @@ FORMS.visit = {
   col: 'visits', title: 'Visit', icon: '🔧',
   spec: () => [
     custPicker,
+    { k: 'dueBox', t: 'info' }, /* v0.11.1 (#7): what is due at this house */
     { k: 'date', l: 'Visit date', t: 'date', req: 1, def: today },
     { k: 'visitType', l: 'Visit type', t: 'chips', o: OPT.visitType, req: 1, def: 'Routine check' },
     { k: 'status', l: 'Status', t: 'chips', o: OPT.visitStatus, req: 1, def: '✅ Completed' },
@@ -820,7 +827,14 @@ FORMS.visit = {
     { k: 'photos', l: 'Photos', t: 'photos' },
     { k: 'notes', l: 'Notes', t: 'textarea', ph: 'complaints, symptoms, anything to remember' },
   ],
-  prefill(p) { const c = S.D.customers.get(p.cid); return { customerId: p.cid || '', nextVisitDate: c ? R.suggestNextVisit(c.installDate, today()) : '', retryDate: R.addDays(today(), 1), signName: c ? c.name || '' : '' }; },
+  info(v) {
+    const x = v.customerId ? model().cust.get(v.customerId) : null; if (!x) return '';
+    const due = (x.fd || []).filter((f) => f.status === 'overdue' || f.status === 'due').map((f) => `${f.type}${f.due ? ' (' + f.due + ')' : ''}`);
+    const last = arr('visits').filter((q) => q.customerId === x.c.id && q.status && String(q.status).includes('Completed')).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+    const line = (s) => `<div>${s}</div>`;
+    return line(`<b>${esc('Due at this house')}</b>: ${due.length ? esc(due.join(' · ')) : esc('no filter due')}`) + (last ? line(`${esc('Last visit')} ${esc(last.date)} · ${esc(last.visitType || '')}${last.ppColor ? ' · PP ' + esc(last.ppColor) : ''}${last.tdsAfter ? ' · TDS ' + esc(last.tdsAfter) : ''}${esc(last.notes ? ' · ' + String(last.notes).slice(0, 60) : '')}`) : line(esc('No completed visit yet'))) + (x.led && x.led.overdue ? line(`<span style="color:var(--bad)">${esc('Overdue ' + R.npr(x.led.overdue) + ' — ask for it while you are there')}</span>`) : '');
+  },
+  prefill(p) { const c = S.D.customers.get(p.cid); const x = p.cid ? model().cust.get(p.cid) : null; const due = x ? (x.fd || []).filter((f) => f.status === 'overdue').map((f) => f.type) : []; return { customerId: p.cid || '', nextVisitDate: c ? R.suggestNextVisit(c.installDate, today()) : '', retryDate: R.addDays(today(), 1), signName: c ? c.name || '' : '', ...(due.length ? { filters: due, visitType: 'Filter change' } : {}) }; },
   check(v, confirmed) {
     const errs = {}, warns = {};
     if (!v.customerId || !S.D.customers.has(v.customerId)) errs.customerId = 'Choose the customer.';
@@ -1512,15 +1526,31 @@ FORMS.event = {
 };
 export { FORMS };
 
+// v0.11.1 (#1) drafts: a half-written form survives a tab tap, a phone call or iOS closing the app — kept on the phone per form, 3 days
+const DRAFT_KEY = (form) => 'kfp_draft_' + form;
+export function draftGet(form) { const d = lsGet(DRAFT_KEY(form), null); return d && d.v && Date.now() - d.t < 3 * 864e5 ? d : null; }
+export function draftClear(form) { try { localStorage.removeItem(DRAFT_KEY(form)); } catch (e) {} }
+let draftT = 0;
+export function draftSave(form) {
+  if (!form || form.dataset.id || S.noDraft || form.dataset.form === 'login') return;
+  clearTimeout(draftT); draftT = setTimeout(() => {
+    const Fm = FORMS[form.dataset.form]; if (!Fm || !form.isConnected) return;
+    const v = readForm(form, Fm.spec()); delete v.sign;
+    if (!Object.values(v).some((x) => (Array.isArray(x) ? x.length : x !== '' && x !== null && x !== undefined))) return;
+    lsSet(DRAFT_KEY(form.dataset.form), { v, t: Date.now() });
+  }, 300);
+}
 function formHtml(p) {
   const F = FORMS[p.form]; if (!F) return '<div class="card">Unknown form</div>';
   const existing = p.id ? S.D[F.col].get(p.id) : null;
-  const pre = existing ? { ...existing } : (F.prefill ? F.prefill(p) : {});
+  const draft = !existing && !S.noDraft ? draftGet(p.form) : null;
+  const pre = existing ? { ...existing } : { ...(F.prefill ? F.prefill(p) : {}), ...(draft ? draft.v : {}) };
   if (F.col === 'customers' && existing && isBoss()) pre.privateNotes = S.privCache && S.privCache[p.id] !== undefined ? S.privCache[p.id] : '';
   const spec = F.spec();
   return `<button class="back" data-back>‹ Back</button><h1>${F.icon} ${esc(existing ? (F.edit ? F.title : 'Edit ' + F.title.toLowerCase()) : F.title)}</h1>
     <div class="muted"><span style="color:var(--bad)">*</span> required${existing ? ' · editing a saved record' : ''}</div>
     <form class="card" id="theForm" data-form="${p.form}" data-id="${esc(p.id || '')}" novalidate>
+      ${draft ? `<div class="draftbar">📝 <span>Draft from ${esc(new Date(draft.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))} restored</span><button type="button" class="btn small ghost" data-act="draftClear" style="margin-left:auto">Start fresh</button></div>` : ''}
       ${spec.map((f) => field(f, pre[f.k])).join('')}
       <button class="btn" type="submit" id="saveBtn">Save</button>
     </form>`;
@@ -1545,7 +1575,8 @@ function submitForm(form) {
   delete v._edit; delete v._id;
   const id = editId || newId(F.col);
   const r = F.save(v, id, isNew);
-  toast(r.ok ? `🟡 Saved on phone${r.np ? ` (+${r.np} photo)` : ''} — sends when online` : '🔴 Could not save — write it on paper');
+  if (isNew && r.ok) draftClear(form.dataset.form);
+  toast(r.ok ? (navigator.onLine && !DEMO ? `🟢 Saved${r.np ? ` (+${r.np} photo)` : ''} — sending now` : `🟡 Saved on phone${r.np ? ` (+${r.np} photo)` : ''} — sends when online`) : '🔴 Could not save — write it on paper');
   if (S.desk && S.drawer) {
     // Desk: the finished form is dropped (Back must not return to it); the result opens where the form was.
     S.drawer = null; const [, scr, prm] = r.go;
@@ -1573,6 +1604,8 @@ export function go(tab, screen, params, isBack) {
   if (S.desk && next.screen === 'report') { closeDrawer(true); }
   if (!isBack && S.route && S.route.screen !== 'form') { history_.push(S.route); pushNav(); }
   if (history_.length > 40) history_.shift();
+  if (S.route && S.route.screen === 'form' && next.screen !== 'form' && !S.desk) { const fm = S.route.params && S.route.params.form; if (fm && !S.route.params.id && draftGet(fm)) toast('📝 Draft kept — open the same form again to continue'); } /* v0.11.1 (#1) */
+  S.navDir = isBack ? 'back' : S.route && next.screen === next.tab && S.route.tab !== next.tab ? 'tab' : next.screen === next.tab ? 'tab' : 'fwd'; /* v0.11.1 motion: which way the next screen slides in */
   S.route = next;
   if (S.route.screen === 'form') S.formPhotos = [];
   render(true);
@@ -1652,7 +1685,7 @@ export function render(fresh) {
   const tb = tabs.querySelector('[data-tab="today"] .badge'); tb.textContent = badge; tb.classList.toggle('hidden', !badge);
   // language switch on every phone screen (Today has it in the header)
   v.innerHTML = (!['today', 'status'].includes(S.route.screen) ? `<div class="lang-float">🌐 ${langSeg()}</div>` : '') + screenHtml(S.route);
-  if (fresh) { v.classList.remove('view-enter'); void v.offsetWidth; v.classList.add('view-enter'); }
+  if (fresh) { v.classList.remove('view-enter', 'view-fwd', 'view-back'); void v.offsetWidth; v.classList.add('view-enter'); if (S.navDir === 'fwd') v.classList.add('view-fwd'); else if (S.navDir === 'back') v.classList.add('view-back'); S.navDir = ''; clearTimeout(S.enterT); S.enterT = setTimeout(() => v.classList.remove('view-enter', 'view-fwd', 'view-back'), 600); /* entrance classes go after the animation so a data refresh does not replay it */ }
   afterRender(v, S.route);
 }
 export function screenHtml(r) {
@@ -1714,7 +1747,7 @@ function viewLogin() {
     <label for="lg_email">Email</label><div class="pwbox"><input id="lg_email" name="email" type="email" autocomplete="username" inputmode="email" value="${esc(lsGet('kfp_login_email', ''))}"><div class="pwbtns"><button type="button" class="pwbtn" data-act="lgClear" data-for="lg_email" aria-label="Clear">✕</button></div></div>
     <label for="lg_pw">Password</label><div class="pwbox"><input id="lg_pw" name="pw" type="password" autocomplete="current-password"><div class="pwbtns"><button type="button" class="pwbtn" data-act="pwShow" aria-label="Show password">👁</button><button type="button" class="pwbtn" data-act="lgClear" data-for="lg_pw" aria-label="Clear">✕</button></div></div>
     <label class="chk-line"><input type="checkbox" id="lg_remember"${lsGet('kfp_login_remember', true) ? ' checked' : ''}> <span>Remember my email</span></label>
-    <label class="chk-line"><input type="checkbox" id="lg_keep"${lsGet('kfp_login_keep', true) ? ' checked' : ''}> <span>Keep me signed in on this phone</span></label>
+    <label class="chk-line"><input type="checkbox" id="lg_keep"${lsGet('kfp_login_keep', true) ? ' checked' : ''}> <span>Keep me signed in on this phone</span></label><div class="hint">Keep it on for a work phone — off means the app cannot open offline after iPhone closes it.</div>
     <div class="hint">The app never stores your password. Let the phone save it (iPhone: Passwords).</div>
     <div class="err hidden" id="lgErr"></div>
     <button class="btn" type="submit">Sign in</button>
@@ -1754,32 +1787,36 @@ export function statusCard() {
 // v0.11 phone lists (Tara 2026-09-30 "too colourful · too bold"): grouped rows like the iPhone Settings app — a small coloured icon box, plain text, a number, › on the right
 export const rowsHtml = (groups) => groups.filter((g) => g.rows.length).map((g) => `${g.title ? `<div class="sec">${esc(g.title)}</div>` : ''}<div class="card flush rows">${g.rows.map((r) => `<button class="rowb ${r.tone || g.tone || ''}" ${r.attr}><span class="ric">${r.ic}</span><span class="rl">${esc(r.l)}${r.s ? `<small>${esc(r.s)}</small>` : ''}</span>${r.n !== undefined && r.n !== '' ? `<span class="rn">${r.n}</span>` : ''}${r.b ? `<span class="rb">${r.b}</span>` : ''}<span class="rc">›</span></button>`).join('')}</div>`).join('');
 export const cItem = (x, right) => `<div class="item" data-cust="${esc(x.c.id)}"><span class="dot ${x.dot}"></span><div class="main"><div class="t">${esc(custLabel(x.c))}${x.c._pending ? ' <span class="pill warn">on phone</span>' : ''}</div>
-  <div class="s">${esc(toleOf(x.c))} · Ward ${esc(x.c.ward || '–')}${x.led.overdue ? ` · <span style="color:var(--bad)">${R.npr(x.led.overdue)} due</span>` : ''}</div></div>${right ? `<div class="r">${right}</div>` : '<div class="r">›</div>'}</div>`;
+  <div class="s">${esc(toleOf(x.c))} · Ward ${esc(x.c.ward || '–')}</div></div>${right ? `<div class="r">${right}</div>` : x.led.overdue ? `<div class="r"><span class="pill bad">${R.npr(x.led.overdue)} due</span></div>` : '<div class="r">›</div>'}</div>`; /* v0.11.1 (#16): the overdue amount sits in the right cell instead of the end of a clipped line */
 
 function viewToday() {
   const m = model(); const t = m.t;
   const chase = chaseFirst(m); const late = chase.filter((x) => ['call', 'visit'].includes(x.dn.stage)).length; /* v0.9 fix: promised homes wait until their day */
   const reqLate = m.openReq.filter((x) => Date.now() > x.sla.replyBy).length;
-  const watch = m.watch.filter((w) => w.lvl !== 'low');
-  const s = syncState();
-  const hr = new Date().getHours(); const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
-  // v0.11: one list, one number per line, a red badge only where someone must act today (Tara 2026-09-30)
-  const rows = [
-    { attr: 'data-list="collections"', ic: '💰', l: 'Collections', n: chase.length, b: late || '', tone: 'tone-money' },
-    { attr: 'data-list="visits"', ic: '🔧', l: 'Visits due', n: m.visitsDue.length, tone: 'tone-field' },
-    { attr: 'data-list="calls"', ic: '📞', l: 'Calls', n: m.calls.length, tone: 'tone-call' },
-    { attr: 'data-list="requests"', ic: '📋', l: 'Requests', n: m.openReq.length, b: reqLate || '', tone: 'tone-req' },
-    { attr: 'data-list="tomorrow"', ic: '📅', l: 'Bills tomorrow', n: m.tomorrowBills.length, tone: 'tone-bill' },
-    { attr: 'data-list="leads"', ic: '🧲', l: 'Leads to follow', n: m.leadsDue.length, tone: 'tone-lead' },
-    ...(watch.length ? [{ attr: 'data-list="watch"', ic: '⚠️', l: 'Look after this week', n: watch.length, tone: 'tone-req' }] : []),
+  const tiles = [
+    ['collections', '💰', 'Collections', chase.length, late ? `${late} need a call/visit` : 'reminders', late ? 'bad' : chase.length ? 'warn' : 'ok'],
+    ['visits', '🔧', 'Visits due', m.visitsDue.length, 'by tole', m.visitsDue.length ? 'warn' : 'ok'],
+    ['calls', '📞', 'Calls', m.calls.length, 'day-7 calls', m.calls.length ? 'warn' : 'ok'],
+    ['requests', '📋', 'Requests', m.openReq.length, reqLate ? `${reqLate} past reply time` : 'open', reqLate ? 'bad' : m.openReq.length ? 'warn' : 'ok'],
+    ['tomorrow', '📅', 'Bills tomorrow', m.tomorrowBills.length, 'send reminders', ''],
+    ['leads', '🧲', 'Leads to follow', m.leadsDue.length, 'follow-up due', m.leadsDue.length ? 'warn' : ''],
   ];
+  const sec = (title, items, empty, list) => `<h2>${title}${list ? `<button class="btn small ghost" style="margin-left:auto" data-list="${list}">All</button>` : ''}</h2><div class="card flush">${items || `<div class="empty">${empty}</div>`}</div>`;
+  const s = syncState(); const tones = { collections: 'tone-money', visits: 'tone-field', calls: 'tone-call', requests: 'tone-req', tomorrow: 'tone-bill', leads: 'tone-lead' };
+  const hr = new Date().getHours(); const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+  // v0.11.1 (Jun 2026-10-01 "원래 그 화면이 우린 좋았음"): the v0.10 look is back — gradient card, three numbers, six tiles; the collections card below keeps its v0.11 shape
   return `<div class="hero">
     <div class="top"><div><div class="hello">${esc(greet)}, ${esc(myName() || 'team')}</div><div class="date">${esc(fmtDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }))}</div></div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">${langSeg()}<span class="syncpill"><span class="dot live ${s.c}" data-sync-dot></span><span data-sync-text>${esc(s.t)}</span></span></div></div>
+    <div class="stats"><button data-list="visits"><b>${m.visitsDue.length}</b><span>Visits due</span></button><button data-list="collections"><b>${chase.length}</b><span>To collect</span></button><button data-list="calls"><b>${m.calls.length}</b><span>Calls</span></button></div>
     <button class="cta" data-tab-go="route">🗺️ Open today's route</button>
   </div>
-  ${rowsHtml([{ title: 'Today', rows }])}
-  <div class="sec">Chase first</div><div class="card flush">${chase.slice(0, 3).map((x) => dunItem(x)).join('') || '<div class="empty">Nobody to chase today 🎉</div>'}</div>`;
+  <div class="grid2 stagger" style="margin-top:12px">${tiles.map(([k, ic, l, n, sub, cls], i) => `<button class="tile ${cls} ${tones[k]}" data-list="${k}" style="--i:${i}"><span class="ic">${ic}</span><span class="n">${n}</span><span>${l}</span><span class="s">${esc(sub)}</span></button>`).join('')}</div>
+  ${sec('💰 Chase first', chase.slice(0, 5).map((x) => dunItem(x)).join(''), 'Nobody to chase today 🎉', 'collections')}
+  ${m.watch.some((w) => w.lvl !== 'low') ? sec('⚠️ Look after this week', m.watch.filter((w) => w.lvl !== 'low').slice(0, 3).map((w) => watchItem(w, { max: 2 })).join(''), '', 'watch') : ''}
+  ${sec('🔧 Visits due', m.visitsDue.slice(0, 5).map((x) => cItem(x, `<span class="pill ${x.due < t ? 'bad' : 'warn'}">${esc(x.filterOnly ? 'filter' : x.due === t ? 'today' : x.due)}</span>`)).join(''), 'No visits due', 'visits')}
+  ${sec('📋 Open requests', m.openReq.slice(0, 4).map(reqItem).join(''), 'No open requests', 'requests')}
+  <div class="row" style="margin-top:6px"><button class="btn" data-go-form="visit">🔧 Visit</button><button class="btn" data-go-form="payment">💵 Payment</button></div>`;
 }
 export function dunItem(x) {
   const d = x.dn; const cls = { reminder: 'blue', due: 'warn', late: 'warn', call: 'orange', visit: 'bad' }[d.stage];
@@ -1790,12 +1827,13 @@ export function dunItem(x) {
   const prLine = pr ? `<div class="s chase-${pr.status}">${S.desk ? (pr.status === 'broken' ? '🤝❌ ' : '🤝 ') : ''}<span>${esc(pr.status === 'broken' ? `promise broken (${pr.date})` : `promised by ${pr.date}`)}</span>${pr.amount ? ` · ${R.npr(pr.amount)}` : ''}</div>` : '';
   const chLine = tries.length ? `<div class="s chase-tries">${S.desk ? '📞 ' : ''}<span>${esc(`${tries.length} ${tries.length === 1 ? 'try' : 'tries'}`)}</span> · <span>${esc('last: ' + (last.reached || last.channel || '—'))}</span> · <span>${esc(last.date === t0 ? 'today' : `${R.daysBetween(last.date, t0)} d ago`)}</span></div>` : '';
   // v0.11 phone (Tara 2026-09-30): one accent per card (the stage pill), plain text, the three actions on their own line so the text keeps its width
-  if (!S.desk) return `<div class="item dun" data-cust="${esc(x.c.id)}"><div class="main"><div class="t">${esc(x.c.name)} <span class="pill ${cls}">${esc(d.short)}</span></div>
+  const rs = remSent(x.c.id); const sentPill = rs ? ` <span class="pill sent">💬 sent ${esc(new Date(rs.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</span>` : '';
+  if (!S.desk) return `<div class="item dun" data-cust="${esc(x.c.id)}"><div class="main"><div class="t">${esc(x.c.name)} <span class="pill ${cls}">${esc(d.short)}</span>${sentPill}</div>
     <div class="s">${R.npr(d.owed)} · ${esc(when)} · ${esc(toleOf(x.c))}</div>${prLine}${chLine}
-    <div class="dun-acts"><a class="btn small ghost" href="tel:${esc(x.c.phone)}" data-stop>📞 Call</a><a class="btn small ghost" href="${esc(waLink(x.c.phone, dunText(x)))}" target="_blank" rel="noopener" data-stop>💬 WhatsApp</a>${canForm('checkin') ? `<button class="btn small ghost" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(R.CHASE_KIND)}" title="Log a payment chase">📝 Log</button>` : ''}</div></div></div>`;
+    <div class="dun-acts"><a class="btn small ghost" href="tel:${esc(x.c.phone)}" data-stop>📞 Call</a><a class="btn small ghost" href="${esc(waLink(x.c.phone, dunText(x)))}" target="_blank" rel="noopener" data-stop data-rem-sent="${esc(x.c.id)}">💬 WhatsApp</a>${canForm('checkin') ? `<button class="btn small ghost" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(R.CHASE_KIND)}" title="Log a payment chase">📝 Log</button>` : ''}</div></div></div>`;
   return `<div class="item" data-cust="${esc(x.c.id)}"><span class="dot ${x.dot}"></span><div class="main"><div class="t">${esc(x.c.name)} <span class="pill ${cls}">${esc(d.short)}</span></div>
     <div class="s">${R.npr(d.owed)} · ${esc(when)} · ${esc(toleOf(x.c))}</div>${prLine}${chLine}</div>
-    <div class="acts">${canForm('checkin') ? `<button class="icon-btn" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(R.CHASE_KIND)}" title="Log a payment chase">📝</button>` : ''}<a class="icon-btn" href="${esc(waLink(x.c.phone, dunText(x)))}" target="_blank" rel="noopener" data-stop>💬</a><a class="icon-btn" href="tel:${esc(x.c.phone)}" data-stop>📞</a></div></div>`;
+    <div class="acts">${canForm('checkin') ? `<button class="icon-btn" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(R.CHASE_KIND)}" title="Log a payment chase">📝</button>` : ''}<a class="icon-btn" href="${esc(waLink(x.c.phone, dunText(x)))}" target="_blank" rel="noopener" data-stop data-rem-sent="${esc(x.c.id)}">💬</a><a class="icon-btn" href="tel:${esc(x.c.phone)}" data-stop>📞</a></div></div>`;
 }
 // Last-90-days chasing line (collections list + desk money page)
 export function chaseStatsLine(cs) {
@@ -1814,7 +1852,7 @@ export function contractItem(e, o) {
   const dot = o ? (o.overdue || o.soon || o.kind === 'lost' ? 'r' : 'y') : 'g';
   return `<div class="item" data-edit="contract" data-id="${esc(e.id)}"><span class="dot ${dot}"></span><div class="main"><div class="t">${ic} ${esc(c.name || '?')} · <span>${esc(e.kind)}</span></div><div class="s">${esc(e.date || '')} · ${esc(s)}</div></div><button class="btn small ghost" data-cust="${esc(e.customerId)}">👤</button></div>`;
 }
-export const chaseFirst = (m) => m.collections.filter((x) => !(x.pr && x.pr.status === 'waiting'));
+export const chaseFirst = (m) => m.collections.filter((x) => !(x.pr && x.pr.status === 'waiting')).sort((a, b) => (remSent(a.c.id) ? 1 : 0) - (remSent(b.c.id) ? 1 : 0)); /* v0.11.1 (#3): reminded today → after the others (stable) */
 export function collectionGroups(xs) {
   const st = (x) => (x.pr ? x.pr.status : ''); const broken = xs.filter((x) => st(x) === 'broken'); const waiting = xs.filter((x) => st(x) === 'waiting').sort((a, b) => a.pr.date.localeCompare(b.pr.date));
   const rest = xs.filter((x) => !['broken', 'waiting'].includes(st(x)));
@@ -1852,10 +1890,10 @@ export function watchItem(w, opts = {}) {
 }
 // Message wording follows G-1 §1-3 (3 days before) with the actual amount of this bill.
 export function dunText(x) {
-  const d = x.dn; const n = (x.c.name || '').split(' ')[0];
-  if (d.stage === 'reminder') return `Namaste ${n}! This is KORA CARE. Your water purifier bill of NPR ${Math.round(d.owed).toLocaleString('en-IN')} is due on ${d.bill.due}. You can pay by Khalti / eSewa QR. Thank you 🙏`;
-  if (d.stage === 'due') return `Namaste ${n}! Friendly reminder from KORA CARE: today's bill of NPR ${Math.round(d.owed).toLocaleString('en-IN')} is due. Khalti / eSewa QR works. Thank you 🙏`;
-  return `Namaste ${n}, this is KORA CARE. We have not received NPR ${Math.round(d.owed).toLocaleString('en-IN')} (due ${x.led.overdueSince}). Please pay by Khalti / eSewa QR, or call us if something is wrong with the purifier. Thank you 🙏`;
+  const d = x.dn; const n = (x.c.name || '').split(' ')[0]; const ref = x.c.code ? ` Please write ${x.c.code} in the Khalti / eSewa remark.` : ''; /* v0.11.1 (#9): the bank CSV match looks for the KC code first */
+  if (d.stage === 'reminder') return `Namaste ${n}! This is KORA CARE. Your water purifier bill of NPR ${Math.round(d.owed).toLocaleString('en-IN')} is due on ${d.bill.due}. You can pay by Khalti / eSewa QR.${ref} Thank you 🙏`;
+  if (d.stage === 'due') return `Namaste ${n}! Friendly reminder from KORA CARE: today's bill of NPR ${Math.round(d.owed).toLocaleString('en-IN')} is due. Khalti / eSewa QR works.${ref} Thank you 🙏`;
+  return `Namaste ${n}, this is KORA CARE. We have not received NPR ${Math.round(d.owed).toLocaleString('en-IN')} (due ${x.led.overdueSince}). Please pay by Khalti / eSewa QR, or call us if something is wrong with the purifier.${ref} Thank you 🙏`;
 }
 export function reqItem(o) {
   const late = Date.now() > o.sla.replyBy, visitLate = Date.now() > o.sla.visitBy, old = Date.now() - (o.r.receivedAtMs || 0) > 3 * 864e5;
@@ -1958,20 +1996,24 @@ function viewDetail(p) {
   <div class="det-h"><span class="dot ${x.dot}" style="width:16px;height:16px"></span><h1 style="margin:0">${esc(c.name)}</h1></div>
   <div class="muted">${esc(c.code)} · ${esc(toleOf(c))} · Ward ${esc(c.ward || '–')} · <span class="pill ${stPill}">${esc(x.status)}</span>${c._pending ? ' <span class="pill warn">on phone</span>' : ''}</div>
   ${assignLine(c, t)}
-  <div class="links">
+  <div class="links${S.desk ? '' : ' top3'}">
     <a href="tel:${esc(c.phone)}">📞 Call</a><a href="${esc(waLink(c.phone))}" target="_blank" rel="noopener">💬 WhatsApp</a>
+    ${can('pay') ? `<button data-go-form="payment" data-cid="${esc(c.id)}">💵 Pay</button>` : ''}${can('visit') ? `<button data-go-form="visit" data-cid="${esc(c.id)}">🔧 Visit</button>` : ''}
+  </div>
+  <div class="links more${S.desk ? '' : ' hidden'}" id="moreLinks">
     ${hasGps ? `<a href="${esc(G.dirUrl(dest))}" data-nav="${esc(dest)}" target="_blank" rel="noopener">🧭 Navigate</a>` : ''}
-    ${can('pay') ? `<button data-go-form="payment" data-cid="${esc(c.id)}">💵 Pay</button>` : ''}${can('visit') ? `<button data-go-form="visit" data-cid="${esc(c.id)}">🔧 Visit</button><button data-go-form="request" data-cid="${esc(c.id)}">📋 Request</button>` : ''}
+    ${can('visit') ? `<button data-go-form="request" data-cid="${esc(c.id)}">📋 Request</button>` : ''}
     ${can('visit') && x.status !== 'Churned' ? omwBtn(c) : ''}
     ${canEdit ? `<button data-go-form="customerEdit" data-id="${esc(c.id)}">✏️ Edit</button>` : ''}${canForm('contract') ? `<button data-go-form="contract" data-cid="${esc(c.id)}">📜 Contract</button>` : ''}
   </div>
+  ${S.desk ? '' : '<button class="btn ghost small" data-act="moreLinks" style="margin-top:6px">⋯ More</button>'}
   ${can('visit') && x.status !== 'Churned' ? omwChips(c) : ''}
   ${receipt ? receiptCard(x, receipt) : ''}
   ${nowCard}
   <div class="sec">Location</div>
   <div class="card where">
     ${hasGps ? `<div class="minimap" id="miniMap" data-id="${esc(c.id)}" data-lat="${c.gps.lat}" data-lng="${c.gps.lng}" data-label="${esc((c.name || '').split(' ')[0])}"></div><div class="mini-foot"><span class="muted" data-mini-dist>📍 Tap the pin button on the map to see how far you are</span><a class="btn small" href="${esc(G.dirUrl(dest))}" data-nav="${esc(dest)}" target="_blank" rel="noopener">🧭 Navigate from here</a></div>`
-      : `<div class="empty">📍 No location saved for this house yet${canEdit ? ' — tap ✏️ Edit → “Get location now” at the door' : ''}.</div>`}
+      : `<div class="empty">📍 No location saved for this house yet.${can('visit') && x.status !== 'Churned' ? `<div style="margin-top:8px"><button class="btn small" data-act="gpsHere" data-cid="${esc(c.id)}">📍 Save my location as this house</button></div>` : ''}</div>`}
     ${kv([['Find the house', c.houseDetail], ['Tole · ward · zone', `${toleOf(c)} · Ward ${c.ward || '–'} · ${c.zone || '–'}`], ['Phone', `<a href="tel:${esc(c.phone)}">${esc(c.phone || '–')}</a>`, 1]])}
   </div>
   <div class="sec">Customer</div>
@@ -2000,7 +2042,7 @@ function viewDetail(p) {
     ${x.chases && x.chases.length ? `<div class="sec-mini">📞 Payment contacts (${x.chases.length})</div>${x.chases.slice(0, 8).map((q) => { const pq = R.isDate(q.promiseDate) ? R.promiseOf([q], pays, t) : null; return `<div class="muted" style="margin:3px 0">${esc(q.date)} · ${esc(q.channel || '')} · <span>${esc(q.reached || '—')}</span>${q.by ? ' · ' + esc(q.by) : ''}${pq ? ` · 🤝 <span>${esc(`promised by ${pq.date}`)}</span>${pq.amount ? ' ' + R.npr(pq.amount) : ''} <span class="pill ${{ kept: 'ok', late: 'warn', broken: 'bad', waiting: 'blue' }[pq.status]}">${esc({ kept: 'kept', late: 'paid late', broken: 'broken', waiting: 'waiting' }[pq.status])}</span>` : ''}${q.lateReason ? ' · ' + esc(q.lateReason) : ''}${q.notes ? ` · “${esc(q.notes)}”` : ''}</div>`; }).join('')}` : ''}
     ${refs.length ? `<div class="note">🎁 Referral reward: ${refs.map((r) => `${r.role === 'referee' ? '1 month free (off bill 2)' : '1 month free (referrer)'} ${r.ready ? `— <a href="#" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">apply</a>` : `(${esc(r.waiting)})`}`).join(' · ')}</div>` : ''}
   </div>
-  <div class="sec">Photos</div><div class="card"><div class="thumbs" id="photoBox"><span class="muted">Loading…</span></div><button class="btn ghost small" data-go-form="photo" data-cid="${esc(c.id)}">📷 Add photos</button></div>
+  <div class="sec">Photos</div><div class="card"><div class="thumbs" id="photoBox"><span class="muted">Loading…</span></div><div class="row"><button class="btn ghost small" data-go-form="photo" data-cid="${esc(c.id)}">📷 Add photos</button>${DEMO ? '' : `<button class="btn ghost small" data-act="photosNet" data-cid="${esc(c.id)}">☁️ Load from server</button>`}</div></div>
   ${rels.length ? `<div class="sec">Relocations (${rels.length})</div><div class="card flush">${rels.map((r) => `<div class="item" data-edit="relocation" data-id="${esc(r.id)}"><div class="main"><div class="t">${esc(r.moveDate || '')} · ${esc(r.status)}</div><div class="s">${esc(r.oldTole === 'Other' ? r.oldToleOther : r.oldTole || '?')} → ${esc(r.newTole === 'Other' ? r.newToleOther : r.newTole || '?')}${r.newSerial ? ' · new device ' + esc(r.newSerial) : ''}</div></div><div class="r">›</div></div>`).join('')}</div>` : ''}
   <div class="sec">Visits (${x.vs.length})</div>
   <div class="card">${x.vs.length ? `<div class="timeline">${x.vs.slice().reverse().map((v) => `<div class="ev"><b>${esc(v.date)}</b> · ${esc(v.visitType || 'Visit')} <span class="pill ${isDone(v.status) ? 'ok' : 'grey'}">${esc(String(v.status || '').replace(/^\S+\s/, ''))}</span>${v.signed ? ' ✍️' : ''}${v._pending ? ' <span class="pill warn">on phone</span>' : ''}<div class="muted">${esc((v.filters || []).join(', ') || 'no filter')} · PP ${esc(v.ppColor || '–')} · TDS ${esc(v.tdsBefore ?? '–')}→${esc(v.tdsAfter ?? '–')} · flow ${esc(v.flow ?? '–')} · ${esc(v.technician || '')}</div>${v.notes ? `<div class="muted">“${esc(v.notes)}”</div>` : ''}</div>`).join('')}</div>` : '<div class="empty">No visits yet</div>'}</div>
@@ -2065,7 +2107,7 @@ async function loadPrivate(id) {
   ta.placeholder = 'Only admin sees this';
 }
 // Photos: server/cache copies + anything still waiting on this phone (our own copy).
-async function loadPhotos(cid, parent) {
+async function loadPhotos(cid, parent, net = false) { /* v0.11.1 (#2): the server copy only when asked (📷 Load from server) and at most 12 — a customer page used to pull every photo of the house every time */
   const box = $('#drawer #photoBox') || $('#photoBox'); if (!box) return;
   const seen = new Map();
   const show = () => {
@@ -2077,9 +2119,9 @@ async function loadPhotos(cid, parent) {
   for (const e of myJournal().filter((e) => e.photo && mine(e.data) && e.state !== 'done')) { const img = await photoGet(e.id); if (img) seen.set(e.id, { ...e.data, img, local: true }); }
   show();
   if (DEMO) return;
-  const q = parent ? query(collection(db, 'photos'), where('parent', '==', parent)) : query(collection(db, 'photos'), where('customerId', '==', cid));
+  const q = parent ? query(collection(db, 'photos'), where('parent', '==', parent), qLimit(12)) : query(collection(db, 'photos'), where('customerId', '==', cid), qLimit(12));
   try { (await getDocsFromCache(q)).forEach((d) => seen.set(d.id, { ...d.data(), local: d.metadata.hasPendingWrites })); show(); } catch (e) {}
-  if (navigator.onLine) { try { (await getDocs(q)).forEach((d) => seen.set(d.id, { ...d.data(), local: false })); show(); } catch (e) {} }
+  if (net && navigator.onLine) { try { (await getDocs(q)).forEach((d) => seen.set(d.id, { ...d.data(), local: false })); show(); } catch (e) {} }
 }
 const isPdf = (x) => typeof x === 'string' && x.startsWith('data:application/pdf');
 const thumb = (img) => (isPdf(img) ? `<div class="pdf-tile" data-pdf="1">📄<span>PDF</span></div>` : `<img src="${esc(img)}" alt="" data-full="1">`);
@@ -2802,10 +2844,10 @@ function bankRows(rows, box) {
 function bankMatch() {
   const g = (id) => $('#drawer #' + id) || $('#' + id);
   const map = { date: Number(g('bmDate').value), amount: Number(g('bmAmt').value), desc: Number(g('bmDesc').value) };
-  const res = R.matchBankRows(S.bankRows || [], map, arr('customers'), model().ledgers).filter((r) => r.amount > 0);
+  const res = R.matchBankRows(S.bankRows || [], map, arr('customers'), model().ledgers, arr('payments')).filter((r) => r.amount > 0);
   S.bankMatches = res;
   const out = g('bankRes');
-  out.innerHTML = `<table class="tbl" style="margin-top:10px"><tr><th></th><th>Date</th><th class="n">NPR</th><th>Match</th></tr>${res.map((r) => `<tr><td><input type="checkbox" data-bank="${r.i}" ${r.customer ? 'checked' : 'disabled'} style="min-height:auto;width:auto"></td><td>${esc(r.date)}</td><td class="n">${r.amount}</td><td>${r.customer ? `${esc(custLabel(r.customer))} <span class="pill blue">${esc(r.how)}</span>` : `<span class="muted">${esc(r.desc.slice(0, 40))}</span>`}</td></tr>`).join('')}</table>
+  out.innerHTML = `<table class="tbl" style="margin-top:10px"><tr><th></th><th>Date</th><th class="n">NPR</th><th>Match</th></tr>${res.map((r) => `<tr><td><input type="checkbox" data-bank="${r.i}" ${r.customer && !r.dup ? 'checked' : r.customer ? '' : 'disabled'} style="min-height:auto;width:auto"></td><td>${esc(r.date)}</td><td class="n">${r.amount}</td><td>${r.customer ? `${esc(custLabel(r.customer))} <span class="pill blue">${esc(r.how)}</span>${r.dup ? ' <span class="pill warn">already recorded</span>' : ''}` : `<span class="muted">${esc(r.desc.slice(0, 40))}</span>`}</td></tr>`).join('')}</table>
     <button class="btn" data-act="bankCreate" type="button">Create ${res.filter((r) => r.customer).length} payments</button>`;
 }
 
@@ -2820,6 +2862,7 @@ document.addEventListener('click', async (ev) => {
   const cl = t.closest('[data-cal]'); if (cl && S.desk) { ev.preventDefault(); const bb = $('#bellBox'); if (bb) bb.classList.add('hidden'); go('calendar', 'calendar', { d: cl.dataset.cal, mo: cl.dataset.cal.slice(0, 7) }); return; }
   const wo = t.closest('[data-watchok]'); if (wo) { ev.preventDefault(); const [cid, sc] = wo.dataset.watchok.split('|'); watchCheck(cid, Number(sc)); toast('✓ Checked — hidden for 7 days unless it gets worse'); scheduleRender(); return; }
   const om = t.closest('[data-omw]'); if (om) { ev.preventDefault(); const box = document.getElementById('omw_' + om.dataset.omw); if (box) { box.classList.toggle('hidden'); if (!box.classList.contains('hidden')) box.scrollIntoView({ block: 'nearest' }); } return; }
+  const rms = t.closest('[data-rem-sent]'); if (rms) { remMark(rms.dataset.remSent); setTimeout(() => scheduleRender(), 400); } /* the link still opens WhatsApp */
   const oms = t.closest('[data-omw-sent]'); if (oms) { omwMark(oms.dataset.omwSent, oms.dataset.eta); setTimeout(() => { const b = document.getElementById('omw_' + oms.dataset.omwSent); if (b) b.classList.add('hidden'); toast('🛵 Marked "on my way" — it is saved with the visit'); }, 50); return; }
   const apb = t.closest('[data-appr]'); if (apb) { ev.preventDefault(); if (!isApprover()) { toast('Only an approver can do this'); return; }
     const [col, id, st] = apb.dataset.appr.split('|'); const x = S.D[col] && S.D[col].get(id); if (!x || x.approval !== 'Pending') return;
@@ -2831,7 +2874,7 @@ document.addEventListener('click', async (ev) => {
     const g = chip.parentElement; const multi = g.dataset.multi === '1';
     if (multi) chip.classList.toggle('on');
     else { const was = chip.classList.contains('on'); g.querySelectorAll('.chip').forEach((b) => b.classList.remove('on')); if (!was) chip.classList.add('on'); }
-    const f = chip.closest('form'); if (f && f.id === 'theForm') refreshConditional(f);
+    const f = chip.closest('form'); if (f && f.id === 'theForm') { refreshConditional(f); draftSave(f); unconfirm(f); }
     return;
   }
   const lg = t.closest('[data-lang]'); if (lg) { setLang(lg.dataset.lang); render(true); if (S.drawer) refreshDrawer(); if (deskMod) deskMod.paletteClose(); return; }
@@ -2937,11 +2980,15 @@ document.addEventListener('click', async (ev) => {
   } else if (act === 'roleRefresh') { if (S.wiped) { location.reload(); return; } await refreshRole(); if (S.role === 'staff') await startData(false); render(); }
   else if (act === 'signOut') {
     const n = myJournal().filter((e) => e.state === 'pending').length;
-    if (n && a.dataset.sure !== '1') { a.dataset.sure = '1'; a.textContent = `⚠️ ${n} record(s) not sent yet — tap again to sign out anyway`; return; }
+    if (n && a.dataset.sure !== '1') { a.dataset.sure = '1'; a.textContent = `⚠️ ${n} record(s) not sent yet — they will be deleted from this phone. Tap again to sign out anyway`; return; }
     if (DEMO) { toast('Demo mode'); return; }
     // signing out also removes the company data kept on this device (cache, journal, photos) — a shared phone keeps nothing
     await wipePhone(); await signOut(auth); location.reload();
-  } else if (act === 'sync') { toast('Checking…'); await reconcile(true); toast(syncState().t); }
+  } else if (act === 'draftClear') { const f = a.closest('form'); if (f) { draftClear(f.dataset.form); if (S.drawer) refreshDrawer(); else render(false); toast('Draft removed'); } }
+  else if (act === 'gpsHere') { gpsHere(a.dataset.cid, a); }
+  else if (act === 'photosNet') { a.disabled = true; a.textContent = 'Loading…'; loadPhotos(a.dataset.cid, '', true).then(() => { a.textContent = 'Loaded'; }); }
+  else if (act === 'moreLinks') { const m = $('#moreLinks'); if (m) { m.classList.toggle('hidden'); a.textContent = m.classList.contains('hidden') ? '⋯ More' : '⋯ Less'; } }
+  else if (act === 'sync') { toast('Checking…'); await reconcile(true); toast(syncState().t); }
   else if (act === 'full') { if (navigator.onLine && !DEMO) { await startData(true); toast('Reloading from server…'); } else toast('Needs internet'); }
   else if (act === 'persist') { let r = false; try { r = await navigator.storage.persist(); } catch (e) {} toast('Storage protection: ' + (r ? 'ON' : 'not granted')); fillDiag(); }
   else if (act === 'swReload' && S.swWaiting) S.swWaiting.postMessage('skipWaiting');
@@ -2972,13 +3019,23 @@ document.addEventListener('change', (ev) => {
   if (ev.target.id === 'bankFile' && ev.target.files[0]) { bankUpload(ev.target.files[0]); return; }
   if (ev.target.id === 'bkCheck' && ev.target.files[0]) { checkBackupFile(ev.target.files[0]); return; }
   const as = ev.target.closest && ev.target.closest('[data-assign]'); if (as && isBoss()) { save(`customers/${as.dataset.assign}`, { assignee: as.value, cover: null }, false); toast(as.value ? `👤 Now goes to ${as.value}` : '👤 Nobody assigned'); scheduleRender(); return; }
-  const f = ev.target.closest && ev.target.closest('#theForm'); if (f) refreshConditional(f);
+  const f = ev.target.closest && ev.target.closest('#theForm'); if (f) { refreshConditional(f); draftSave(f); unconfirm(f); }
 });
 document.addEventListener('input', (ev) => {
   if (ev.target.id === 'custSearch') { S.route.params.q = ev.target.value; const l = $('#custList'); if (l) l.innerHTML = custListHtml(S.route.params); return; }
   if (ev.target.id === 'deskSearch' && deskMod) { deskMod.onSearch(ev.target.value); return; }
-  const f = ev.target.closest && ev.target.closest('#theForm'); if (f && ev.target.tagName === 'SELECT') refreshConditional(f);
+  const f = ev.target.closest && ev.target.closest('#theForm'); if (f) { if (ev.target.tagName === 'SELECT') refreshConditional(f); draftSave(f); unconfirm(f); }
+  const cp = ev.target.classList && ev.target.classList.contains('custpick') ? ev.target : null; if (cp) custPickFilter(cp);
 });
+// v0.11.1 (#6): once a value changes, the yellow notes must be checked again — "Save anyway" goes back to "Save"
+// v0.11.1 (#8): the search box rebuilds the customer wheel with matches only (the chosen one stays)
+function custPickFilter(inp) {
+  const sel = document.getElementById(inp.dataset.for); if (!sel) return; const q = inp.value.trim().toLowerCase(); const cur = sel.value;
+  const list = arr('customers').filter((c) => (c.status !== 'Churned' || c.id === cur) && (!q || [c.name, c.code, c.phone, toleOf(c)].some((s) => String(s || '').toLowerCase().includes(q)))).sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, q ? 40 : 2000);
+  sel.innerHTML = `<option value="">— choose customer —</option>${list.map((c) => `<option value="${esc(c.id)}"${c.id === cur ? ' selected' : ''}>${esc(custLabel(c))} · ${esc(toleOf(c))}</option>`).join('')}`;
+  if (q && list.length === 1) { sel.value = list[0].id; const f = sel.closest('form'); if (f) refreshConditional(f); }
+}
+function unconfirm(f) { if (f.dataset.confirmed === '1') { delete f.dataset.confirmed; const b = f.querySelector('#saveBtn'); if (b) b.textContent = 'Save'; } }
 document.addEventListener('submit', async (ev) => {
   ev.preventDefault(); const f = ev.target;
   if (f.id === 'loginForm') {
@@ -3008,6 +3065,16 @@ document.addEventListener('keydown', (ev) => {
   if (document.getElementById('peek')) { closePeek(); return; }
   if (S.drawer) closeDrawer();
 });
+// v0.11.1 (#4): a technician at the door saves the pin without the edit right (rules already allow the gps field for the visit right)
+function gpsHere(cid, btn) {
+  if (!navigator.geolocation) { toast('This phone cannot give location'); return; }
+  if (btn) btn.textContent = 'Getting location…';
+  navigator.geolocation.getCurrentPosition((p) => {
+    const acc = Math.round(p.coords.accuracy); if (acc > 150 && btn && btn.dataset.sure !== '1') { btn.dataset.sure = '1'; btn.textContent = `±${acc} m — stand outside and tap again to save anyway`; return; }
+    save(`customers/${cid}`, { gps: { lat: Number(p.coords.latitude.toFixed(6)), lng: Number(p.coords.longitude.toFixed(6)), acc } }, false);
+    toast(`📍 Location saved (±${acc} m)`); if (S.drawer) refreshDrawer(); else scheduleRender();
+  }, (e) => { toast('Could not get location: ' + e.message); if (btn) btn.textContent = '📍 Save my location as this house'; }, { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 });
+}
 function captureGps(form) {
   const out = form.querySelector('#gpsOut');
   if (!navigator.geolocation) { out.textContent = 'This phone cannot give location.'; return; }

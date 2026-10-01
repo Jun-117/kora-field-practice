@@ -82,7 +82,7 @@ export function routeHtml() {
       <div class="rmode">${routeMode() === 'auto' ? `<span class="on">📡 Auto order · from where you are${me ? '' : ' (finding you…)'}</span>` : `<span class="man">✋ Your own order</span><button data-act="rAuto">📡 Back to auto</button>`}</div>
       ${st.noGps.length ? `<div class="rsum" style="font-size:12px;color:var(--muted)">📍 ${st.noGps.length} stop(s) without GPS — open the customer and tap “Get location” next visit</div>` : ''}
     </div>
-    <div class="rbot"><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext">🧭 Next</button><button class="round" data-act="rMe" title="My location">📍</button><button class="round" data-act="rList" title="List">☰</button></div>
+    <div class="rbot"><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext"><span class="nx">🧭 Next</span></button><button class="round" data-act="rMe" title="My location">📍</button></div>
   </div>`;
 }
 export async function mountRoute(root) {
@@ -96,6 +96,7 @@ export async function mountRoute(root) {
   const lab = () => box.classList.toggle('labels', map.getZoom() >= 15); map.on('zoomend', lab);
   map.on('click', () => closeSheet());
   draw(true); lab();
+  if (!navigator.onLine) { toast('📵 Offline — the map tiles cannot load. The stop list still works.', 5000); setTimeout(() => listSheet(), 400); } /* v0.11.1 (#17) */
   if (!me && hereNow()) me = hereNow();
   startWatch();
 }
@@ -129,7 +130,7 @@ function draw(fit) {
   }
   if (seq.length > 1 && filter === 'all') Lf.polyline(seq.map((s) => [s.p.lat, s.p.lng]), { color: '#1f6fb2', weight: 3, opacity: 0.45, dashArray: '6 8' }).addTo(layer);
   const nx = document.getElementById('rNext'); const first = seq[0];
-  if (nx) nx.innerHTML = first ? `🧭 Next: #1 ${esc((first.x.c.name || '').split(' ')[0])}` : '🧭 Nothing left';
+  if (nx) nx.innerHTML = first ? `<span class="nx">🧭 Next</span><span class="nxn">#1 ${esc((first.x.c.name || '').split(' ')[0])}</span>` : '<span class="nx">🧭 Nothing left</span>'; /* v0.11.1: two short lines instead of one clipped line */
   if (fit) { if (lastView) map.setView(lastView.c, lastView.z, { animate: false }); else if (pts.length) map.fitBounds(pts, { padding: [70, 70], maxZoom: 16, animate: false }); else map.setView([28.2096, 83.9856], 13, { animate: false }); }
   drawMe();
   S.routeSeq = seq; // for tests & the list
@@ -155,7 +156,7 @@ function sheet(s, n) {
     </div>${can('visit') ? omwChips(c) : ''}`;
   document.body.appendChild(el);
 }
-export function closeSheet() { const el = document.getElementById('rsheet'); if (el) el.remove(); }
+export function closeSheet() { const el = document.getElementById('rsheet'); if (!el) return; el.id = ''; el.classList.add('out'); setTimeout(() => el.remove(), 230); } /* v0.11.1: slides down instead of vanishing (the id is freed at once so the next sheet can mount) */
 function listSheet(keep) {
   const old = document.getElementById('rsheet'); const scroll = old && keep ? old.querySelector('.rl').scrollTop : 0;
   if (keep && !(old && old.classList.contains('list'))) return;

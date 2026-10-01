@@ -16,7 +16,7 @@ import * as B from './bs.js';
 import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
-export const APP_VERSION = 'kf-v0.12.3 (2026-10-02)';
+export const APP_VERSION = 'kf-v0.12.4 (2026-10-02)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -2103,7 +2103,7 @@ function receiptCard(x, pay) {
   const sp = x.led.splits[pay.id] || {};
   const lines = sp.extra !== undefined ? [[pay.type, sp.extra]] : [['Installation / first month', sp.install], ['Subscription', sp.subscription], ['Refundable deposit (not a fee)', sp.deposit], ['Credit carried forward', sp.unallocated]].filter(([, v]) => v > 0.01);
   const rd = RC.receiptData(x, pay, {}); /* v0.12.3: same number + next bill as the picture */
-  const text = `KORA CARE — receipt ${rd.no}\n${x.c.name} (${x.c.code})\nDate: ${pay.date}\n` + lines.map(([l, v]) => `${l}: NPR ${Math.round(v).toLocaleString('en-IN')}`).join('\n') + `\nTotal: NPR ${Math.round(pay.amount).toLocaleString('en-IN')}${Number(pay.discount) > 0 ? `\nDiscount: NPR ${Math.round(pay.discount).toLocaleString('en-IN')}${pay.approval === 'Pending' ? ' (waiting for approval)' : pay.approval === 'Rejected' ? ' (not approved)' : ''}` : ''}\nPaid by: ${pay.method || ''}${pay.ref ? ' · ' + pay.ref : ''}\nNext bill: ${rd.next}\nThank you! 🙏`;
+  const text = `KORA CARE — receipt ${rd.no}\n${x.c.name} (${x.c.code})\nDate: ${pay.date}\n` + lines.map(([l, v]) => `${l}: NPR ${Math.round(v).toLocaleString('en-IN')}`).join('\n') + `\nTotal: NPR ${Math.round(pay.amount).toLocaleString('en-IN')}${Number(pay.discount) > 0 ? `\nDiscount: NPR ${Math.round(pay.discount).toLocaleString('en-IN')}${pay.approval === 'Pending' ? ' (waiting for approval)' : pay.approval === 'Rejected' ? ' (not approved)' : ''}` : ''}\n${rd.credit ? 'Credit: ' + pay.type : 'Paid by: ' + (pay.method || '') + (pay.ref ? ' · ' + pay.ref : '')}\nNext bill: ${rd.next}\nThank you! 🙏`;
   return `<div class="card" style="border-color:var(--ok)"><div class="status">🧾 Receipt</div><pre class="diag" style="color:var(--ink);margin:10px 0 0">${esc(text)}</pre>
     <a class="btn ok" style="display:block;text-align:center;text-decoration:none;line-height:56px" href="${esc(waLink(x.c.phone, text))}" target="_blank" rel="noopener">💬 Send receipt on WhatsApp</a>
     <button type="button" class="btn" style="display:block;width:100%;margin-top:8px" data-act="rcImg" data-pid="${esc(pay.id)}">🧾 Image receipt</button><div id="rcBox" class="hidden"></div></div>`;

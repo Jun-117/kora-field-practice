@@ -48,12 +48,14 @@ export function receiptData(x, pay, co = {}) {
     if (sp.unallocated > 0.01) lines.push({ ic: 'credit', t: 'Credit carried forward · अग्रिम', s: 'counts toward the next bill', v: sp.unallocated });
   }
   const discount = Number(pay.discount) > 0 && pay.approval !== 'Rejected' ? Number(pay.discount) : 0;
+  const discountNote = discount && pay.approval === 'Pending' ? 'discount · waiting for approval' : 'discount';
+  const credit = R.isNonCash(pay); /* referral / service credit: nothing was paid — a credit note */
   // deposit held as of this bill (an old receipt shows what was held then, not today's total)
   const held = Math.round(paidBill ? led.bills.filter((b) => b.k <= paidBill.k).reduce((t, b) => t + (b.parts ? b.parts.deposit : 0), 0) : (led.depositCollected || 0)), segs = Math.max(0, Math.min(p.depositMonths, Math.round(held / p.depositMonthly)));
   const nb = (paidBill && after(paidBill)) || led.nextBill;
   return {
     name: x.c.name || '', code: x.c.code || '', no: receiptNo(pay), date: niceDate(pay.date), bs: bsText(pay.date),
-    method: pay.method || '', ref: pay.ref || '', total: Number(pay.amount) || 0, lines, discount,
+    method: credit ? String(pay.type || 'Credit') : (pay.method || ''), ref: credit ? '' : (pay.ref || ''), total: Number(pay.amount) || 0, lines, discount, discountNote, credit,
     bill: paidBill ? `${ord(paidBill.k)} · ${period(paidBill)}` : (sp.extra !== undefined ? String(pay.type || '') : '—'),
     held, segs, depMonths: p.depositMonths, depTotal: p.depositTotal,
     next: nb ? `${niceDate(nb.due)} · NPR ${money(nb.amount)}` : 'Paid up · सबै तिरिएको',
@@ -100,8 +102,8 @@ function paint(ctx, d, im, ct, cb, measure) {
   const L = cx + 22, Rt = cx + cw - 22, IW = Rt - L; let y = ct + 26;
   // ---- head
   if (im) { const h = 34, w = h * im.width / im.height; ctx.drawImage(im, L, y, w, h); } else text(ctx, 'KORA', L, y + 28, { f: font(800, 26), color: C.navy });
-  text(ctx, 'PAYMENT RECEIPT', Rt, y + 10, { f: font(700, 10), color: C.blue, align: 'right', ls: 1.4 });
-  text(ctx, 'भुक्तानी रसिद', Rt, y + 24, { f: font(500, 9.5), color: C.mute, align: 'right' });
+  text(ctx, d.credit ? 'CREDIT NOTE' : 'PAYMENT RECEIPT', Rt, y + 10, { f: font(700, 10), color: C.blue, align: 'right', ls: 1.4 });
+  text(ctx, d.credit ? 'क्रेडिट नोट' : 'भुक्तानी रसिद', Rt, y + 24, { f: font(500, 9.5), color: C.mute, align: 'right' });
   text(ctx, d.no, Rt, y + 44, { f: font(700, 12.5), color: C.ink, align: 'right' });
   text(ctx, `${d.date}${d.bs ? ' · ' + d.bs : ''}`, Rt, y + 58, { f: font(400, 10), color: C.mute, align: 'right' });
   text(ctx, `${d.company} · ${d.ward}`, L, y + 49, { f: font(400, 9.5), color: C.mute });
@@ -114,13 +116,13 @@ function paint(ctx, d, im, ct, cb, measure) {
   ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(L + IW - 20 + 75, y - 50 + 75, 75, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.beginPath(); ctx.arc(L + IW - 48 - 35, y + 14 + 35, 35, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
-  text(ctx, 'TOTAL PAID · जम्मा', L + 16, y + 26, { f: font(400, 10), color: 'rgba(255,255,255,.85)', ls: 1.2 });
+  text(ctx, d.credit ? 'CREDIT APPLIED · क्रेडिट' : 'TOTAL PAID · जम्मा', L + 16, y + 26, { f: font(400, 10), color: 'rgba(255,255,255,.85)', ls: 1.2 });
   const nw = text(ctx, 'NPR', L + 16, y + 58, { f: font(600, 14), color: 'rgba(255,255,255,.9)' });
   text(ctx, money(d.total), L + 16 + nw + 5, y + 58, { f: font(800, 30), color: '#fff' });
-  ctx.font = font(800, 10.5); const pw = ctx.measureText('PAID').width + 44;
+  ctx.font = font(800, 10.5); const pw = ctx.measureText(d.credit ? 'CREDIT' : 'PAID').width + 44;
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.18)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2; ctx.fillStyle = C.green; rr(ctx, Rt - 16 - pw, y + 16, pw, 22, 11); ctx.fill(); ctx.restore();
   icon(ctx, 'check', Rt - 16 - pw + 10, y + 21, 12, C.greenInk, 3.2);
-  text(ctx, 'PAID', Rt - 16 - 12, y + 31, { f: font(800, 10.5), color: C.greenInk, align: 'right', ls: 0.6 });
+  text(ctx, d.credit ? 'CREDIT' : 'PAID', Rt - 16 - 12, y + 31, { f: font(800, 10.5), color: C.greenInk, align: 'right', ls: 0.6 });
   text(ctx, [d.method, d.ref].filter(Boolean).join(' · '), Rt - 16, y + 54, { f: font(400, 9.5), color: 'rgba(255,255,255,.85)', align: 'right' });
   y += bh + 18;
   // ---- who
@@ -128,10 +130,10 @@ function paint(ctx, d, im, ct, cb, measure) {
   const colW = IW / 2 - 10;
   const kv = (k, v, x0, yy) => { text(ctx, k, x0, yy, { f: font(400, 9.5), color: C.mute, ls: 0.8 }); text(ctx, v, x0, yy + 15, { f: font(600, 12.5), color: C.ink, max: colW }); };
   kv('CUSTOMER · ग्राहक', d.name, L, y + 10); kv('CUSTOMER CODE', d.code, col2, y + 10);
-  kv('PAID BY', [d.method, d.ref].filter(Boolean).join(' · '), L, y + 44); kv('BILL · बिल', d.bill, col2, y + 44);
+  kv(d.credit ? 'CREDIT TYPE' : 'PAID BY', [d.method, d.ref].filter(Boolean).join(' · '), L, y + 44); kv('BILL · बिल', d.bill, col2, y + 44);
   y += 74; ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rt, y); ctx.stroke();
   // ---- items
-  const rows = d.lines.slice(); if (d.discount > 0) rows.push({ ic: 'credit', t: 'Discount · छुट', s: 'approved discount', v: -d.discount });
+  const rows = d.lines.slice(); if (d.discount > 0) rows.push({ ic: 'credit', t: 'Discount · छुट', s: d.discountNote, v: -d.discount });
   for (const it of rows) {
     const top = y + 9; ctx.fillStyle = C.sky; rr(ctx, L, top, 24, 24, 7); ctx.fill(); icon(ctx, it.ic, L + 5, top + 5, 14, C.blue);
     text(ctx, it.t, L + 33, top + 13, { f: font(400, 12.5), color: C.ink });

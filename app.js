@@ -15,7 +15,7 @@ import * as CA from './capack.js';
 import * as B from './bs.js';
 import * as CAL from './cal.js';
 
-export const APP_VERSION = 'kf-v0.11.1 (2026-10-01)';
+export const APP_VERSION = 'kf-v0.11.2 (2026-10-01)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -461,15 +461,16 @@ export function model() {
   if (rcSlow.length) alerts.push({ lvl: 'warn', ic: '🛠️', key: 'repair:slow', t: `${rcSlow.length} repair(s) open over 7 days — the credit grows each day`, list: 'repairs' });
   if (rcDue.length && isBoss()) alerts.push({ lvl: 'warn', ic: '🛠️', key: 'repair:credit', t: `${rcDue.length} late repair(s) — give the credit`, list: 'repairs' });
   const pLate = [...cust.values()].filter((x) => x.status === 'Paused' && R.isDate(x.c.pausedUntil) && x.c.pausedUntil < t).length; if (pLate) alerts.push({ lvl: 'warn', ic: '⏸️', key: 'pause:late', t: `${pLate} paused home(s) past their restart day`, list: 'paused' });
-  const offTomorrow = (hm[tomorrow] || []).find((h) => h.kind === 'all'); if (offTomorrow) alerts.push({ lvl: 'info', ic: '🎉', t: `Office closed tomorrow — ${offTomorrow.n}`, cal: tomorrow });
+  const offTomorrow = (hm[tomorrow] || []).find((h) => h.kind === 'all'); if (offTomorrow) alerts.push({ lvl: 'info', ic: '🏖️', t: `Office closed tomorrow — ${offTomorrow.n}`, cal: tomorrow });
   if (can('money')) for (const dl of CAL.deadlines(t, R.addDays(t, 5), S.settings)) alerts.push({ lvl: dl.d <= R.addDays(t, 2) ? 'bad' : 'warn', ic: dl.ic, t: `${dl.t} — ${dl.d === t ? 'today' : 'by ' + dl.d}${CAL.isOff(hm, dl.d) ? ' (a holiday — do it the day before)' : ''}`, cal: dl.d });
   // watch list (homes to look after this week) — "✓ checked" hides a home for 7 days on this device unless its points go up
   const wOk = lsGet(WATCH_OK, {});
   const watchAll = R.watchList(cust, D, t).filter((w) => forMe(w.x));
-  const watch = watchAll.filter((w) => { const k = wOk[w.x.c.id]; return !(k && k.until >= t && w.score <= k.score); });
+  const watchVis = watchAll.filter((w) => { const k = wOk[w.x.c.id]; return !(k && k.until >= t && w.score <= k.score); });
+  const watch = watchVis.slice(0, 10); /* v0.11.2 (#13) Jun: "최대 10까지만" — the ten highest scores, the rest wait their turn */
   const wHigh = watch.filter((w) => w.lvl === 'high').length; if (wHigh) alerts.push({ lvl: 'warn', ic: '⚠️', key: 'watch:high', t: `${wHigh} home(s) to look after this week`, list: 'watch' });
   if (isBoss() && S.fleetCache) for (const d of S.fleetCache) { const q = deviceIssues(d); if (q.lvl === 'bad') { alerts.push({ lvl: 'bad', ic: '📱', key: 'phone:' + d.id, t: `${userName(d.uid, d.name || d.email || 'A phone')}: ${q.out.filter((x) => x[0] === 'bad').map((x) => x[1]).join(' · ')}`, side: 'phones' }); } }
-  const m = { t, D, cust, ledgers, approvals, repairCr, contractOpen, claimsSt, vials, collections, visitsDue, calls, tomorrowBills, openReq, leadsDue, metrics, deposits, vat, referrals, learning, filtersAll, alerts, devices, expMonths, relOpen, hm, mineOnly, watch, watchChecked: watchAll.length - watch.length, filterPlan, capacity };
+  const m = { t, D, cust, ledgers, approvals, repairCr, contractOpen, claimsSt, vials, collections, visitsDue, calls, tomorrowBills, openReq, leadsDue, metrics, deposits, vat, referrals, learning, filtersAll, alerts, devices, expMonths, relOpen, hm, mineOnly, watch, watchChecked: watchAll.length - watchVis.length, watchMore: watchVis.length - watch.length, filterPlan, capacity };
   modelCache = { ver: S.ver, day: t, m };
   return m;
 }
@@ -648,7 +649,6 @@ FORMS.install = {
     { k: 'deviceSerial', l: 'Device serial number', t: 'text', req: 1 },
     { k: 'installDate', l: 'Install date', t: 'date', req: 1, def: today, hint: 'The monthly bill falls on this same day every month.' },
     { k: 'signUpDate', l: 'Sign-up date', t: 'date', req: 1, def: today },
-    { k: 'plan', l: 'Plan', t: 'chips', o: OPT.plan, req: 1, def: 'Standard' },
     { t: 'section', l: 'Final checks', hint: 'All must be ticked. Flow and water source are required.' },
     { k: 'checks', l: 'Checklist', t: 'checks', o: OPT.installChecks, req: 1 },
     { k: 'purifiedTds', l: 'Purified water TDS', t: 'number', req: 1 },
@@ -693,7 +693,7 @@ FORMS.install = {
     else if (v.pressurePsi !== null && !confirmed && (v.pressurePsi < 20 || v.pressurePsi > 80)) warns.pressurePsi = v.pressurePsi < 20 ? 'Very low pressure — tell the customer flow may be slow.' : 'High pressure — a reducing valve is needed.';
     if (v.rawTds === null) errs.rawTds = 'Measure the raw water TDS.'; else if (!inRange(v.rawTds, 0, 5000)) errs.rawTds = 'Check the TDS number (0–5000).';
     else if (v.rawTds >= 250 && !confirmed) warns.rawTds = 'TDS 250+ → offer the Siliphos option.';
-    need(errs, v, 'deviceSerial', 'Enter the device serial.'); need(errs, v, 'installDate', 'Enter the date.'); need(errs, v, 'signUpDate', 'Enter the date.'); need(errs, v, 'plan', 'Choose a plan.');
+    need(errs, v, 'deviceSerial', 'Enter the device serial.'); need(errs, v, 'installDate', 'Enter the date.'); need(errs, v, 'signUpDate', 'Enter the date.');
     if ((v.checks || []).length < OPT.installChecks.length && !v._edit) errs.checks = `Tick all ${OPT.installChecks.length} checks before finishing.`;
     if (v.purifiedTds === null && !v._edit) errs.purifiedTds = 'Measure the purified water TDS.'; else if (!inRange(v.purifiedTds, 0, 5000)) errs.purifiedTds = 'Check the TDS number.';
     if (v.flow === null && !v._edit) errs.flow = 'Measure the flow.'; else if (!inRange(v.flow, 0, 10)) errs.flow = 'Check the flow (0–10 L/min).';
@@ -722,6 +722,7 @@ FORMS.install = {
     delete data.firstPay; delete data.payMethod; delete data.payRef; delete data.payBillNo; delete data.sign; const vial = data.vialStarted === 'Yes'; delete data.vialStarted;
     if (isNew) { data.signed = !!sig; if (sig) data.noSign = ''; } else { delete data.signName; delete data.noSign; } /* the edit form has no signature box */
     if (isNew) { data.code = newCode(); data.status = 'Active'; }
+    if (!data.plan) data.plan = 'Standard'; /* v0.11.2 (#19) Jun: one plan — "기본+전원옵션 빼라" */
     // v0.11: household size and the water they drank before come from the sign-up screening (asked once, there) — sales statistics, blank when there was no screening
     const scr0 = isNew ? R.findScreening(arr('screenings'), S.convertLead, phone) : null;
     if (scr0) { if (data.householdSize === undefined || data.householdSize === null) data.householdSize = scr0.householdSize ?? null; if (!data.prevWater) data.prevWater = scr0.prevWater || ''; }
@@ -1776,7 +1777,11 @@ export function alertsHtml(m) {
   const col = { bad: 'var(--bad)', warn: 'var(--warn)', ok: 'var(--ok)', info: 'var(--brand)' };
   const link = (a) => (a.list ? `data-list="${a.list}"` : a.cal ? (S.desk ? `data-cal="${a.cal}"` : '') : a.side ? (S.desk ? `data-side="${a.side}"` : '') : `data-report="${a.report}"`);
   const btns = (a) => (S.desk && a.report !== 'diag' ? `<div class="snz" data-stop><button data-snooze="${esc(alertKey(a))}" data-days="1" title="Done for today">✓</button><button data-snooze="${esc(alertKey(a))}" data-days="3" title="Hide for 3 days">💤</button></div>` : '');
-  return (list.map((a) => `<div class="item" ${link(a)}><span class="dot" style="background:${col[a.lvl]}"></span><div class="main"><div class="t" style="white-space:normal">${a.ic} ${esc(a.t)}</div></div>${btns(a)}<div class="r">›</div></div>`).join('') || '<div class="empty">No alerts — all clear ✨</div>')
+  // v0.11.2 (#14) Jun: "카테고리별로 정리" — four groups, a coloured dot only for red
+  const CAT = [['money', 'Money', '💰🤝💵✋🧾🏦📅'], ['field', 'Field & customers', '📋🔧🧪📞🚪🛠️⏸️📜🚚🧫⚠️📍🧲🔎'], ['stock', 'Stock & devices', '📦🔩📮'], ['sys', 'System & office', '💾📱🔴🧭📑🏖️🏖️']];
+  const catOf = (a) => (CAT.find(([, , ics]) => ics.includes(a.ic)) || CAT[3])[0];
+  const row = (a) => `<div class="item" ${link(a)}><span class="dot" style="background:${a.lvl === 'bad' ? col.bad : 'var(--line)'}"></span><div class="main"><div class="t" style="white-space:normal;font-weight:${a.lvl === 'bad' ? 600 : 400}">${a.ic} ${esc(a.t)}</div></div>${btns(a)}<div class="r">›</div></div>`;
+  return (list.length ? CAT.map(([k, label]) => { const xs = list.filter((a) => catOf(a) === k); return xs.length ? `<div class="sec-mini">${esc(label)} · ${xs.length}</div>${xs.map(row).join('')}` : ''; }).join('') : '<div class="empty">No alerts — all clear ✨</div>')
     + (hidden ? `<div class="muted snz-foot">💤 ${hidden} hidden · <a href="#" data-act="unsnooze">show all</a></div>` : '');
 }
 export function statusCard() {
@@ -1812,7 +1817,7 @@ function viewToday() {
     <button class="cta" data-tab-go="route">🗺️ Open today's route</button>
   </div>
   <div class="grid2 stagger" style="margin-top:12px">${tiles.map(([k, ic, l, n, sub, cls], i) => `<button class="tile ${cls} ${tones[k]}" data-list="${k}" style="--i:${i}"><span class="ic">${ic}</span><span class="n">${n}</span><span>${l}</span><span class="s">${esc(sub)}</span></button>`).join('')}</div>
-  ${sec('💰 Chase first', chase.slice(0, 5).map((x) => dunItem(x)).join(''), 'Nobody to chase today 🎉', 'collections')}
+  ${sec('💰 Chase first', chase.slice(0, 5).map((x) => dunItem(x)).join(''), 'Nobody to chase today 🏖️', 'collections')}
   ${m.watch.some((w) => w.lvl !== 'low') ? sec('⚠️ Look after this week', m.watch.filter((w) => w.lvl !== 'low').slice(0, 3).map((w) => watchItem(w, { max: 2 })).join(''), '', 'watch') : ''}
   ${sec('🔧 Visits due', m.visitsDue.slice(0, 5).map((x) => cItem(x, `<span class="pill ${x.due < t ? 'bad' : 'warn'}">${esc(x.filterOnly ? 'filter' : x.due === t ? 'today' : x.due)}</span>`)).join(''), 'No visits due', 'visits')}
   ${sec('📋 Open requests', m.openReq.slice(0, 4).map(reqItem).join(''), 'No open requests', 'requests')}
@@ -1844,7 +1849,7 @@ export function chaseStatsLine(cs) {
 // v0.9 #4: the verdict of the latest screening for a lead (or a button to screen it)
 export function screenPill(l) {
   const sc = R.findScreening(arr('screenings'), l.id, l.phone);
-  return sc ? `<span class="pill ${{ Pass: 'ok', Check: 'warn', Hold: 'bad' }[sc.verdict] || 'grey'}">🔎 ${esc(sc.verdict)}</span>` : ['Signed', 'Rejected'].includes(l.outcome) ? '' : `<button class="btn small ghost" data-go-form="screening" data-lead="${esc(l.id)}">🔎 Screen</button>`;
+  return sc ? `<span class="pill ${{ Pass: 'ok', Check: 'warn', Hold: 'bad' }[sc.verdict] || 'grey'}">🔎 ${esc('Screening: ' + sc.verdict)}</span>` : ['Signed', 'Rejected'].includes(l.outcome) ? '' : `<button class="btn small ghost" data-go-form="screening" data-lead="${esc(l.id)}">🔎 Screen first</button>`;
 }
 export function contractItem(e, o) {
   const c = S.D.customers.get(e.customerId) || {}; const ic = { 'Notice to end': '🚪', 'Transfer to a new holder': '🔁', 'Lost or stolen': '🚨' }[e.kind] || '📜';
@@ -1986,7 +1991,7 @@ function viewDetail(p) {
   for (const wt of m.vials.waiting.filter((q) => q.customerId === c.id)) todo.push({ lvl: 'info', ic: '🧫', t: 'Read the water vial', s: `filled ${wt.sampledDate || '?'}`, a: `<button class="btn small ghost" data-edit="waterTest" data-id="${esc(wt.id)}">🧫 Read</button>` });
   if (led.contractEnded) todo.push({ lvl: 'warn', ic: '📝', t: 'Contract ended — renew', s: `${R.PRICES.contractMonths} months since ${c.installDate}` });
   for (const o of m.contractOpen.filter((q) => q.e.customerId === c.id)) todo.push(o.kind === 'notice' ? { lvl: o.overdue || o.soon ? 'bad' : 'warn', ic: '📜', t: `ending on ${o.e.endDate || '?'} — book the recovery`, s: o.e.early ? `before 36 months · deposit paid ${R.npr(o.e.depositPaid || 0)} is kept (draft §2.2)` : 'after 36 months · deposit back with the unit (draft §2.2)', a: can('visit') ? `<button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start recovery</button>` : '' } : { lvl: 'warn', ic: '📜', t: 'device lost or stolen — not settled', s: `${o.e.fault || ''}${o.lateNotice ? ' · told us late (draft §2.5(b))' : ''}`, a: canForm('contract') ? `<button class="btn small ghost" data-edit="contract" data-id="${esc(o.e.id)}">Settle</button>` : '' });
-  for (const r of refs.filter((q) => q.ready)) todo.push({ lvl: 'info', ic: '🎁', t: r.role === 'referee' ? 'Referral: 1 month free (off bill 2)' : 'Referral reward: 1 month free', s: 'referral reward', a: isBoss() ? `<a href="#" class="btn small ghost" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">Apply</a>` : '' });
+  for (const r of refs.filter((q) => q.ready)) todo.push({ lvl: 'info', ic: '🎁', t: r.role === 'referee' ? 'Came through a referral — 1 month free (off bill 2)' : `Brought ${esc((S.D.customers.get(r.forId) || {}).name || 'a new home')} — referrer's 1 month free`, s: r.role === 'referee' ? 'apply once · comes off bill 2' : '3 months after their install · apply once', a: isBoss() ? `<a href="#" class="btn small ghost" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">Apply</a>` : '' });
   const worst = todo.some((q) => q.lvl === 'bad') ? 'bad' : todo.some((q) => q.lvl === 'warn') ? 'warn' : todo.length ? 'info' : 'ok';
   const nowCard = x.status === 'Churned' ? `<div class="card now lv-info"><div class="now-h">⚫ Customer has left${c.churnDate ? ` <span class="muted">${esc(c.churnDate)}</span>` : ''}</div>${recs.length ? '' : `<div class="now-i lv-warn"><span class="ic">📦</span><div class="main"><div class="t">No recovery case yet</div><div class="s">get the device back and settle the deposit</div></div><div class="acts"><button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start</button></div></div>`}</div>`
     : `<div class="card now lv-${worst}"><div class="now-h">${worst === 'ok' ? '✅ Nothing due here' : '⚡ Do now'}<span class="sp"></span>${worst === 'ok' ? `<span class="muted">${x.nv ? `next visit ${esc(x.nv.date)} · ` : ''}${led.nextBill ? 'next bill ' + esc(led.nextBill.due) : ''}</span>` : ''}</div>
@@ -2222,7 +2227,7 @@ function viewList(p) {
   if (k === 'collections') {
     const groups = collectionGroups(m.collections); const cs = R.chaseStats(m.D.checkins, m.D.payments, R.addDays(t, -90), t);
     return head('Collections', 'Reminder 3 days before · on the day · 3 days late: Tara calls · 7 days late: home visit') +
-      (groups.map((g) => `<h2>${esc(g.label)} <span class="pill">${g.xs.length}</span></h2><div class="card flush">${g.xs.map((x) => dunItem(x)).join('')}</div>`).join('') || '<div class="card empty">Nobody to chase 🎉</div>') +
+      (groups.map((g) => `<h2>${esc(g.label)} <span class="pill">${g.xs.length}</span></h2><div class="card flush">${g.xs.map((x) => dunItem(x)).join('')}</div>`).join('') || '<div class="card empty">Nobody to chase 🏖️</div>') +
       `<div class="hint">📝 = log a call or visit about the money (who answered, the day they will pay). A home that gave a day waits in “Promised” until then.</div>${chaseStatsLine(cs)}`;
   }
   if (k === 'visits') {
@@ -2240,7 +2245,7 @@ function viewList(p) {
     const g = [['high', '🔴 Look after first'], ['watch', '🟠 Keep an eye on'], ['low', '🔵 Small signs']];
     return head('⚠️ Look after this week', 'Points from signs in the records (late bills, open problems, unhappy calls, first 90 days, moving…). It orders who to call first — it is not a forecast.')
       + g.map(([lv, l]) => { const xs = m.watch.filter((w) => w.lvl === lv); return xs.length ? `<h2>${l} <span class="pill">${xs.length}</span></h2><div class="card flush">${xs.map((w) => watchItem(w)).join('')}</div>` : ''; }).join('')
-      + (m.watch.length ? '' : '<div class="card empty">Nobody to worry about 🎉</div>') + (m.watchChecked ? `<div class="muted" style="margin-top:8px">✓ ${m.watchChecked} checked this week · <a href="#" data-act="watchShowAll">show again</a></div>` : '');
+      + (m.watch.length ? '' : '<div class="card empty">Nobody to worry about 🏖️</div>') + (m.watchChecked ? `<div class="muted" style="margin-top:8px">✓ ${m.watchChecked} checked this week · <a href="#" data-act="watchShowAll">show again</a></div>` : '');
   }
   if (k === 'requests') return head('Open requests', 'Reply within 2 hours in office hours · 3+ days = red') + `<div class="card flush">${m.openReq.map(reqItem).join('') || '<div class="empty">No open requests</div>'}</div><button class="btn" data-go-form="request">📋 New request</button>`;
   if (k === 'tomorrow') {
@@ -2269,7 +2274,7 @@ function viewList(p) {
       <div class="s">${esc(String(r.x.date || r.x.closedDate || r.x.startedDate || '').slice(0, 10))} · by ${esc(who(r.x))}${r.x.discountReason ? ' · ' + esc(r.x.discountReason) : ''}${r.state !== 'Pending' ? ` · ${esc(lbl[r.state] || r.state)} by ${esc(userName(r.x.approvedByUid, r.x.approvedBy))} ${esc(String(r.x.approvedAt || '').slice(0, 10))}` : ''}</div></div>
       ${acts && me && r.state === 'Pending' ? `<div class="wacts" data-stop><button class="btn small ok" data-appr="${esc(r.col)}|${esc(r.x.id)}|Approved">✓ OK</button><button class="btn small ghost" data-appr="${esc(r.col)}|${esc(r.x.id)}|Rejected">✕ No</button></div>` : `<span class="pill ${r.state === 'Pending' ? 'warn' : r.state === 'Approved' ? 'ok' : 'bad'}">${esc(lbl[r.state] || r.state)}</span>`}</div>`;
     return head('✋ Money approvals', `Rules (Settings → Money approvals · 🔴 first guesses): discount over ${R.npr(rule.discountOver)} and deposit refund over ${R.npr(rule.refundOver)} need an OK from ${rule.who === 'Admin only' ? 'Jun (admin)' : 'Jun or anyone with the money right'}. Until then the discount does not reduce the bill and the refund does not leave the deposit book.`) +
-      `<h2>Waiting · ${A.pending.length}</h2><div class="card flush">${A.pending.map((r) => item(r, true)).join('') || '<div class="empty">Nothing waiting 🎉</div>'}</div>
+      `<h2>Waiting · ${A.pending.length}</h2><div class="card flush">${A.pending.map((r) => item(r, true)).join('') || '<div class="empty">Nothing waiting 🏖️</div>'}</div>
       <h2>Decided · last 30</h2><div class="card flush">${A.done.slice(0, 30).map((r) => item(r, false)).join('') || '<div class="empty">Nothing yet</div>'}</div>`;
   }
   if (k === 'relocations') return head('🚚 Relocations', 'Customers moving house: new address, new pin, device moved or swapped.') + `<div class="card flush">${m.D.relocations.slice().sort((a, b) => String(b.moveDate).localeCompare(String(a.moveDate))).map((r) => { const c = S.D.customers.get(r.customerId); return `<div class="item" data-edit="relocation" data-id="${esc(r.id)}"><span class="dot ${r.status === 'Done' ? 'g' : r.status === 'Cancelled' ? 'k' : 'y'}"></span><div class="main"><div class="t">${esc(c ? c.name : '?')} · ${esc(r.status)}</div><div class="s">${esc(r.moveDate || '')} · ${esc(r.oldTole === 'Other' ? r.oldToleOther : r.oldTole || '?')} → ${esc(r.newTole === 'Other' ? r.newToleOther : r.newTole || '?')}</div></div><div class="r">›</div></div>`; }).join('') || '<div class="empty">No relocations</div>'}</div>${can('visit') ? '<button class="btn" data-go-form="relocation">🚚 New relocation</button>' : ''}`;
@@ -2291,7 +2296,7 @@ function viewList(p) {
     const row = (x) => `<div class="item" data-edit="claim" data-id="${esc(x.c.id)}"><span class="dot ${x.notSentLate ? 'r' : x.open ? 'y' : 'g'}"></span><div class="main"><div class="t">${esc(x.c.what === 'Device' ? x.c.serial : x.c.part || '?')} · <span>${esc(x.c.problem || '')}</span> <span class="pill ${pill[x.c.result || 'Waiting']}">${esc(x.c.result || 'Waiting')}</span></div><div class="s">${esc(x.c.supplier || '')} · ${esc(x.c.foundDate || '')}${x.by ? ' · ' + esc('claim by ' + x.by) : ''}${x.c.sentDate ? ' · ' + esc('sent ' + x.c.sentDate) : x.notSentLate ? ' · ' + esc('not sent — deadline passed') : ''}${x.c.result === 'Credited' ? ' · ' + esc(`credit USD ${x.c.creditUsd || 0}`) : ''}</div></div><div class="r">›</div></div>`;
     return head('📮 Supplier claims', 'PI TQ-PI-20260808: condition 7 — inspect within 14 days of arrival · condition 4 — faulty within 30 days of install = replaced or credited.') +
       `<div class="card"><div class="kv"><div class="k">Open claims</div><div class="v num">${C.open.length}</div><div class="k">Credit to take off the next order</div><div class="v num">USD ${C.creditOpen.toFixed(2)}</div>${Object.entries(C.byResult).map(([k2, n]) => `<div class="k">${esc(k2)}</div><div class="v num">${n}</div>`).join('')}</div></div>
-      <h2>Open claims <span class="pill">${C.open.length}</span></h2><div class="card flush">${C.open.map(row).join('') || '<div class="empty">Nothing open 🎉</div>'}</div>
+      <h2>Open claims <span class="pill">${C.open.length}</span></h2><div class="card flush">${C.open.map(row).join('') || '<div class="empty">Nothing open 🏖️</div>'}</div>
       <h2>All <span class="pill">${C.all.length}</span></h2><div class="card flush">${C.all.map(row).join('') || '<div class="empty">No claims yet</div>'}</div>${canForm('claim') ? '<button class="btn" data-go-form="claim">📮 New claim</button>' : ''}`;
   }
   if (k === 'proof') {
@@ -2314,7 +2319,7 @@ function viewList(p) {
   if (k === 'contract') {
     const open = m.contractOpen; const all = m.D.contractEvents.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return head('📜 Contract events', 'Notice to end · transfer to a new holder · lost or stolen — following the customer agreement working draft (2026-09-03, still with the lawyer).') +
-      `<h2>To do <span class="pill">${open.length}</span></h2><div class="card flush">${open.map((o) => contractItem(o.e, o)).join('') || '<div class="empty">Nothing open 🎉</div>'}</div>
+      `<h2>To do <span class="pill">${open.length}</span></h2><div class="card flush">${open.map((o) => contractItem(o.e, o)).join('') || '<div class="empty">Nothing open 🏖️</div>'}</div>
       <h2>All <span class="pill">${all.length}</span></h2><div class="card flush">${all.slice(0, 60).map((e) => contractItem(e)).join('') || '<div class="empty">No contract events yet</div>'}</div>${canForm('contract') ? '<button class="btn" data-go-form="contract">📜 New contract event</button>' : ''}`;
   }
   if (k === 'repairs') {
@@ -2423,7 +2428,7 @@ export function viewReport(p) {
     return head('⏳ Sales stage days', 'How long homes take from first contact to the first payment (installs of the last 12 months). A home is matched to its lead by the convert button or the same phone number. Targets are first guesses (🔴).') +
       `<div class="card"><div class="kv"><div class="k">Lead → first payment</div><div class="v num">${dd(F.totalMedian)} <span class="muted">median</span></div><div class="k">Homes with a lead</div><div class="v num">${F.matched} of ${F.journeys.length}</div><div class="k">Paid on install day</div><div class="v num">${F.paidOnInstall} of ${F.journeys.length}</div></div></div>
       <div class="card scroll-x"><table class="tbl"><tr><th>Step</th><th class="n">Homes</th><th class="n">Median</th><th class="n">Slowest</th><th class="n">Over target</th></tr>${F.steps.map((q) => `<tr><td>${esc(q.label)}</td><td class="n">${q.n}</td><td class="n">${dd(q.median)}</td><td class="n">${dd(q.max)}</td><td class="n">${q.slow || '·'} <span class="muted">(${q.target} d)</span></td></tr>`).join('')}</table></div>
-      <h2>Leads stuck · ${F.stuck.length}</h2><div class="card flush">${F.stuck.map((o) => `<div class="item" data-edit="lead" data-id="${esc(o.l.id)}"><span class="dot ${o.days > 30 ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(o.l.name || '?')} · ${esc(o.stage === 'New' ? 'New lead' : o.stage)}</div><div class="s">${o.days} days in this stage${o.l.followUpDate ? ' · follow up ' + esc(o.l.followUpDate) : ''}</div></div></div>`).join('') || '<div class="empty">No lead is stuck 🎉</div>'}</div>`;
+      <h2>Leads stuck · ${F.stuck.length}</h2><div class="card flush">${F.stuck.map((o) => `<div class="item" data-edit="lead" data-id="${esc(o.l.id)}"><span class="dot ${o.days > 30 ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(o.l.name || '?')} · ${esc(o.stage === 'New' ? 'New lead' : o.stage)}</div><div class="s">${o.days} days in this stage${o.l.followUpDate ? ' · follow up ' + esc(o.l.followUpDate) : ''}</div></div></div>`).join('') || '<div class="empty">No lead is stuck 🏖️</div>'}</div>`;
   }
   if (k === 'billing') {
     if (!can('money')) return head('🌊 Billing moves', '') + '<div class="card"><div class="empty">Money rights needed.</div></div>';
@@ -2442,10 +2447,10 @@ export function viewReport(p) {
       `<div class="card"><div class="kv"><div class="k">Trips</div><div class="v num">${N.trips}</div><div class="k">Nobody home</div><div class="v num">${N.noShows} · ${pc(N.rate)}</div>
         <div class="k">🛵 Message sent</div><div class="v num">${pc(N.withMsg.rate)} of ${N.withMsg.trips} trips</div><div class="k">No message</div><div class="v num">${pc(N.noMsg.rate)} of ${N.noMsg.trips} trips</div>
         <div class="k">Minutes waited</div><div class="v num">${N.waited}</div></div>${N.withMsg.trips < 30 || N.noMsg.trips < 30 ? '<div class="hint">🔴 Fewer than 30 trips on one side — too early to say whether the message helps.</div>' : ''}</div>
-      <h2>What happened</h2><div class="card"><div class="kv">${Object.entries(N.byReason).sort((a, b) => b[1] - a[1]).map(([k2, v]) => `<div class="k">${esc(k2)}</div><div class="v num">${v}</div>`).join('') || '<div class="empty">Nobody-home trips: none 🎉</div>'}</div></div>
+      <h2>What happened</h2><div class="card"><div class="kv">${Object.entries(N.byReason).sort((a, b) => b[1] - a[1]).map(([k2, v]) => `<div class="k">${esc(k2)}</div><div class="v num">${v}</div>`).join('') || '<div class="empty">Nobody-home trips: none 🏖️</div>'}</div></div>
       <h2>Homes missed twice or more · ${N.repeat.length}</h2><div class="card flush">${N.repeat.map((r) => (r.c ? `<div class="item" data-cust="${esc(r.id)}"><span class="dot r"></span><div class="main"><div class="t">${esc(r.c.name)}</div><div class="s">${r.n} times · last ${esc(r.last)} · ${esc(toleOf(r.c))}</div></div></div>` : '')).join('') || '<div class="empty">None</div>'}</div>
       <h2>By person</h2><div class="card scroll-x"><table class="tbl"><tr><th>Who</th><th class="n">Trips</th><th class="n">Nobody home</th><th class="n">Rate</th></tr>${who.map(([n, r]) => `<tr><td><b>${esc(n)}</b></td><td class="n">${r.trips}</td><td class="n">${r.ns}</td><td class="n">${pc(r.trips ? r.ns / r.trips : null)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No trips</td></tr>'}</table></div>
-      <h2>Latest nobody-home trips</h2><div class="card flush">${N.list.slice(0, 25).map((v) => `<div class="item" data-cust="${esc(v.customerId)}"><span class="dot y"></span><div class="main"><div class="t">${esc(cn(v.customerId))} · ${esc(v.noShowReason || 'Nobody home')}</div><div class="s">${esc(String(v.date).slice(0, 10))} · ${esc(v.technician || '—')}${v.omwAt ? ' · 🛵 message sent' : ''}${v.retryDate ? ' · try again ' + esc(v.retryDate) : ''}</div></div></div>`).join('') || '<div class="empty">None 🎉</div>'}</div>`;
+      <h2>Latest nobody-home trips</h2><div class="card flush">${N.list.slice(0, 25).map((v) => `<div class="item" data-cust="${esc(v.customerId)}"><span class="dot y"></span><div class="main"><div class="t">${esc(cn(v.customerId))} · ${esc(v.noShowReason || 'Nobody home')}</div><div class="s">${esc(String(v.date).slice(0, 10))} · ${esc(v.technician || '—')}${v.omwAt ? ' · 🛵 message sent' : ''}${v.retryDate ? ' · try again ' + esc(v.retryDate) : ''}</div></div></div>`).join('') || '<div class="empty">None 🏖️</div>'}</div>`;
   }
   if (k === 'callbacks') {
     const days = Number(S.settings.callbackDays) || R.CALLBACK.days; const C = R.callbackStats(m.D, R.addDays(m.t, -90), m.t, days);
@@ -2455,7 +2460,7 @@ export function viewReport(p) {
       `<div class="card scroll-x"><table class="tbl"><tr><th>Who</th><th class="n">Jobs</th><th class="n">Visits</th><th class="n">Installs</th><th class="n">Callbacks</th><th class="n">Rate</th>${S.isAdmin ? '<th>Last training</th>' : ''}</tr>
       ${C.people.map((p) => `<tr><td><b>${esc(p.name)}</b></td><td class="n">${p.jobs}</td><td class="n">${p.visits}</td><td class="n">${p.installs}</td><td class="n">${p.callbacks}</td><td class="n">${p.rate === null ? '—' : `<span class="pill ${p.rate > 0.1 ? 'bad' : p.rate > 0.05 ? 'warn' : 'ok'}">${R.pct(p.rate, 1)}</span>`}</td>${S.isAdmin ? `<td class="mono">${esc(lastTrain[p.name] || '—')}</td>` : ''}</tr>`).join('') || '<tr><td colspan="7" class="muted">No jobs in 90 days</td></tr>'}</table>
       <div class="hint">Few jobs = the rate jumps around; read it with the numbers next to it. Colours: over 10 % red · over 5 % orange (🔴 first guess).</div></div>
-      <h2>Callbacks · ${C.callbacks.length}</h2><div class="card flush">${C.callbacks.map((x) => `<div class="item" data-edit="request" data-id="${esc(x.r.id)}"><span class="dot ${x.days <= 7 ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(cn(x.r.customerId))} · ${esc(x.r.type)}</div><div class="s">${x.days} days after ${esc(x.job.what)} on ${esc(x.job.date)} by ${esc(x.who)}${x.r.description ? ' · ' + esc(String(x.r.description).slice(0, 60)) : ''}</div></div></div>`).join('') || '<div class="empty">No callbacks 🎉</div>'}</div>`;
+      <h2>Callbacks · ${C.callbacks.length}</h2><div class="card flush">${C.callbacks.map((x) => `<div class="item" data-edit="request" data-id="${esc(x.r.id)}"><span class="dot ${x.days <= 7 ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(cn(x.r.customerId))} · ${esc(x.r.type)}</div><div class="s">${x.days} days after ${esc(x.job.what)} on ${esc(x.job.date)} by ${esc(x.who)}${x.r.description ? ' · ' + esc(String(x.r.description).slice(0, 60)) : ''}</div></div></div>`).join('') || '<div class="empty">No callbacks 🏖️</div>'}</div>`;
   }
   if (k === 'capacity') {
     if (!m.capacity) return head('👷 Field capacity', '') + '<div class="card"><div class="empty">Only for people who see every customer.</div></div>';
@@ -2473,7 +2478,7 @@ export function viewReport(p) {
     return head('🚪 Leavers', 'Why homes left and what it cost. The reason is the main reason on the recovery case. Lost monthly = subscription price (VAT incl.) · lost contract = months left of 36 × price.') +
       (noCase.length ? `<div class="card note-warn"><b>${noCase.length} leaver(s) without a recovery case</b> — no reason recorded, device and deposit not tracked.<div class="mini-list" style="margin-top:6px">${noCase.map((x) => `<div class="item"><div class="main"><div class="t">${esc(x.c.name)}</div><div class="s">left ${esc(x.end)} · ${x.tenure} months</div></div>${canForm('recovery') ? `<button class="btn small" data-go-form="recovery" data-cid="${esc(x.c.id)}">📦 Record</button>` : ''}</div>`).join('')}</div></div>` : '') +
       `<div class="card scroll-x"><table class="tbl"><tr><th>Left on</th><th>Customer</th><th class="n">Months</th><th>Main reason</th><th>In their words</th><th>Device back</th><th class="n">Contract lost</th></tr>
-      ${L.rows.map((x) => `<tr ${x.r ? `data-edit="recovery" data-id="${esc(x.r.id)}"` : `data-cust="${esc(x.c.id)}"`} style="cursor:pointer"><td class="mono">${esc(x.end)}</td><td><b>${esc(x.c.name)}</b></td><td class="n">${x.tenure}</td><td>${x.reason === 'Not recorded' ? '<span class="pill warn">Not recorded</span>' : esc(x.reason)}</td><td class="muted">${esc(x.detail)}</td><td>${esc(x.outcome || '—')}</td><td class="n">${R.npr(x.lostContract)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nobody has left 🎉</td></tr>'}</table></div>
+      ${L.rows.map((x) => `<tr ${x.r ? `data-edit="recovery" data-id="${esc(x.r.id)}"` : `data-cust="${esc(x.c.id)}"`} style="cursor:pointer"><td class="mono">${esc(x.end)}</td><td><b>${esc(x.c.name)}</b></td><td class="n">${x.tenure}</td><td>${x.reason === 'Not recorded' ? '<span class="pill warn">Not recorded</span>' : esc(x.reason)}</td><td class="muted">${esc(x.detail)}</td><td>${esc(x.outcome || '—')}</td><td class="n">${R.npr(x.lostContract)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nobody has left 🏖️</td></tr>'}</table></div>
       <h2>⏰ Why payments were late · last 12 months</h2><div class="card">${Object.keys(lateN).length ? `<div class="kv">${R.LATE_REASONS.filter((k2) => lateN[k2]).map((k2) => `<div class="k">${esc(k2)}</div><div class="v num">${lateN[k2].total}</div>`).join('')}</div>` : '<div class="empty">No late reasons recorded yet</div>'}<div class="hint">Asked when a late home pays or on a follow-up call. "Money not come in yet" → move the bill day to when money arrives · "No money this month" → a different talk.</div></div>`;
   }
   if (k === 'referrals') return head('🎁 Referral rewards', 'New customer — 1 month free (taken off bill 2) · referrer — 1 month free 3 months later, only after install + fee paid · no cash') +
@@ -2491,7 +2496,7 @@ export function viewReport(p) {
     const T = rows.reduce((s2, r) => { for (const k2 of ['gross', 'ssfE', 'ssfR', 'net', 'cost']) s2[k2] += r.P[k2]; s2.tds += r.P.tds || 0; return s2; }, { gross: 0, ssfE: 0, ssfR: 0, net: 0, cost: 0, tds: 0 });
     const n = (x) => (x === null || x === undefined ? '—' : Math.round(x).toLocaleString('en-IN')); const unsaved = rows.filter((r) => !r.sv).length;
     return head('💼 Payroll', 'Nepali month · 🟢 SSF 11% + 20% on the basic salary (SSF procedure §25) · 🟢 TDS from the Inland Revenue 2083/84 table unless the CA\'s is in Settings · a payslip is not a tax filing — the CA checks.') +
-      `<div class="row wrap" style="align-items:center"><button class="btn small ghost" data-report="payroll" data-pm="${prev.y}-${prev.m}">‹</button><b>${esc(B.bsLabel(py, pm))}</b><span class="muted">${esc(rg.from)} → ${esc(rg.to)}</span><button class="btn small ghost" data-report="payroll" data-pm="${next.y}-${next.m}">›</button>${dashain ? '<span class="pill warn">🎉 Dashain month — bonus suggested</span>' : ''}</div>
+      `<div class="row wrap" style="align-items:center"><button class="btn small ghost" data-report="payroll" data-pm="${prev.y}-${prev.m}">‹</button><b>${esc(B.bsLabel(py, pm))}</b><span class="muted">${esc(rg.from)} → ${esc(rg.to)}</span><button class="btn small ghost" data-report="payroll" data-pm="${next.y}-${next.m}">›</button>${dashain ? '<span class="pill warn">🏖️ Dashain month — bonus suggested</span>' : ''}</div>
       ${rows.some((r) => !r.sv && r.P.taxMissing) ? `<div class="card" style="border-color:var(--warn)"><div class="warn">${esc('🔴 No tax table yet — ask the CA for this year\'s TDS table and type it in Settings → Payroll. TDS shows as —.')}</div></div>` : ''}
       ${rows.some((r) => !r.sv && r.P.taxDefault) ? `<div class="card"><div class="hint">${esc('🟢 Tax = the Inland Revenue table for 2083/84 (single = couple) · SSF members pay no 1% band · the CA can replace it in Settings.')}</div></div>` : ''}
       ${rows.some((r) => !r.sv && r.P.noRest) ? `<div class="card" style="border-color:var(--bad)"><div class="warn">${esc('🔴 The tax table has no "rest" line — income above the last bracket would be taxed at 0. Add the last line from the CA.')}</div></div>` : ''}

@@ -13,6 +13,8 @@ const KIND = {
   done: { cls: 'done', label: 'Done today', color: '#16a34a' },
 };
 let Lf = null, map = null, layer = null, meLayer = null, me = null, filter = 'all', lastView = null, watchId = null, orderedAt = null;
+// v0.11.2 (#7) Jun: "마커들 누르면 순서대로 1,2,3 뜨게" — tap pins in the order you want; each tap puts that stop at the next position of your own order
+let picking = false, picked = [];
 const dayKey = () => 'kfp_route_' + today();
 const modeKey = () => 'kfp_route_mode_' + today();
 const LIVE_REORDER_KM = 0.15; // re-order after moving 150 m (auto mode)
@@ -79,7 +81,7 @@ export function routeHtml() {
     <div class="rtop">
       <div class="rsum">${chips.map(([k, l, c, col]) => `<span class="k ${filter === k ? 'on' : ''}" data-rfilter="${k}" style="color:${col}"><b>${c}</b>${l}</span>`).join('')}
         <span class="k" data-list="calls" style="color:var(--c-call)"><b>${calls}</b>Calls</span><span class="k" data-list="collections" style="color:var(--c-money)"><b>${chase}</b>To chase</span></div>
-      <div class="rmode">${routeMode() === 'auto' ? `<span class="on">📡 Auto order · from where you are${me ? '' : ' (finding you…)'}</span>` : `<span class="man">✋ Your own order</span><button data-act="rAuto">📡 Back to auto</button>`}</div>
+      <div class="rmode">${routeMode() === 'auto' ? `<span class="on">📡 Auto order · from where you are${me ? '' : ' (finding you…)'}</span>` : `<span class="man">✋ Your own order</span><button data-act="rAuto">📡 Back to auto</button>`}<button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '👆 Tap pins to order'}</button></div>
       ${st.noGps.length ? `<div class="rsum" style="font-size:12px;color:var(--muted)">📍 ${st.noGps.length} stop(s) without GPS — open the customer and tap “Get location” next visit</div>` : ''}
     </div>
     <div class="rbot"><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext"><span class="nx">🧭 Next</span></button><button class="round" data-act="rMe" title="My location">📍</button></div>
@@ -125,7 +127,7 @@ function draw(fit) {
     const k = s.done ? 'done' : s.main; const n = num.get(s.id);
     const html = `<div class="stop-pin ${KIND[k].cls} ${k === 'collect' ? 'pulse' : ''}"><div class="b"><span>${s.done ? '✓' : n || '•'}</span></div><div class="lab">${esc((s.x.c.name || '').split(' ')[0])} · ${esc(toleOf(s.x.c))}</div></div>`;
     const mk = Lf.marker([g.lat, g.lng], { icon: Lf.divIcon({ className: '', html, iconSize: [34, 34], iconAnchor: [17, 34] }), zIndexOffset: s.done ? 0 : 1000 - (n || 0) });
-    mk.on('click', () => sheet(s, n));
+    mk.on('click', () => { if (picking) { pickStop(s.id); return; } sheet(s, n); });
     layer.addLayer(mk);
   }
   if (seq.length > 1 && filter === 'all') Lf.polyline(seq.map((s) => [s.p.lat, s.p.lng]), { color: '#1f6fb2', weight: 3, opacity: 0.45, dashArray: '6 8' }).addTo(layer);
@@ -208,6 +210,11 @@ function endDrag(ev) {
   setManual(ids); update(); listSheet(true);
 }
 document.addEventListener('pointerup', endDrag); document.addEventListener('pointercancel', endDrag);
+function pickStop(id) {
+  if (picked.includes(id)) return;
+  picked.push(id); const ids = (S.routeSeq || []).map((s) => s.id).filter((x) => !picked.includes(x)); setManual([...picked, ...ids]); update();
+  const all = (S.routeSeq || []).length; if (picked.length >= all) { picking = false; picked = []; toast('✋ Order set'); update(); } else toast(`#${picked.length} · tap the next stop (${all - picked.length} left)`, 1500);
+}
 function toAuto() { lsSet(modeKey(), 'auto'); lsSet(dayKey(), null); orderedAt = me; update(); listSheet(true); toast(`📡 Auto order from ${me ? 'your location' : 'the first stop'}`); }
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && document.getElementById('rsheet')) closeSheet(); });
 document.addEventListener('click', (ev) => {
@@ -216,7 +223,8 @@ document.addEventListener('click', (ev) => {
   const a = ev.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
   if (act === 'rClose') closeSheet();
-  else if (act === 'rAuto') toAuto();
+  else if (act === 'rAuto') { picking = false; picked = []; toAuto(); }
+  else if (act === 'rPick') { picking = !picking; picked = []; closeSheet(); update(); toast(picking ? '👆 Tap the pins in the order you want to visit' : '✋ Order kept'); }
   else if (act === 'rOrder') {
     const run = () => { if (me) setHere(me); lsSet(modeKey(), 'auto'); lsSet(dayKey(), null); const seq = ordered(stopsFor(model()).withGps); lsSet(dayKey(), { ids: seq.map((s) => s.id), at: Date.now() }); draw(false); toast(`🔢 ${seq.length} stops ordered from ${me ? 'your location' : 'the first stop'} · ≈${routeKm(seq, me).toFixed(1)} km`); };
     if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => { me = { lat: p.coords.latitude, lng: p.coords.longitude }; run(); }, run, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }); else run();

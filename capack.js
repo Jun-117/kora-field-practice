@@ -4,17 +4,19 @@
 import * as R from './logic.js';
 import * as B from './bs.js';
 import { S, model, esc } from './app.js';
+import { getLang } from './i18n.js';
 
 const IRD_TITLE = 'बिक्री खाता';
 const IRD_RULE = '(नियम २३ को उपनियम (१) को खण्ड (ज) संग सम्बन्धित)';
 // 15 columns, exactly as the IRD sheet (A–O)
-export const IRD_COLS = [
-  ['मिति', 'Date (BS)'], ['बीजक नम्बर', 'Bill no.'], ['खरिदकर्ताको नाम', 'Buyer'], ['खरिदकर्ताको स्थायी लेखा नम्बर', 'Buyer PAN'],
-  ['वस्तु वा सेवाको नाम', 'Goods / service'], ['वस्तु वा सेवाको परिमाण', 'Qty'], ['वस्तु वा सेवाको परिमाण मापन गर्ने इकाइ', 'Unit'],
-  ['जम्मा बिक्री / निकासी (रु)', 'Total sales (excl. VAT)'], ['स्थानीय कर छुटको बिक्री मूल्य (रु)', 'Exempt sales'],
-  ['मूल्य (रु)', 'Taxable value'], ['कर (रु)', 'VAT 13%'],
-  ['निकासी गरेको वस्तु वा सेवाको मूल्य (रु)', 'Export value'], ['निकासी गरेको देश', 'Export country'], ['निकासी प्रज्ञापनपत्र नम्बर', 'Customs decl. no.'], ['निकासी प्रज्ञापनपत्र मिति', 'Customs decl. date'],
+export const IRD_COLS = [ /* [Nepali, English, Korean(screen only — v0.11.2 #17)] */
+  ['मिति', 'Date (BS)', '날짜(네팔력)'], ['बीजक नम्बर', 'Bill no.', '계산서 번호'], ['खरिदकर्ताको नाम', 'Buyer', '구매자'], ['खरिदकर्ताको स्थायी लेखा नम्बर', 'Buyer PAN', '구매자 PAN'],
+  ['वस्तु वा सेवाको नाम', 'Goods / service', '품목/서비스'], ['वस्तु वा सेवाको परिमाण', 'Qty', '수량'], ['वस्तु वा सेवाको परिमाण मापन गर्ने इकाइ', 'Unit', '단위'],
+  ['जम्मा बिक्री / निकासी (रु)', 'Total sales (excl. VAT)', '총매출(VAT 제외)'], ['स्थानीय कर छुटको बिक्री मूल्य (रु)', 'Exempt sales', '면세 매출'],
+  ['मूल्य (रु)', 'Taxable value', '과세가액'], ['कर (रु)', 'VAT 13%', '부가세 13%'],
+  ['निकासी गरेको वस्तु वा सेवाको मूल्य (रु)', 'Export value', '수출액'], ['निकासी गरेको देश', 'Export country', '수출국'], ['निकासी प्रज्ञापनपत्र नम्बर', 'Customs decl. no.', '세관신고 번호'], ['निकासी प्रज्ञापनपत्र मिति', 'Customs decl. date', '세관신고 날짜'],
 ];
+const koHdr = (c) => (getLang() === 'ko' && c[2] ? `<small class="ko">${c[2]}</small>` : '');
 const UNIT_NE = { month: 'महिना', job: 'पटक' };
 const n2 = (x) => (Math.round((Number(x) || 0) * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -85,9 +87,9 @@ export function capackHtml(p) {
     <div class="muted">Input VAT comes from expenses entered with a VAT bill (${buy.rows.filter((r) => r.kind !== 'exempt').length} bills this period). Whether each one can be claimed is the CA's call.</div>
     <div class="row wrap"><button class="btn" data-act="capackXlsx">⬇️ Excel — IRD format</button><button class="btn ghost" data-act="capackCsv">⬇️ CSV</button><button class="btn ghost" data-act="capackPrint">🖨️ Print / PDF</button><button class="btn ghost" data-act="capackMsg">✉️ Message for the CA</button></div>
     <div id="capackMsgBox"></div>
-    <div class="card scroll-x" data-noi18n><div class="ird-head"><b>${IRD_TITLE}</b> <span class="muted">${IRD_RULE}</span><br><span class="muted">करदाता दर्ता नं (PAN): ${esc(co.pan || '—')} · करदाताको नाम: ${esc(co.name || '—')} · साल: ${P.y} · कर अवधि: ${esc(P.labelNe)}</span></div>
-      <table class="tbl ird"><tr><th colspan="7">बीजक</th><th rowspan="2">${IRD_COLS[7][0]}<small>${IRD_COLS[7][1]}</small></th><th rowspan="2">${IRD_COLS[8][0]}<small>${IRD_COLS[8][1]}</small></th><th colspan="2">करयोग्य बिक्री</th><th colspan="4">निकासी</th></tr>
-      <tr>${IRD_COLS.map((c, i) => (i === 7 || i === 8 ? '' : `<th>${c[0]}<small>${c[1]}</small></th>`)).join('')}</tr>
+    <div class="card scroll-x" data-noi18n><div class="ird-head"><b>${IRD_TITLE}</b> <span class="muted">${IRD_RULE}</span>${getLang() === 'ko' ? '<span class="muted"> · 매출장(IRD 양식) — 화면만 한국어 · 엑셀/인쇄는 네팔어·영어 그대로</span>' : ''}<br><span class="muted">करदाता दर्ता नं (PAN): ${esc(co.pan || '—')} · करदाताको नाम: ${esc(co.name || '—')} · साल: ${P.y} · कर अवधि: ${esc(P.labelNe)}</span></div>
+      <table class="tbl ird"><tr><th colspan="7">बीजक</th><th rowspan="2">${IRD_COLS[7][0]}<small>${IRD_COLS[7][1]}</small>${koHdr(IRD_COLS[7])}</th><th rowspan="2">${IRD_COLS[8][0]}<small>${IRD_COLS[8][1]}</small>${koHdr(IRD_COLS[8])}</th><th colspan="2">करयोग्य बिक्री</th><th colspan="4">निकासी</th></tr>
+      <tr>${IRD_COLS.map((c, i) => (i === 7 || i === 8 ? '' : `<th>${c[0]}<small>${c[1]}</small>${koHdr(c)}</th>`)).join('')}</tr>
       ${rows.slice(0, 300).map((r) => `<tr class="${r.billNo ? '' : 'nobill'}"><td class="mono nw">${esc(B.fmtBs(B.adToBs(r.date)))}</td><td class="mono">${r.billNo ? esc(r.billNo) : '<span style="color:var(--bad)">—</span>'}</td><td>${esc(r.buyer)}</td><td class="mono">${esc(r.buyerPan)}</td><td>${esc(r.item)}</td><td class="n">${r.qty}</td><td>${esc(UNIT_NE[r.unit] || r.unit)}</td><td class="n">${n2(r.total)}</td><td class="n">0.00</td><td class="n">${n2(r.taxable)}</td><td class="n">${n2(r.vat)}</td><td></td><td></td><td></td><td></td></tr>`).join('') || '<tr><td colspan="15" class="muted">No sales in this period</td></tr>'}
       ${rows.length ? `<tr class="tot"><td colspan="7"><b>जम्मा</b></td><td class="n"><b>${n2(book.totals.total)}</b></td><td class="n">0.00</td><td class="n"><b>${n2(book.totals.taxable)}</b></td><td class="n"><b>${n2(book.totals.vat)}</b></td><td colspan="4"></td></tr>` : ''}</table>
       ${rows.length > 300 ? `<div class="muted">+${rows.length - 300} more rows in the Excel file</div>` : ''}</div>

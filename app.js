@@ -16,7 +16,7 @@ import * as B from './bs.js';
 import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
-export const APP_VERSION = 'kf-v0.12.4 (2026-10-02)';
+export const APP_VERSION = 'kf-v0.13.0 (2026-10-02)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -872,7 +872,7 @@ FORMS.visit = {
     const ok = save(`visits/${id}`, data, isNew);
     if (isNew && ok) omwClear(v.customerId);
     const np = savePhotos(v.customerId, `visits/${id}`, v.visitType === 'Repair' ? 'repair' : 'visit') + (ok ? saveSign(v.customerId, `visits/${id}`, sig, v.signName) : 0);
-    return { ok, np, go: ['customers', 'detail', { id: v.customerId }] };
+    return { ok, np, go: ['customers', 'detail', { id: v.customerId, vrep: id }] };
   },
 };
 FORMS.payment = {
@@ -1972,6 +1972,7 @@ function viewDetail(p) {
   const refs = m.referrals.filter((r) => r.who.id === c.id && !r.done);
   const stPill = { Active: 'ok', Paused: 'blue', Churned: 'grey' }[x.status];
   const receipt = p.receipt && m.D.payments.find((q) => q.id === p.receipt);
+  if (p.vrep && !S.desk && String(p.vrep) !== S.rcAuto) { S.rcAuto = String(p.vrep); setTimeout(() => imageCard('visit', p.vrep), 120); } /* v0.13: the visit report preview opens by itself after a visit is saved (once) */
   const bills = led.bills.slice(-6); const spans = R.pauseSpans(c, t); /* v0.9 #2 */
   const hasGps = c.gps && Number.isFinite(c.gps.lat) && Number.isFinite(c.gps.lng);
   const dest = hasGps ? `${c.gps.lat.toFixed(6)},${c.gps.lng.toFixed(6)}` : '';
@@ -2011,10 +2012,12 @@ function viewDetail(p) {
     ${can('visit') ? `<button data-go-form="request" data-cid="${esc(c.id)}">📋 Request</button>` : ''}
     ${can('visit') && x.status !== 'Churned' ? omwBtn(c) : ''}
     ${canEdit ? `<button data-go-form="customerEdit" data-id="${esc(c.id)}">✏️ Edit</button>` : ''}${canForm('contract') ? `<button data-go-form="contract" data-cid="${esc(c.id)}">📜 Contract</button>` : ''}
+    ${x.status === 'Active' ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && String(q.status).includes('Completed')).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">🧪 Visit report</button>` : ''; })()}
   </div>
   ${S.desk ? '' : '<button class="btn ghost small" data-act="moreLinks" style="margin-top:6px">⋯ More</button>'}
   ${can('visit') && x.status !== 'Churned' ? omwChips(c) : ''}
   ${receipt ? receiptCard(x, receipt) : ''}
+  <div id="rcBox" class="hidden"></div>
   ${nowCard}
   <div class="sec">Location</div>
   <div class="card where">
@@ -2106,24 +2109,31 @@ function receiptCard(x, pay) {
   const text = `KORA CARE — receipt ${rd.no}\n${x.c.name} (${x.c.code})\nDate: ${pay.date}\n` + lines.map(([l, v]) => `${l}: NPR ${Math.round(v).toLocaleString('en-IN')}`).join('\n') + `\nTotal: NPR ${Math.round(pay.amount).toLocaleString('en-IN')}${Number(pay.discount) > 0 ? `\nDiscount: NPR ${Math.round(pay.discount).toLocaleString('en-IN')}${pay.approval === 'Pending' ? ' (waiting for approval)' : pay.approval === 'Rejected' ? ' (not approved)' : ''}` : ''}\n${rd.credit ? 'Credit: ' + pay.type : 'Paid by: ' + (pay.method || '') + (pay.ref ? ' · ' + pay.ref : '')}\nNext bill: ${rd.next}\nThank you! 🙏`;
   return `<div class="card" style="border-color:var(--ok)"><div class="status">🧾 Receipt</div><pre class="diag" style="color:var(--ink);margin:10px 0 0">${esc(text)}</pre>
     <a class="btn ok" style="display:block;text-align:center;text-decoration:none;line-height:56px" href="${esc(waLink(x.c.phone, text))}" target="_blank" rel="noopener">💬 Send receipt on WhatsApp</a>
-    <button type="button" class="btn" style="display:block;width:100%;margin-top:8px" data-act="rcImg" data-pid="${esc(pay.id)}">🧾 Image receipt</button><div id="rcBox" class="hidden"></div></div>`;
+    <button type="button" class="btn" style="display:block;width:100%;margin-top:8px" data-act="rcImg" data-pid="${esc(pay.id)}">🧾 Image receipt</button></div>`;
 }
 /* v0.12 image receipt (Jun 2026-10-01 "이거로 하자"): the picture version of the same payment, drawn on this phone (receipt.js),
    then the share sheet → WhatsApp → the customer. Falls back to "save the image" where the share sheet cannot take files. */
-async function imageReceipt(pid) {
-  const pay = S.D.payments.get(pid); const box = $('#rcBox'); if (!pay || !box) return;
-  const x = model().cust.get(pay.customerId); if (!x) { toast('Customer not found'); return; }
-  box.classList.remove('hidden'); box.innerHTML = '<div class="muted" style="margin-top:8px">Making the receipt…</div>';
+/* v0.12 image receipt (Jun 2026-10-01 "이거로 하자") + v0.13 referral card · visit report (Jun 10/2 "뭐 할거 더 없어?") — all drawn on this phone
+   (receipt.js) then the share sheet → WhatsApp → the customer. Falls back to "save the image" where the share sheet cannot take files. */
+async function imageCard(kind, id) {
+  const box = $('#rcBox'); if (!box) return;
+  const co = { name: S.settings.coName || 'KORA CARE Pvt. Ltd.', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '' };
+  let x, draw, name, alt;
+  if (kind === 'receipt') { const pay = S.D.payments.get(id); if (!pay) return; x = model().cust.get(pay.customerId); if (!x) { toast('Customer not found'); return; } const d = RC.receiptData(x, pay, co); draw = () => RC.drawReceipt(d); name = `${d.no}.png`; alt = 'receipt'; }
+  else if (kind === 'referral') { x = model().cust.get(id); if (!x) return; const d = RC.referralData(x, co); draw = () => RC.drawReferralCard(d); name = `KORA-referral-${d.code || 'card'}.png`; alt = 'referral card'; }
+  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return; x = model().cust.get(v.customerId); if (!x) return; const d = RC.visitData(x, v, co); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit report'; }
+  else return;
+  box.classList.remove('hidden'); box.innerHTML = '<div class="muted" style="margin-top:8px">Making the picture…</div>';
   try {
-    const d = RC.receiptData(x, pay, { name: S.settings.coName || 'KORA CARE Pvt. Ltd.', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '' });
-    const cv = await RC.drawReceipt(d); S.rcCanvas = cv;
+    const cv = await draw(); S.rcCanvas = cv; S.rcKind = kind;
     const blob = await RC.canvasBlob(cv); if (S.rcUrl) { try { URL.revokeObjectURL(S.rcUrl); } catch (e) {} }
-    S.rcUrl = URL.createObjectURL(blob); S.rcBlob = blob; S.rcName = `${d.no}.png`;
+    S.rcUrl = URL.createObjectURL(blob); S.rcBlob = blob; S.rcName = name;
     const can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], S.rcName, { type: 'image/png' })] }));
-    box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="receipt">
+    box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(alt)}">
       ${can ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcShare">📤 Share → WhatsApp</button>` : ''}
       <a class="btn ghost" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
       <div class="muted" style="margin-top:6px;font-size:12px">${can ? 'Share → choose WhatsApp → the customer' : 'Save, then send it from WhatsApp'}</div>`;
+    box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   } catch (e) { box.innerHTML = `<div class="muted">Could not make the image · ${esc(e && e.message || e)}</div>`; }
 }
 async function loadPrivate(id) {
@@ -2973,7 +2983,9 @@ document.addEventListener('click', async (ev) => {
   const a = t.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
   if (act === 'closeDrawer') closeDrawer();
-  else if (act === 'rcImg') { ev.preventDefault(); imageReceipt(a.dataset.pid); }
+  else if (act === 'rcImg') { ev.preventDefault(); imageCard('receipt', a.dataset.pid); }
+  else if (act === 'rcRef') { ev.preventDefault(); imageCard('referral', a.dataset.cid); }
+  else if (act === 'rcVisit') { ev.preventDefault(); imageCard('visit', a.dataset.vid); }
   else if (act === 'rcShare') { ev.preventDefault(); if (!S.rcBlob) return; const r = await RC.shareImage(S.rcBlob, S.rcName || 'receipt.png'); toast(r === 'shared' ? '✅ Shared' : r === 'unsupported' ? 'Sharing not available here — save the image' : 'Share cancelled'); }
   else if (act === 'demoWho') { if (DEMO) demoWho(); }
   else if (act === 'demoAs') { if (DEMO) demoAs(a.dataset.as || ''); }

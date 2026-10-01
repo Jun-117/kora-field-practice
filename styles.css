@@ -804,3 +804,6 @@ nav.tabs button { transition: background .18s, color .18s; }
 .chip, .chk { transition: background .12s, border-color .12s, transform .08s; }
 .pill { transition: background .15s, color .15s; }
 .btn.small:active, .icon-btn:active, .rowb:active { transform: scale(.98); }
+
+/* v0.12 image receipt preview */
+.rc-img{width:100%;max-width:340px;display:block;margin:10px auto;border-radius:14px;box-shadow:0 6px 18px rgba(13,45,94,.18)}

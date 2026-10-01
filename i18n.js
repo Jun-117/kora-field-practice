@@ -1270,6 +1270,10 @@ P.unshift(
   [/^Shelf = in − out − issued \+ returned − used from the shelf\. Order more below (\d+) \(🔴 first guess$/, '선반 = 입고 − 출고 − 지급 + 반납 − 선반에서 씀. $1 아래면 추가 주문 (🔴 첫 추정', 'शेल्फ = भित्र − बाहिर − दिइएको + फिर्ता − शेल्फबाट प्रयोग। $1 भन्दा कम भए थप अर्डर (🔴 पहिलो अनुमान'],
 );
 
+W['🧾 Image receipt'] = ['🧾 이미지 영수증', '🧾 फोटो रसिद']; W['📤 Share → WhatsApp'] = ['📤 공유 → WhatsApp', '📤 सेयर → WhatsApp']; W['⬇️ Save image'] = ['⬇️ 이미지 저장', '⬇️ फोटो सेभ'];
+W['Share → choose WhatsApp → the customer'] = ['공유 → WhatsApp 선택 → 고객', 'सेयर → WhatsApp छान्नुहोस् → ग्राहक']; W['Save, then send it from WhatsApp'] = ['저장한 뒤 WhatsApp에서 보내세요', 'सेभ गरेर WhatsApp बाट पठाउनुहोस्'];
+W['Making the receipt…'] = ['영수증 만드는 중…', 'रसिद बनाउँदै…']; W['Could not make the image'] = ['이미지를 못 만들었어요', 'फोटो बनाउन सकिएन']; W['✅ Shared'] = ['✅ 공유됨', '✅ सेयर भयो'];
+W['Sharing not available here — save the image'] = ['여기선 공유가 안 돼요 — 이미지를 저장하세요', 'यहाँ सेयर मिल्दैन — फोटो सेभ गर्नुहोस्']; W['Share cancelled'] = ['공유 취소됨', 'सेयर रद्द']; W['Company WhatsApp number'] = ['회사 WhatsApp 번호', 'कम्पनीको WhatsApp नम्बर'];
 Object.assign(W, { 'Practice — saved on this phone only': ['연습 — 이 폰에만 저장', 'अभ्यास — यो फोनमा मात्र सेभ'], 'PRACTICE — NOT SENT TO THE SERVER': ['연습용 — 서버로 안 보냄', 'अभ्यास — सर्भरमा पठाइँदैन'] });
 
 const D2 = {}; for (const [en, [ko, ne]] of Object.entries(W)) { D2[en.trim()] = { ko, ne }; }

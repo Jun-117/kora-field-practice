@@ -11,7 +11,7 @@ const CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export function loadDemo(S, today) {
   const r = rng(20260928); const pick = (a) => a[Math.floor(r() * a.length)]; const int = (a, b) => a + Math.floor(r() * (b - a + 1));
   let n = 0; const id = (p) => `${p}_demo_${(++n).toString(36)}`;
-  let billN = 0; S.settings = { ...S.settings, coName: 'KORA CARE DEMO Pvt. Ltd. (fake)', coPan: '999999999', coAddress: 'Pokhara (demo)' };
+  let billN = 0; S.settings = { ...S.settings, coName: 'KORA CARE DEMO Pvt. Ltd. (fake)', coPan: '999999999', coAddress: 'Pokhara (demo)', coPhone: '+977 970-0000000 (fake)' };
   const put = (col, x) => { x.id = x.id || id(col); x.createdBy = 'demo-uid'; S.D[col].set(x.id, x); return x; };
   const tolesW = Object.keys(TOLES).flatMap((k) => Array(['Lakeside', 'Chipledhunga', 'Newroad', 'Prithvi', 'Baidam'].includes(k) ? 3 : 1).fill(k));
   const custs = [];

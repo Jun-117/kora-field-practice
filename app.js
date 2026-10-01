@@ -14,8 +14,9 @@ import * as G from './geo.js';
 import * as CA from './capack.js';
 import * as B from './bs.js';
 import * as CAL from './cal.js';
+import * as RC from './receipt.js';
 
-export const APP_VERSION = 'kf-v0.11.2 (2026-10-01)';
+export const APP_VERSION = 'kf-v0.12.0 (2026-10-01)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -2103,7 +2104,26 @@ function receiptCard(x, pay) {
   const lines = sp.extra !== undefined ? [[pay.type, sp.extra]] : [['Installation / first month', sp.install], ['Subscription', sp.subscription], ['Refundable deposit (not a fee)', sp.deposit], ['Credit carried forward', sp.unallocated]].filter(([, v]) => v > 0.01);
   const text = `KORA CARE — receipt\n${x.c.name} (${x.c.code})\nDate: ${pay.date}\n` + lines.map(([l, v]) => `${l}: NPR ${Math.round(v).toLocaleString('en-IN')}`).join('\n') + `\nTotal: NPR ${Math.round(pay.amount).toLocaleString('en-IN')}${Number(pay.discount) > 0 ? `\nDiscount: NPR ${Math.round(pay.discount).toLocaleString('en-IN')}${pay.approval === 'Pending' ? ' (waiting for approval)' : pay.approval === 'Rejected' ? ' (not approved)' : ''}` : ''}\nPaid by: ${pay.method || ''}${pay.ref ? ' · ' + pay.ref : ''}\nThank you! 🙏`;
   return `<div class="card" style="border-color:var(--ok)"><div class="status">🧾 Receipt</div><pre class="diag" style="color:var(--ink);margin:10px 0 0">${esc(text)}</pre>
-    <a class="btn ok" style="display:block;text-align:center;text-decoration:none;line-height:56px" href="${esc(waLink(x.c.phone, text))}" target="_blank" rel="noopener">💬 Send receipt on WhatsApp</a></div>`;
+    <a class="btn ok" style="display:block;text-align:center;text-decoration:none;line-height:56px" href="${esc(waLink(x.c.phone, text))}" target="_blank" rel="noopener">💬 Send receipt on WhatsApp</a>
+    <button type="button" class="btn" style="display:block;width:100%;margin-top:8px" data-act="rcImg" data-pid="${esc(pay.id)}">🧾 Image receipt</button><div id="rcBox" class="hidden"></div></div>`;
+}
+/* v0.12 image receipt (Jun 2026-10-01 "이거로 하자"): the picture version of the same payment, drawn on this phone (receipt.js),
+   then the share sheet → WhatsApp → the customer. Falls back to "save the image" where the share sheet cannot take files. */
+async function imageReceipt(pid) {
+  const pay = S.D.payments.get(pid); const box = $('#rcBox'); if (!pay || !box) return;
+  const x = model().cust.get(pay.customerId); if (!x) { toast('Customer not found'); return; }
+  box.classList.remove('hidden'); box.innerHTML = '<div class="muted" style="margin-top:8px">Making the receipt…</div>';
+  try {
+    const d = RC.receiptData(x, pay, { name: S.settings.coName || 'KORA CARE Pvt. Ltd.', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '' });
+    const cv = await RC.drawReceipt(d); S.rcCanvas = cv;
+    const blob = await RC.canvasBlob(cv); if (S.rcUrl) { try { URL.revokeObjectURL(S.rcUrl); } catch (e) {} }
+    S.rcUrl = URL.createObjectURL(blob); S.rcBlob = blob; S.rcName = `${d.no}.png`;
+    const can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], S.rcName, { type: 'image/png' })] }));
+    box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="receipt">
+      ${can ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcShare">📤 Share → WhatsApp</button>` : ''}
+      <a class="btn ghost" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
+      <div class="muted" style="margin-top:6px;font-size:12px">${can ? 'Share → choose WhatsApp → the customer' : 'Save, then send it from WhatsApp'}</div>`;
+  } catch (e) { box.innerHTML = `<div class="muted">Could not make the image · ${esc(e && e.message || e)}</div>`; }
 }
 async function loadPrivate(id) {
   const ta = $('#drawer #privNotes') || $('#privNotes'); if (!ta || !isBoss()) return;
@@ -2568,6 +2588,7 @@ export function viewReport(p) {
       <label>Legal company name</label><input name="coName" value="${esc(S.settings.coName || '')}" placeholder="as on the PAN / VAT certificate">
       <label>Company PAN (VAT)</label><input name="coPan" value="${esc(S.settings.coPan || '')}" inputmode="numeric" placeholder="9 digits">
       <label>Address</label><input name="coAddress" value="${esc(S.settings.coAddress || '')}" placeholder="e.g. Pokhara-13, Kaski">
+      <label>Company WhatsApp number</label><input name="coPhone" value="${esc(S.settings.coPhone || '')}" placeholder="+977 9xx-xxxxxxx" hint="on the image receipt">
       <label>Nepali calendar fix (only if the CA says a month length is wrong)</label><textarea name="bsOverride" placeholder="2084: 31,32,31,32,31,30,30,30,29,29,30,31">${esc(S.settings.bsOverride || '')}</textarea><div class="hint">Years 2080–2083 are checked against 3 sources. From 2084 the sources disagree — put the official month lengths here when the calendar is out.</div>
       ${S.isAdmin ? '<button class="btn" type="submit">Save settings</button>' : '<div class="hint">Only Jun (admin) changes settings — the deputy can read them.</div>'}</form>
     <div class="card"><div class="kv"><div class="k">Day 1</div><div class="v">${R.npr(R.PRICES.installFee)}</div><div class="k">Months 2–13</div><div class="v">${R.npr(R.PRICES.monthly + R.PRICES.depositMonthly)} (incl. deposit ${R.PRICES.depositMonthly})</div><div class="k">Months 14–36</div><div class="v">${R.npr(R.PRICES.monthly)}</div><div class="k">Deposit</div><div class="v">${R.npr(R.PRICES.depositTotal)}</div></div></div>`;
@@ -2951,6 +2972,8 @@ document.addEventListener('click', async (ev) => {
   const a = t.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
   if (act === 'closeDrawer') closeDrawer();
+  else if (act === 'rcImg') { ev.preventDefault(); imageReceipt(a.dataset.pid); }
+  else if (act === 'rcShare') { ev.preventDefault(); if (!S.rcBlob) return; const r = await RC.shareImage(S.rcBlob, S.rcName || 'receipt.png'); toast(r === 'shared' ? '✅ Shared' : r === 'unsupported' ? 'Sharing not available here — save the image' : 'Share cancelled'); }
   else if (act === 'demoWho') { if (DEMO) demoWho(); }
   else if (act === 'demoAs') { if (DEMO) demoAs(a.dataset.as || ''); }
   else if (act === 'demoReset') { if (!DEMO || !DEMO_KEEP) return; if (a.dataset.armed !== '1') { a.dataset.armed = '1'; a.textContent = 'Tap again — delete every practice record'; a.classList.add('danger'); return; } location.href = location.pathname + '?reset=1'; }
@@ -3060,7 +3083,7 @@ document.addEventListener('submit', async (ev) => {
     if (!S.isAdmin) { toast('Only Jun changes settings'); return; }
     const e = f.elements; const pan = e.coPan.value.replace(/\s/g, '');
     if (pan && !/^\d{9}$/.test(pan)) { toast('Company PAN has 9 digits'); return; }
-    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
+    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
       apprDiscountOver: e.apprDiscountOver.value.trim() === '' ? null : Math.max(0, Number(e.apprDiscountOver.value) || 0), apprRefundOver: e.apprRefundOver.value.trim() === '' ? null : Math.max(0, Number(e.apprRefundOver.value) || 0), apprWho: e.apprWho.value }; // numbers: the rules compare them
     auditLog('settings', 'app', S.settings, data); save('settings/app', data, false); S.settings = { ...S.settings, ...data }; B.setOverrides(data.bsOverride); bump(); toast('Settings saved'); goBack();
   }

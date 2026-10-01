@@ -15,12 +15,12 @@ export function loadDemo(S, today) {
   const put = (col, x) => { x.id = x.id || id(col); x.createdBy = 'demo-uid'; S.D[col].set(x.id, x); return x; };
   const tolesW = Object.keys(TOLES).flatMap((k) => Array(['Lakeside', 'Chipledhunga', 'Newroad', 'Prithvi', 'Baidam'].includes(k) ? 3 : 1).fill(k));
   const custs = [];
-  // installs: ramp over ~11 months (8/month early → 12/month later, per the plan's time ramp)
-  const start = R.addDays(today, -330);
+  // installs: ramp over ~10 months (4/month early → 6/month later) → about 50 homes = the PoC size (v0.12.2 Jun: realistic numbers)
+  const start = R.addDays(today, -300);
   let d = start; let sameDay = 0;
   while (d < R.addDays(today, -2)) {
     const monthsIn = R.monthsBetween(start, d);
-    const perMonth = (monthsIn < 6 ? 6 : 9) * (typeof location !== 'undefined' && location.search.includes('big') ? 9.5 : 1);
+    const perMonth = (monthsIn < 6 ? 4 : 6) * (typeof location !== 'undefined' && location.search.includes('big') ? 9.5 : 1);
     sameDay = (sameDay || 0) + 1; const gap = Math.round((30 / perMonth) * (0.6 + r() * 0.8)); if (gap >= 1 || sameDay > 4) { d = R.addDays(d, Math.max(1, gap)); sameDay = 0; }
     if (d >= today) break;
     const inst = d; const tole = pick(tolesW); const [la, lo] = TOLES[tole];
@@ -41,13 +41,13 @@ export function loadDemo(S, today) {
     });
     custs.push(c);
   }
-  // behaviour: 80% on time, 12% late, 8% stopped paying
+  // behaviour: 88% on time, 8% late, 4% stopped paying (v0.12.2)
   for (const c of custs) {
-    const kind = r(); const stopAt = kind > 0.92 ? int(3, 8) : 99;
+    const kind = r(); const stopAt = kind > 0.96 ? int(3, 8) : 99;
     for (let k = 1; k <= 60; k++) {
       const due = R.billDue(c.installDate, k); if (due > today) break;
       if (k >= stopAt) break;
-      const delay = k === 1 ? 0 : kind < 0.8 ? int(-2, 4) : kind < 0.92 ? int(4, 18) : int(0, 6);
+      const delay = k === 1 ? 0 : kind < 0.88 ? int(-2, 4) : kind < 0.96 ? int(4, 18) : int(0, 6);
       const date = R.addDays(due, delay); if (date > today) continue;
       const b = R.billAmount(k);
       put('payments', { customerId: c.id, date, type: k === 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: b.amount, method: pick(['Khalti', 'eSewa', 'Fonepay QR', 'Fonepay QR', k === 1 ? 'Khalti' : 'Cash']), ref: 'TXN' + int(100000, 999999), billNo: r() < 0.05 ? '' : String(1000 + (++billN)), point: pick(['Field visit', 'Digital', 'Digital']), by: 'Tara', updatedAt: { toMillis: () => R.parseD(date).getTime() + 14 * 3600e3 } });
@@ -59,7 +59,7 @@ export function loadDemo(S, today) {
     for (let i = 0; i < 20; i++) {
       const step = R.monthsBetween(c.installDate, last) < 6 ? 1 : 3;
       const planned = R.addMonths(last, step);
-      if (planned > R.addDays(today, -1) || r() < 0.015) break;
+      if (planned > R.addDays(today, -1) || r() < 0.004) break; /* v0.12.2: fewer homes with a visit left hanging */
       let date = R.addDays(planned, int(-3, 4)); if (date > R.addDays(today, -1)) date = R.addDays(today, -1);
       const filters = [];
       const ppCol = R.monthsBetween(lastPP, date) >= 4 ? pick(['Brown', 'Brown', 'Black']) : R.monthsBetween(lastPP, date) >= 2 ? pick(['White', 'Brown']) : 'White';
@@ -97,15 +97,15 @@ export function loadDemo(S, today) {
   custs.slice(6, 8).forEach((c) => { c.status = 'Paused'; c.pausedUntil = R.addDays(today, 20); });
   // service requests
   const reqT = ['Breakdown', 'Water quality', 'Leak', 'Claim', 'Other'];
-  for (let i = 0; i < 10; i++) {
-    const c = pick(custs.filter((x) => x.status === 'Active')); const open = i < 3;
+  for (let i = 0; i < 8; i++) {
+    const c = pick(custs.filter((x) => x.status === 'Active')); const open = i < 2; /* v0.12.2: 2 open requests, not 3 */
     const ms = open ? Date.now() - [1.5, 20, 60][i] * 3600e3 : R.parseD(R.addDays(today, -int(5, 200))).getTime() + int(9, 18) * 3600e3;
     const dt = new Date(ms);
     put('requests', { customerId: c.id, type: pick(reqT), priority: i === 0 ? 'Urgent' : pick(['Normal', 'Normal', 'Low']), status: open ? (i === 1 ? 'In progress' : 'Received') : 'Done', receivedAt: `${R.fmtD(dt)}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`, receivedAtMs: ms, receivedDate: R.fmtD(dt), description: pick(['water flow slow since yesterday', 'small leak under the tap', 'water tastes different', 'UV light blinking', 'wants a second tap']), agent: 'Tara', resolution: open ? '' : 'fixed on site', doneDate: open ? '' : R.fmtD(dt), updatedAt: { toMillis: () => ms } });
   }
   // leads
   const stages = ['New', 'New', 'Thinking', 'Thinking', 'Thinking', 'Demo booked', 'Signed', 'Rejected'];
-  for (let i = 0; i < 22; i++) { const st = pick(stages); put('leads', { name: `${pick(FIRST)} ${pick(LAST)}`, phone: '+97798' + int(10000000, 99999999), tole: pick(Object.keys(TOLES)), ward: String(int(1, 33)), channel: pick(['Word of mouth', 'Tara_Direct', 'Pop-up Booth', 'Facebook']), outcome: st, followUpDate: st === 'Signed' || st === 'Rejected' ? '' : R.addDays(today, int(-4, 6)), rejectReason: st === 'Rejected' ? pick(['price', 'landlord said no', 'already has RO']) : '', updatedAt: { toMillis: () => Date.now() - int(1, 400) * 3600e3 } }); }
+  for (let i = 0; i < 12; i++) { const st = pick(stages); /* v0.12.2: 12 open-ish leads, not 22 */ put('leads', { name: `${pick(FIRST)} ${pick(LAST)}`, phone: '+97798' + int(10000000, 99999999), tole: pick(Object.keys(TOLES)), ward: String(int(1, 33)), channel: pick(['Word of mouth', 'Tara_Direct', 'Pop-up Booth', 'Facebook']), outcome: st, followUpDate: st === 'Signed' || st === 'Rejected' ? '' : R.addDays(today, int(-1, 6)), rejectReason: st === 'Rejected' ? pick(['price', 'landlord said no', 'already has RO']) : '', updatedAt: { toMillis: () => Date.now() - int(1, 400) * 3600e3 } }); }
   // stock
   put('stockMoves', { item: 'Device', type: 'In', qty: 50, date: R.addDays(start, -10), ref: 'TQ-PI-20260808 (50 units)' });
   put('stockMoves', { item: 'Device', type: 'In', qty: 60, date: R.addDays(today, -120), ref: 'second batch (demo)' });
@@ -214,7 +214,10 @@ export function loadDemo(S, today) {
   { const q = rng(9292026); const pays = [...S.D.payments.values()];
     const ledOf = (c) => R.ledger(c, pays.filter((p) => p.customerId === c.id), today);
     const act = [...S.D.customers.values()].filter((c) => c.status === 'Active' && R.isDate(c.installDate));
-    const late = act.map((c) => ({ c, led: ledOf(c) })).filter((x) => x.led.daysOverdue >= 3).sort((a, b) => b.led.daysOverdue - a.led.daysOverdue);
+    const lateOf = () => act.map((c) => ({ c, led: ledOf(c) })).filter((x) => x.led.daysOverdue >= 3).sort((a, b) => b.led.daysOverdue - a.led.daysOverdue);
+    let late = lateOf();
+    // v0.12.2: the small world (≈50 homes · 8 % late) can leave fewer than 5 late homes — the chase stories below need 5, so a few paid-up homes lose their last payment(s)
+    for (const c of act) { if (late.length >= 5) break; if (late.some((x) => x.c.id === c.id)) continue; const all = pays.filter((p) => p.customerId === c.id); if (all.some((p) => p.approval || p.savedAt || p.discount || p.date >= R.addDays(today, -7))) continue; /* keep the homes that carry the approval / field-live stories */ const mine = all.filter((p) => p.type === 'Monthly subscription').sort((a, b) => b.date.localeCompare(a.date)); if (mine.length < 3) continue; for (const p of mine.slice(0, 1 + (late.length % 2))) { S.D.payments.delete(p.id); pays.splice(pays.indexOf(p), 1); } late = lateOf(); }
     const chase = (c, x) => put('checkins', { customerId: c.id, kind: R.CHASE_KIND, by: q() < 0.7 ? 'Tara' : 'Ramesh', channel: 'Phone', ...x });
     late.forEach((x, i) => {
       const since = x.led.overdueSince; const owe = Math.round(x.led.overdue); const y = R.addDays(today, -1);

@@ -209,49 +209,46 @@ export function referralData(x, co = {}) {
   return { name: x.c.name || '', code: x.c.code || '', price: money(R.PRICES.monthly), ...coOf(co) };
 }
 export async function drawReferralCard(d) {
-  const H2 = 466; // 1080 × 1398 (≈4:5) — a card, not a page · room for a 2-line contact row
+  // Jun 2026-10-02: the "pair" layout — you / neighbour boxes + the code band — in the receipt's theme (no barcode)
+  const H2 = 450; // 1080 × 1350 (4:5)
   const im = await logo();
   const cv = document.createElement('canvas'); cv.width = W * SCALE; cv.height = H2 * SCALE;
   const ctx = cv.getContext('2d'); ctx.scale(SCALE, SCALE);
-  const g0 = ctx.createLinearGradient(0, 0, 0, H2); g0.addColorStop(0, '#dff1fb'); g0.addColorStop(1, '#c9e6f7'); ctx.fillStyle = g0; ctx.fillRect(0, 0, W, H2);
-  const cx = 12, cw = W - 24, ct = 16, cb = H2 - 16;
+  ctx.fillStyle = '#e3eef8'; ctx.fillRect(0, 0, W, H2);
+  const cx = 8, cw = W - 16, ct = 16, cb = H2 - 16;
   ctx.save(); ctx.shadowColor = 'rgba(13,45,94,.18)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5; ctx.fillStyle = '#fff'; rr(ctx, cx, ct, cw, cb - ct, 20); ctx.fill(); ctx.restore();
-  const L = cx + 20, Rt = cx + cw - 20, IW = Rt - L; let y = ct + 22;
+  const L = cx + 22, Rt = cx + cw - 22, IW = Rt - L; let y = ct + 24;
   if (im) { const h = 30, w = h * im.width / im.height; ctx.drawImage(im, L, y, w, h); }
-  text(ctx, 'REFER A NEIGHBOUR', Rt, y + 12, { f: font(700, 10), color: C.blue, align: 'right', ls: 1.4 });
-  text(ctx, NE.refer, Rt, y + 26, { f: font(500, 9.5), color: C.mute, align: 'right' });
-  y += 44;
-  // band
-  const bh = 98; ctx.save(); rr(ctx, L, y, IW, bh, 16); ctx.clip();
-  const g = ctx.createLinearGradient(L, y, L + IW, y + bh); g.addColorStop(0, '#0f3a73'); g.addColorStop(0.7, '#1f6fb2'); g.addColorStop(1, '#2d86c8'); ctx.fillStyle = g; ctx.fillRect(L, y, IW, bh);
-  ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(L + IW - 10, y - 20, 80, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.beginPath(); ctx.arc(L + IW - 70, y + bh + 10, 50, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  text(ctx, 'Bring a neighbour.', L + 18, y + 34, { f: font(800, 22), color: '#fff' });
-  text(ctx, 'You both get 1 month free.', L + 18, y + 60, { f: font(800, 18), color: '#8fd3f4' });
-  text(ctx, NE.both, L + 18, y + 82, { f: font(500, 11), color: 'rgba(255,255,255,.9)' });
-  y += bh + 14;
-  // 3 steps
-  const steps = [['Tell a neighbour or a relative about KORA CARE.', ''], [`They WhatsApp us${d.phone ? ' at ' + d.phone : ''} and say your code.`, ''], ['After their first month: your next bill is free — and so is their second.', '']];
-  for (let i = 0; i < steps.length; i++) {
-    ctx.fillStyle = C.sky; ctx.beginPath(); ctx.arc(L + 12, y + 8, 12, 0, Math.PI * 2); ctx.fill();
-    text(ctx, String(i + 1), L + 12, y + 12.5, { f: font(800, 12), color: C.blue, align: 'center' });
-    const ls = wrap(ctx, steps[i][0], IW - 36, font(400, 12)); ls.forEach((ln, j) => text(ctx, ln, L + 32, y + 12 + j * 15, { f: font(400, 12), color: C.ink }));
-    y += Math.max(1, ls.length) * 15 + 9;
-  }
-  // code box
-  ctx.fillStyle = C.sky; rr(ctx, L, y, IW, 66, 14); ctx.fill();
-  text(ctx, `YOUR CODE · ${NE.code}`, L + 14, y + 20, { f: font(600, 9.5), color: C.skyInk, ls: 1 });
-  text(ctx, d.code, L + 14, y + 48, { f: font(800, 26), color: C.navy });
-  text(ctx, d.name, Rt - 14, y + 48, { f: font(600, 12.5), color: C.navy, align: 'right', max: IW / 2 });
-  y += 66 + 12;
+  text(ctx, `REFER A NEIGHBOUR · ${NE.refer}`, Rt, y + 20, { f: font(700, 9.5), color: C.blue, align: 'right', ls: 1.2, max: IW * 0.6 });
+  y += 30 + 22;
+  text(ctx, 'Bring a neighbour.', L, y, { f: font(800, 20), color: C.navy }); y += 24;
+  text(ctx, 'You both get 1 month free.', L, y, { f: font(800, 20), color: C.navy }); y += 20;
+  text(ctx, `${NE.refer} — ${NE.both}`, L, y, { f: font(500, 11), color: C.mute, max: IW }); y += 18;
+  // you / neighbour
+  const gw = (IW - 10) / 2, bh = 78;
+  const box = (x0, k, big, small) => { ctx.fillStyle = C.sky; rr(ctx, x0, y, gw, bh, 14); ctx.fill(); text(ctx, k, x0 + 12, y + 20, { f: font(600, 9), color: C.mute, ls: 1, max: gw - 24 }); text(ctx, big, x0 + 12, y + 46, { f: font(800, 15), color: C.navy, max: gw - 24 }); text(ctx, small, x0 + 12, y + 63, { f: font(400, 9.5), color: C.skyInk, max: gw - 24 }); };
+  box(L, 'YOU · तपाईं', 'Next bill free', 'after their first month');
+  box(L + gw + 10, 'NEIGHBOUR · छिमेकी', '2nd month free', 'off their bill 2');
+  y += bh + 12;
+  // code band
+  const kb = 64; ctx.save(); rr(ctx, L, y, IW, kb, 14); ctx.clip();
+  const g = ctx.createLinearGradient(L, y, L + IW, y + kb); g.addColorStop(0, '#0f3a73'); g.addColorStop(0.7, '#1f6fb2'); g.addColorStop(1, '#2d86c8'); ctx.fillStyle = g; ctx.fillRect(L, y, IW, kb);
+  ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(L + IW - 20, y - 20, 60, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  text(ctx, `YOUR CODE · ${NE.code}`, L + 14, y + 20, { f: font(400, 9.5), color: 'rgba(255,255,255,.85)', ls: 1.2 });
+  text(ctx, d.code, L + 14, y + 49, { f: font(800, 26), color: '#fff' });
+  text(ctx, d.name, Rt - 14, y + 30, { f: font(500, 11.5), color: '#fff', align: 'right', max: IW * 0.45 });
+  text(ctx, 'KORA CARE member', Rt - 14, y + 46, { f: font(400, 10), color: 'rgba(255,255,255,.85)', align: 'right' });
+  y += kb + 20;
+  // how
+  const how = `They WhatsApp ${d.phone || 'KORA CARE'} and say this code.`;
+  wrap(ctx, how, IW, font(400, 12)).forEach((ln, i) => text(ctx, ln, L, y + i * 16, { f: font(400, 12), color: C.ink })); y += 16;
   // footer
-  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(cx + cw, y); ctx.stroke(); y += 17;
-  text(ctx, `Clean water, looked after · NPR ${d.price} a month`, L, y, { f: font(700, 12), color: C.navy }); y += 18;
-  contacts(ctx, d, L, Rt, y);
+  const fy = cb - 20;
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx, fy - 30); ctx.lineTo(cx + cw, fy - 30); ctx.stroke();
+  text(ctx, `Clean water, looked after · NPR ${d.price} a month`, L, fy - 12, { f: font(700, 11), color: C.navy, max: IW });
+  text(ctx, d.web, L, fy + 2, { f: font(400, 9.5), color: C.mute });
   return cv;
 }
-
 export function visitData(x, v, co = {}) {
   const f = (n) => (n === null || n === undefined || n === '' || !Number.isFinite(Number(n))) ? null : Number(n);
   const fd = (x.fd || []).filter((q) => q.due).map((q) => ({ type: q.type, due: niceDate(q.due), status: q.status }));

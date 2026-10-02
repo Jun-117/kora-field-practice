@@ -16,7 +16,8 @@ import * as B from './bs.js';
 import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
-export const APP_VERSION = 'kf-v0.13.1 (2026-10-02)';
+document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
+export const APP_VERSION = 'kf-v0.13.2 (2026-10-02)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -1816,6 +1817,8 @@ function viewToday() {
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">${langSeg()}<span class="syncpill"><span class="dot live ${s.c}" data-sync-dot></span><span data-sync-text>${esc(s.t)}</span></span></div></div>
     <div class="stats"><button data-list="visits"><b>${m.visitsDue.length}</b><span>Visits due</span></button><button data-list="collections"><b>${chase.length}</b><span>${late ? `To collect · ${late} late` : 'To collect'}</span></button><button data-list="calls"><b>${m.calls.length}</b><span>Calls</span></button></div>
     <button class="cta" data-tab-go="route">🗺️ Open today's route</button>
+    <button type="button" class="memo-btn${lsGet('kfp_memo', '') ? ' has' : ''}" data-act="memoToggle" title="Memo">📝 Memo${lsGet('kfp_memo', '') ? ' ·' : ''}</button>
+    <div id="memoBox" class="memo${lsGet('kfp_memo_open', 0) ? '' : ' hidden'}"><textarea id="memoTa" rows="4" placeholder="Memo — stays on this phone">${esc(lsGet('kfp_memo', ''))}</textarea><div class="muted" id="memoHint">${lsGet('kfp_memo', '') ? 'Saved on this phone' : 'Anything — it is saved as you type'}</div></div>
   </div>
   <div class="grid2 stagger" style="margin-top:12px">${tiles.map(([k, ic, l, n, sub, cls], i) => `<button class="tile ${cls} ${tones[k]}" data-list="${k}" style="--i:${i}"><span class="ic">${ic}</span><span class="n">${n}</span><span>${l}</span><span class="s">${esc(sub)}</span></button>`).join('')}</div>
   ${sec('💰 Chase first', chase.slice(0, 5).map((x) => dunItem(x)).join(''), 'Nobody to chase today 🏖️', 'collections')}
@@ -2983,6 +2986,7 @@ document.addEventListener('click', async (ev) => {
   const a = t.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
   if (act === 'closeDrawer') closeDrawer();
+  else if (act === 'memoToggle') { ev.preventDefault(); const b = $('#memoBox'); if (!b) return; b.classList.toggle('hidden'); lsSet('kfp_memo_open', b.classList.contains('hidden') ? 0 : 1); if (!b.classList.contains('hidden')) { const ta = $('#memoTa'); if (ta) ta.focus(); } }
   else if (act === 'rcImg') { ev.preventDefault(); imageCard('receipt', a.dataset.pid); }
   else if (act === 'rcRef') { ev.preventDefault(); imageCard('referral', a.dataset.cid); }
   else if (act === 'rcVisit') { ev.preventDefault(); imageCard('visit', a.dataset.vid); }

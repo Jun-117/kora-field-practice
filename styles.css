@@ -807,3 +807,9 @@ nav.tabs button { transition: background .18s, color .18s; }
 
 /* v0.12 image receipt preview */
 .rc-img{width:100%;max-width:340px;display:block;margin:10px auto;border-radius:14px;box-shadow:0 6px 18px rgba(13,45,94,.18)}
+
+/* v0.13.2 memo pad on Today (stays on this phone) */
+.memo-btn{display:block;width:100%;margin-top:8px;padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.14);color:#fff;font-weight:600;font-size:14px}
+.memo-btn.has{background:rgba(255,255,255,.26)}
+.memo{margin-top:8px}.memo textarea{width:100%;box-sizing:border-box;border-radius:12px;border:1px solid var(--line);padding:10px;font:inherit;font-size:15px;line-height:1.45;background:#fffbe6;color:#15202b;resize:vertical;min-height:96px}
+.memo .muted{font-size:11px;margin-top:4px;color:rgba(255,255,255,.8)}

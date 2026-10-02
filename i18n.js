@@ -1275,6 +1275,7 @@ P.unshift(
 );
 
 W['tick all'] = ['전부 선택', 'सबै छान्नुहोस्'];
+W['📝 Memo'] = ['📝 메모', '📝 मेमो']; W['📝 Memo ·'] = ['📝 메모 ·', '📝 मेमो ·']; W['Memo — stays on this phone'] = ['메모 — 이 폰에만 저장', 'मेमो — यो फोनमा मात्र']; W['Saved on this phone'] = ['이 폰에 저장됨', 'यो फोनमा सेभ']; W['Anything — it is saved as you type'] = ['아무거나 — 쓰는 대로 저장돼요', 'जे पनि — लेख्दै गर्दा सेभ हुन्छ'];
 W['🎁 Referral card'] = ['🎁 추천 카드', '🎁 सिफारिस कार्ड']; W['🧪 Visit report'] = ['🧪 방문 리포트', '🧪 भ्रमण रिपोर्ट']; W['Making the picture…'] = ['그림 만드는 중…', 'फोटो बनाउँदै…'];
 W['🧾 Image receipt'] = ['🧾 이미지 영수증', '🧾 फोटो रसिद']; W['📤 Share → WhatsApp'] = ['📤 공유 → WhatsApp', '📤 सेयर → WhatsApp']; W['⬇️ Save image'] = ['⬇️ 이미지 저장', '⬇️ फोटो सेभ'];
 W['Share → choose WhatsApp → the customer'] = ['공유 → WhatsApp 선택 → 고객', 'सेयर → WhatsApp छान्नुहोस् → ग्राहक']; W['Save, then send it from WhatsApp'] = ['저장한 뒤 WhatsApp에서 보내세요', 'सेभ गरेर WhatsApp बाट पठाउनुहोस्'];

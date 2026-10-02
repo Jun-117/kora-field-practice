@@ -209,44 +209,39 @@ export function referralData(x, co = {}) {
   return { name: x.c.name || '', code: x.c.code || '', price: money(R.PRICES.monthly), ...coOf(co) };
 }
 export async function drawReferralCard(d) {
-  // Jun 2026-10-02: the "pair" layout — you / neighbour boxes + the code band — in the receipt's theme (no barcode)
+  // Jun 2026-10-02 "그래 이거로하자" = H3: logo · two-tone headline · smaller code band (name inside) · you / neighbour · one guide line · one footer line
   const H2 = 450; // 1080 × 1350 (4:5)
   const im = await logo();
   const cv = document.createElement('canvas'); cv.width = W * SCALE; cv.height = H2 * SCALE;
   const ctx = cv.getContext('2d'); ctx.scale(SCALE, SCALE);
   ctx.fillStyle = '#e3eef8'; ctx.fillRect(0, 0, W, H2);
   const cx = 8, cw = W - 16, ct = 16, cb = H2 - 16;
-  ctx.save(); ctx.shadowColor = 'rgba(13,45,94,.18)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5; ctx.fillStyle = '#fff'; rr(ctx, cx, ct, cw, cb - ct, 20); ctx.fill(); ctx.restore();
-  const L = cx + 22, Rt = cx + cw - 22, IW = Rt - L; let y = ct + 24;
-  if (im) { const h = 30, w = h * im.width / im.height; ctx.drawImage(im, L, y, w, h); }
-  text(ctx, `REFER A NEIGHBOUR · ${NE.refer}`, Rt, y + 20, { f: font(700, 9.5), color: C.blue, align: 'right', ls: 1.2, max: IW * 0.6 });
-  y += 30 + 22;
-  text(ctx, 'Bring a neighbour.', L, y, { f: font(800, 20), color: C.navy }); y += 24;
-  text(ctx, 'You both get 1 month free.', L, y, { f: font(800, 20), color: C.navy }); y += 20;
-  text(ctx, `${NE.refer} — ${NE.both}`, L, y, { f: font(500, 11), color: C.mute, max: IW }); y += 18;
-  // you / neighbour
-  const gw = (IW - 10) / 2, bh = 78;
-  const box = (x0, k, big, small) => { ctx.fillStyle = C.sky; rr(ctx, x0, y, gw, bh, 14); ctx.fill(); text(ctx, k, x0 + 12, y + 20, { f: font(600, 9), color: C.mute, ls: 1, max: gw - 24 }); text(ctx, big, x0 + 12, y + 46, { f: font(800, 15), color: C.navy, max: gw - 24 }); text(ctx, small, x0 + 12, y + 63, { f: font(400, 9.5), color: C.skyInk, max: gw - 24 }); };
-  box(L, 'YOU · तपाईं', 'Next bill free', 'after their first month');
-  box(L + gw + 10, 'NEIGHBOUR · छिमेकी', '2nd month free', 'off their bill 2');
-  y += bh + 12;
+  ctx.save(); ctx.shadowColor = 'rgba(13,45,94,.12)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5; ctx.fillStyle = '#fff'; rr(ctx, cx, ct, cw, cb - ct, 20); ctx.fill(); ctx.restore();
+  const L = cx + 26, Rt = cx + cw - 26, IW = Rt - L, mid = L + IW / 2; let y = ct + 24;
+  if (im) { const h = 26, w = h * im.width / im.height; ctx.drawImage(im, L, y, w, h); }
+  y += 26 + 36;
+  text(ctx, 'Bring a neighbour.', mid, y, { f: font(800, 20), color: C.navy, align: 'center' }); y += 24;
+  text(ctx, 'You both get 1 month free.', mid, y, { f: font(800, 20), color: C.blue, align: 'center' }); y += 19;
+  text(ctx, `${NE.refer} — ${NE.both}`, mid, y, { f: font(500, 10.5), color: C.mute, align: 'center', max: IW }); y += 18;
   // code band
-  const kb = 64; ctx.save(); rr(ctx, L, y, IW, kb, 14); ctx.clip();
-  const g = ctx.createLinearGradient(L, y, L + IW, y + kb); g.addColorStop(0, '#0f3a73'); g.addColorStop(0.7, '#1f6fb2'); g.addColorStop(1, '#2d86c8'); ctx.fillStyle = g; ctx.fillRect(L, y, IW, kb);
-  ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(L + IW - 20, y - 20, 60, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-  text(ctx, `YOUR CODE · ${NE.code}`, L + 14, y + 20, { f: font(400, 9.5), color: 'rgba(255,255,255,.85)', ls: 1.2 });
-  text(ctx, d.code, L + 14, y + 49, { f: font(800, 26), color: '#fff' });
-  text(ctx, d.name, Rt - 14, y + 30, { f: font(500, 11.5), color: '#fff', align: 'right', max: IW * 0.45 });
-  text(ctx, 'KORA CARE member', Rt - 14, y + 46, { f: font(400, 10), color: 'rgba(255,255,255,.85)', align: 'right' });
-  y += kb + 20;
-  // how
-  const how = `They WhatsApp ${d.phone || 'KORA CARE'} and say this code.`;
-  wrap(ctx, how, IW, font(400, 12)).forEach((ln, i) => text(ctx, ln, L, y + i * 16, { f: font(400, 12), color: C.ink })); y += 16;
+  const kb = 76; ctx.save(); rr(ctx, L, y, IW, kb, 16); ctx.clip();
+  const g = ctx.createLinearGradient(L, y, L + IW, y + kb); g.addColorStop(0, C.navy); g.addColorStop(1, C.blue); ctx.fillStyle = g; ctx.fillRect(L, y, IW, kb); ctx.restore();
+  text(ctx, `YOUR CODE · ${NE.code}`, mid, y + 18, { f: font(400, 9), color: 'rgba(255,255,255,.8)', align: 'center', ls: 1.4 });
+  text(ctx, d.code, mid, y + 49, { f: font(800, 26), color: '#fff', align: 'center', ls: 1 });
+  text(ctx, d.name, mid, y + 66, { f: font(400, 10), color: 'rgba(255,255,255,.85)', align: 'center', max: IW - 40 });
+  y += kb + 14;
+  // you / neighbour
+  const gw = (IW - 10) / 2, bh = 62;
+  const box = (x0, k, big) => { ctx.fillStyle = C.sky; rr(ctx, x0, y, gw, bh, 14); ctx.fill(); text(ctx, k, x0 + gw / 2, y + 22, { f: font(600, 8.5), color: C.skyInk, align: 'center', ls: 1, max: gw - 16 }); text(ctx, big, x0 + gw / 2, y + 45, { f: font(700, 15), color: C.navy, align: 'center', max: gw - 16 }); };
+  box(L, 'YOU · तपाईं', 'Next bill free'); box(L + gw + 10, 'NEIGHBOUR · छिमेकी', '2nd month free');
+  y += bh + 26;
+  // guide line: "They WhatsApp <phone> and say this code."
+  ctx.font = font(400, 11); const a1 = 'They WhatsApp ', a3 = ' and say this code.'; const a2 = d.phone || 'KORA CARE';
+  const w1 = ctx.measureText(a1).width, w3 = ctx.measureText(a3).width; ctx.font = font(700, 11); const w2 = ctx.measureText(a2).width;
+  let x = mid - (w1 + w2 + w3) / 2; x += text(ctx, a1, x, y, { f: font(400, 11), color: C.mute }); x += text(ctx, a2, x, y, { f: font(700, 11), color: C.navy }); text(ctx, a3, x, y, { f: font(400, 11), color: C.mute });
   // footer
-  const fy = cb - 20;
-  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx, fy - 30); ctx.lineTo(cx + cw, fy - 30); ctx.stroke();
-  text(ctx, `Clean water, looked after · NPR ${d.price} a month`, L, fy - 12, { f: font(700, 11), color: C.navy, max: IW });
-  text(ctx, d.web, L, fy + 2, { f: font(400, 9.5), color: C.mute });
+  const fy = cb - 24; ctx.font = font(700, 9.5); const f1 = 'KORA CARE', f2 = ' · ' + (d.web || 'koracarenepal.com'); const fw1 = ctx.measureText(f1).width; ctx.font = font(400, 9.5); const fw2 = ctx.measureText(f2).width;
+  let fx = mid - (fw1 + fw2) / 2; fx += text(ctx, f1, fx, fy, { f: font(700, 9.5), color: C.navy }); text(ctx, f2, fx, fy, { f: font(400, 9.5), color: C.mute });
   return cv;
 }
 export function visitData(x, v, co = {}) {

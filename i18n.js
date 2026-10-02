@@ -1253,6 +1253,11 @@ Object.assign(W, {
   'Hold ☰ and drag a stop to where you want it': ['☰를 꾹 누른 채 원하는 자리로 끌어다 놓기', '☰ थिचिराखेर चाहेको ठाउँमा तान्नुहोस्'], 'Hold and drag': ['꾹 눌러 끌기', 'थिचेर तान्नुहोस्'],
 });
 P.unshift(
+  [/^Installation booked (\d{4}-\d{2}-\d{2})$/, '설치 예약 $1', 'जडान बुक $1'],
+  [/^🧾 Receipt saved · (R-[\w-]+)$/, '🧾 영수증 저장됨 · $1', '🧾 रसिद सेभ · $1'],
+  [/^🔧 Visit saved · (\d{4}-\d{2}-\d{2})$/, '🔧 방문 저장됨 · $1', '🔧 भ्रमण सेभ · $1'],
+  [/^📅 Tomorrow · (\d{4}-\d{2}-\d{2})$/, '📅 내일 · $1', '📅 भोलि · $1'],
+  [/^(\d+) homes? · tap 💬 to send the notice$/, '$1집 · 💬 눌러 예고 보내기', '$1 घर · 💬 थिचेर सूचना'],
   [/^To collect · (\d+) late$/, '받을 돈 · 연체 $1', 'उठाउने · $1 ढिला'],
   [/^([\d,]+) left$/, '$1 남음', '$1 बाँकी'],
   [/^Sanitise · (.+)$/, '소독 · $1', 'सफाइ · $1'],
@@ -1281,6 +1286,11 @@ W['🧾 Image receipt'] = ['🧾 이미지 영수증', '🧾 फोटो रस
 W['Share → choose WhatsApp → the customer'] = ['공유 → WhatsApp 선택 → 고객', 'सेयर → WhatsApp छान्नुहोस् → ग्राहक']; W['Save, then send it from WhatsApp'] = ['저장한 뒤 WhatsApp에서 보내세요', 'सेभ गरेर WhatsApp बाट पठाउनुहोस्'];
 W['Making the receipt…'] = ['영수증 만드는 중…', 'रसिद बनाउँदै…']; W['Could not make the image'] = ['이미지를 못 만들었어요', 'फोटो बनाउन सकिएन']; W['✅ Shared'] = ['✅ 공유됨', '✅ सेयर भयो'];
 W['Sharing not available here — save the image'] = ['여기선 공유가 안 돼요 — 이미지를 저장하세요', 'यहाँ सेयर मिल्दैन — फोटो सेभ गर्नुहोस्']; W['Share cancelled'] = ['공유 취소됨', 'सेयर रद्द']; W['Company WhatsApp number'] = ['회사 WhatsApp 번호', 'कम्पनीको WhatsApp नम्बर'];
+W['🧾 Receipt → WhatsApp'] = ['🧾 영수증 → WhatsApp', '🧾 रसिद → WhatsApp']; W['📨 Visit note → WhatsApp'] = ['📨 방문 메모 → WhatsApp', '📨 भ्रमण नोट → WhatsApp']; W['🏠 Installed card → WhatsApp'] = ['🏠 설치 완료 카드 → WhatsApp', '🏠 जडान कार्ड → WhatsApp'];
+W['📨 Visit note'] = ['📨 방문 메모', '📨 भ्रमण नोट']; W['🏠 Installed card'] = ['🏠 설치 완료 카드', '🏠 जडान कार्ड']; W['Then the receipt below.'] = ['다음은 아래 영수증.', 'त्यसपछि तलको रसिद।']; W['Installed'] = ['설치 완료', 'जडान भयो'];
+W['🗂️ Photo timeline'] = ['🗂️ 사진 타임라인', '🗂️ फोटो समयरेखा']; W['(ours · not sent)'] = ['(내부용 · 고객에게 안 감)', '(हाम्रो · पठाइँदैन)'];
+W['Filter interval from real data'] = ['필터 주기 = 실측값', 'फिल्टर अवधि = वास्तविक डाटा']; W['Yes — once a filter has 5+ real changes, use the observed average'] = ['예 — 실제 교체 5건 넘으면 실측 평균 사용', 'हो — ५+ वास्तविक परिवर्तनपछि औसत प्रयोग']; W['No — always the E-2 booking interval'] = ['아니오 — 항상 E-2 기본 주기', 'होइन — सधैं E-2 अवधि'];
+W['💬 Confirm date'] = ['💬 날짜 확인', '💬 मिति पक्का']; W['confirm with the customer'] = ['고객에게 확인', 'ग्राहकसँग पक्का गर्नुहोस्']; W['confirm 3 days before'] = ['3일 전에 확인', '३ दिन अघि पक्का']; W['💬 Notice'] = ['💬 예고', '💬 सूचना']; W['✓ sent'] = ['✓ 보냄', '✓ पठाइयो']; W['Nothing planned for tomorrow'] = ['내일 예정 없음', 'भोलि केही छैन']; W['no phone'] = ['전화 없음', 'फोन छैन'];
 Object.assign(W, { 'Practice — saved on this phone only': ['연습 — 이 폰에만 저장', 'अभ्यास — यो फोनमा मात्र सेभ'], 'PRACTICE — NOT SENT TO THE SERVER': ['연습용 — 서버로 안 보냄', 'अभ्यास — सर्भरमा पठाइँदैन'] });
 
 const D2 = {}; for (const [en, [ko, ne]] of Object.entries(W)) { D2[en.trim()] = { ko, ne }; }

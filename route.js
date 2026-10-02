@@ -3,6 +3,7 @@
 // Order: AUTO (default) = nearest-neighbour from where you stand + 2-opt, redone as you move (live position).
 //        MANUAL = your own order (hold ☰ and drag a stop, or 📌 it next — v0.11); "Auto" switches back. Both are kept per day on the phone.
 import * as R from './logic.js';
+import { nextText } from './app.js';
 import { S, model, esc, custLabel, toleOf, waLink, dunText, nav, toast, today, offerLink, omwBtn, omwChips, can } from './app.js';
 import { loadLeaflet, MAP_OPTS, setHere, hereNow, openDirections, dirUrl } from './geo.js';
 
@@ -84,7 +85,7 @@ export function routeHtml() {
       <div class="rmode">${routeMode() === 'auto' ? `<span class="on">📡 Auto order · from where you are${me ? '' : ' (finding you…)'}</span><button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '✋ Your own order · tap the pins'}</button>` : `<span class="man">✋ Your own order</span><button data-act="rAuto">📡 Back to auto</button><button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '👆 Tap pins to re-order'}</button>`}</div>
       ${st.noGps.length ? `<div class="rsum" style="font-size:12px;color:var(--muted)">📍 ${st.noGps.length} stop(s) without GPS — open the customer and tap “Get location” next visit</div>` : ''}
     </div>
-    <div class="rbot"><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext"><span class="nx">🧭 Next</span></button><button class="round" data-act="rMe" title="My location">📍</button></div>
+    <div class="rbot"><button data-act="rTomorrow" title="Tomorrow's homes — send the notice">📅</button><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext"><span class="nx">🧭 Next</span></button><button class="round" data-act="rMe" title="My location">📍</button></div>
   </div>`;
 }
 export async function mountRoute(root) {
@@ -215,6 +216,18 @@ function pickStop(id) {
   picked.push(id); const ids = (S.routeSeq || []).map((s) => s.id).filter((x) => !picked.includes(x)); setManual([...picked, ...ids]); update();
   const all = (S.routeSeq || []).length; if (picked.length >= all) { picking = false; picked = []; toast('✋ Order set'); update(); } else toast(`#${picked.length} · tap the next stop (${all - picked.length} left)`, 1500);
 }
+// v0.14 (#4 · Jun 10/3): the evening-before notice — tomorrow's homes, one WhatsApp link each; a tap marks it sent on this phone
+function tomorrowSheet() {
+  closeSheet(); const m = model(); const tm = R.addDays(m.t, 1);
+  const homes = [...m.cust.values()].filter((x) => x.status === 'Active' && x.nv && x.nv.date === tm);
+  const sentKey = 'kfp_next_' + tm; const sent = lsGet(sentKey, {});
+  const el = document.createElement('div'); el.className = 'sheet list'; el.id = 'rsheet';
+  el.innerHTML = `<div class="grab" data-act="rClose"></div><button class="sx" data-act="rClose" title="Close">✕</button>
+    <div class="rl-h"><b>📅 Tomorrow · ${esc(tm)}</b><span class="muted">${homes.length} home${homes.length === 1 ? '' : 's'} · tap 💬 to send the notice</span></div>
+    <div class="rl">${homes.map((x) => `<div class="rl-i"><div class="main"><b>${esc(x.c.name)}</b> <span class="mono">${esc(x.c.code)}</span><div class="muted">${esc(x.c.tole || '')} · ${esc(x.nv.source || 'visit')}</div></div>${x.c.phone ? `<a class="btn small ${sent[x.c.id] ? 'ghost' : 'ok'}" href="${esc(waLink(x.c.phone, nextText(x.c, tm)))}" target="_blank" rel="noopener" data-next-sent="${esc(x.c.id)}">${sent[x.c.id] ? '✓ sent' : '💬 Notice'}</a>` : '<span class="muted">no phone</span>'}</div>`).join('') || '<div class="empty">Nothing planned for tomorrow</div>'}</div>`;
+  document.body.appendChild(el);
+}
+document.addEventListener('click', (ev) => { const b = ev.target.closest && ev.target.closest('[data-next-sent]'); if (!b) return; const m = model(); const tm = R.addDays(m.t, 1); const k = 'kfp_next_' + tm; const s = lsGet(k, {}); s[b.dataset.nextSent] = Date.now(); lsSet(k, s); b.textContent = '✓ sent'; b.classList.remove('ok'); b.classList.add('ghost'); }, true);
 function toAuto() { lsSet(modeKey(), 'auto'); lsSet(dayKey(), null); orderedAt = me; update(); listSheet(true); toast(`📡 Auto order from ${me ? 'your location' : 'the first stop'}`); }
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && document.getElementById('rsheet')) closeSheet(); });
 document.addEventListener('click', (ev) => {
@@ -223,6 +236,7 @@ document.addEventListener('click', (ev) => {
   const a = ev.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
   if (act === 'rClose') closeSheet();
+  else if (act === 'rTomorrow') tomorrowSheet();
   else if (act === 'rAuto') { picking = false; picked = []; toAuto(); }
   else if (act === 'rPick') { picking = !picking; picked = []; closeSheet(); if (picking && routeMode() === 'auto') setManual((S.routeSeq || []).map((s) => s.id)); /* v0.12.1 (#7) Jun: "직접 정한 순서" = tap the pins 1·2·3 — one button */ update(); toast(picking ? '👆 Tap the pins in the order you want to visit' : '✋ Order kept'); }
   else if (act === 'rOrder') {

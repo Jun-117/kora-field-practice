@@ -501,6 +501,13 @@ export function suggestNextVisit(installDate, visitDate) {
 // PP interval: 3 months if the 3-month mark lands in the monsoon (Jun–Sep), else 4 (E-2).
 export function ppMonths(lastChange) { const m = parseD(addMonths(lastChange, PP_MONSOON_MONTHS)).getMonth() + 1; return m >= 6 && m <= 9 ? PP_MONSOON_MONTHS : FILTER_MONTHS.PP; }
 
+// v0.14 (Jun 10/3 #3): once a filter type has 5+ observed changes across all homes, its booking interval becomes the observed average (rounded to a month, 1..36)
+export const LEARN_MIN = 5;
+export function learnedMonths(customers, visits, on = true) {
+  const out = { ...FILTER_MONTHS }; if (!on) return out;
+  for (const r of filterLearning(customers, visits)) { if (r.n >= LEARN_MIN && r.avgMonths && FILTER_MONTHS[r.type]) out[r.type] = Math.max(1, Math.min(36, Math.round(r.avgMonths))); }
+  return out;
+}
 export function filterDues(customer, cVisits, today, months = FILTER_MONTHS) {
   const res = [];
   if (!customer || !isDate(customer.installDate)) return res;

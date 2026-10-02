@@ -19,6 +19,11 @@ const ICON = {
   check: ['M4 12.5l5 5L20 7'],
   install: ['M4 20h16', 'M6 20V9l6-5 6 5v11', 'M10 20v-6h4v6'],
   credit: ['M4 12h16', 'M14 6l6 6-6 6'],
+  'swap': ['M4 7h12l-3-3', 'M20 17H8l3 3'],
+  'spark': ['M12 3v3M12 18v3M3 12h3M18 12h3', 'M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1'],
+  'tap': ['M4 10h9a3 3 0 0 1 3 3v2M13 10V6h3M4 10v4h4v-4M16 15v4'],
+  'phone': ['M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z'],
+  'user': ['M12 4a4 4 0 1 0 0 8a4 4 0 1 0 0-8z', 'M4 21a8 8 0 0 1 16 0'],
 };
 const DEV = '०१२३४५६७८९';
 export const devanagari = (n) => String(n).replace(/\d/g, (d) => DEV[Number(d)]);
@@ -90,15 +95,14 @@ export async function drawReceipt(d) {
   const hgt = paint(probe.getContext('2d'), d, im, 30, H - 30, true);
   const cv = document.createElement('canvas'); cv.width = W * SCALE; cv.height = H * SCALE;
   const ctx = cv.getContext('2d'); ctx.scale(SCALE, SCALE);
-  const ct = Math.max(24, Math.round((H - hgt) / 2));
-  paint(ctx, d, im, ct, ct + hgt, false);
+  const ct = 0; cv.height = Math.round(hgt) * SCALE; const ctx2 = cv.getContext('2d'); ctx2.scale(SCALE, SCALE); /* v0.14: canvas = exactly the card */
+  paint(ctx2, d, im, ct, hgt, false);
   return cv;
 }
 // draws the page + card; returns the card height it needed (measure = true draws on a throwaway canvas)
 function paint(ctx, d, im, ct, cb, measure) {
-  const cx = 8, cw = W - 16;
-  ctx.fillStyle = C.page; ctx.fillRect(0, 0, W, H);
-  ctx.save(); ctx.shadowColor = 'rgba(13,45,94,.18)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5; ctx.fillStyle = '#fff'; rr(ctx, cx, ct, cw, cb - ct, 20); ctx.fill(); ctx.restore();
+  const cx = 0, cw = W; /* v0.14 (Jun 10/3 "0px"): the card is the picture — no grey page, no shadow, no rounded corners */
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
   const L = cx + 22, Rt = cx + cw - 22, IW = Rt - L; let y = ct + 26;
   // ---- head
   if (im) { const h = 34, w = h * im.width / im.height; ctx.drawImage(im, L, y, w, h); } else text(ctx, 'KORA', L, y + 28, { f: font(800, 26), color: C.navy });
@@ -214,10 +218,9 @@ export async function drawReferralCard(d) {
   const im = await logo();
   const cv = document.createElement('canvas'); cv.width = W * SCALE; cv.height = H2 * SCALE;
   const ctx = cv.getContext('2d'); ctx.scale(SCALE, SCALE);
-  ctx.fillStyle = '#e3eef8'; ctx.fillRect(0, 0, W, H2);
-  const cx = 8, cw = W - 16, ct = 16, cb = H2 - 16;
-  ctx.save(); ctx.shadowColor = 'rgba(13,45,94,.12)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5; ctx.fillStyle = '#fff'; rr(ctx, cx, ct, cw, cb - ct, 20); ctx.fill(); ctx.restore();
-  const L = cx + 26, Rt = cx + cw - 26, IW = Rt - L, mid = L + IW / 2; let y = ct + 24;
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H2); /* v0.14: 0px */
+  const cx = 0, cw = W, ct = 0, cb = H2;
+  const L = cx + 26, Rt = cx + cw - 26, IW = Rt - L, mid = L + IW / 2; let y = ct + 30;
   if (im) { const h = 26, w = h * im.width / im.height; ctx.drawImage(im, L, y, w, h); }
   y += 26 + 36;
   text(ctx, 'Bring a neighbour.', mid, y, { f: font(800, 20), color: C.navy, align: 'center' }); y += 24;
@@ -244,80 +247,85 @@ export async function drawReferralCard(d) {
   let fx = mid - (fw1 + fw2) / 2; fx += text(ctx, f1, fx, fy, { f: font(700, 9.5), color: C.navy }); text(ctx, f2, fx, fy, { f: font(400, 9.5), color: C.mute });
   return cv;
 }
-export function visitData(x, v, co = {}) {
+export function visitData(x, v, co = {}, photos = {}) {
+  // v0.14 (Jun 10/3 #7): the visit NOTE — a record, not a proof. No TDS, no stamp. Rows = what we did; PP changed → the two photos slide in.
   const f = (n) => (n === null || n === undefined || n === '' || !Number.isFinite(Number(n))) ? null : Number(n);
-  const fd = (x.fd || []).filter((q) => q.due).map((q) => ({ type: q.type, due: niceDate(q.due), status: q.status }));
+  const filters = v.filters || [];
+  const rows = [];
+  if (filters.length) rows.push({ ic: 'swap', t: `${filters.join(', ')} filter${filters.length > 1 ? 's' : ''} — new one in`, s: 'the old one taken away' });
+  else rows.push({ ic: 'drop', t: `${v.visitType || 'Purifier'} — checked`, s: 'flow and tap fine' });
+  if (v.sanitised === 'Yes') rows.push({ ic: 'spark', t: 'Housing and tube cleaned', s: '' });
+  if (f(v.flow) !== null || f(v.tdsAfter) !== null) rows.push({ ic: 'tap', t: 'Tap checked', s: '' });
+  const nextFilter = (x.fd || []).filter((q) => q.due && q.type !== 'Sanitise' && !filters.includes(q.type)).sort((p, q) => String(p.due).localeCompare(String(q.due)))[0]; /* a filter changed today is not the next one due */
+  const nv = R.isDate(v.nextVisitDate) ? v.nextVisitDate : '';
+  const pp = (x.fd || []).find((q) => q.type === 'PP');
   return {
-    name: x.c.name || '', code: x.c.code || '', date: niceDate(v.date), bs: bsText(v.date), tech: v.technician || '', type: v.visitType || 'Visit',
-    tdsBefore: f(v.tdsBefore), tdsAfter: f(v.tdsAfter), flow: f(v.flow), sanitised: v.sanitised === 'Yes', filters: v.filters || [], minutes: f(v.durationMin),
-    next: R.isDate(v.nextVisitDate) ? `${niceDate(v.nextVisitDate)}${bsText(v.nextVisitDate) ? ' · ' + bsText(v.nextVisitDate) : ''}` : '', filtersDue: fd, ...coOf(co),
+    name: x.c.name || '', code: x.c.code || '', date: niceDate(v.date), bs: bsText(v.date), tech: v.technician || '', rows,
+    ppChanged: filters.includes('PP'), ppBefore: photos.before || null, ppAfter: photos.after || null,
+    ppMonths: pp && R.isDate(pp.last) && R.isDate(v.date) && pp.last < v.date ? Math.max(1, Math.round(R.daysBetween(pp.last, v.date) / 30.44)) : null,
+    next: nv ? `${niceDate(nv)}${nextFilter && nextFilter.due <= R.addDays(nv, 14) ? ' · ' + nextFilter.type + ' filter' : ''}` : '', ...coOf(co),
   };
 }
 export async function drawVisitReport(d) {
   const im = await logo();
   const probe = document.createElement('canvas'); probe.width = W; probe.height = H;
-  const hgt = paintVisit(probe.getContext('2d'), d, im, 30, H - 30);
-  const cv = document.createElement('canvas'); cv.width = W * SCALE; cv.height = H * SCALE;
-  const ctx = cv.getContext('2d'); ctx.scale(SCALE, SCALE);
-  const ct = Math.max(24, Math.round((H - hgt) / 2)); paintVisit(ctx, d, im, ct, ct + hgt);
+  const hgt = paintVisit(probe.getContext('2d'), d, im);
+  const cv = document.createElement('canvas'); cv.width = W * SCALE; cv.height = Math.round(hgt) * SCALE;
+  const ctx = cv.getContext('2d'); ctx.scale(SCALE, SCALE); paintVisit(ctx, d, im);
   return cv;
 }
-function paintVisit(ctx, d, im, ct, cb) {
-  const cx = 8, cw = W - 16;
-  ctx.fillStyle = C.page; ctx.fillRect(0, 0, W, H);
-  ctx.save(); ctx.shadowColor = 'rgba(13,45,94,.18)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5; ctx.fillStyle = '#fff'; rr(ctx, cx, ct, cw, cb - ct, 20); ctx.fill(); ctx.restore();
+function photoBox(ctx, x0, y, gw, ph, img, cap, pad) {
+  ctx.fillStyle = C.sky; rr(ctx, x0, y, gw, ph + pad, 14); ctx.fill();
+  ctx.save(); rr(ctx, x0, y, gw, ph, 14); ctx.clip();
+  if (img) { try { const r = Math.max(gw / img.width, ph / img.height); ctx.drawImage(img, x0 + (gw - img.width * r) / 2, y + (ph - img.height * r) / 2, img.width * r, img.height * r); } catch (e) { ctx.fillStyle = '#b9c5d3'; ctx.fillRect(x0, y, gw, ph); } }
+  else { ctx.fillStyle = '#b9c5d3'; ctx.fillRect(x0, y, gw, ph); text(ctx, 'photo', x0 + gw / 2, y + ph / 2 + 4, { f: font(400, 10), color: '#2f3f52', align: 'center' }); }
+  ctx.restore(); if (cap) text(ctx, cap, x0 + gw / 2, y + ph + 16, { f: font(600, 9.5), color: C.navy, align: 'center', max: gw - 10 });
+}
+function paintVisit(ctx, d, im) {
+  const cx = 0, cw = W, ct = 0; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
   const L = cx + 22, Rt = cx + cw - 22, IW = Rt - L; let y = ct + 26;
-  y = head(ctx, im, L, Rt, y, 'VISIT REPORT', NE.report, d.date, d.bs ? `${d.bs}${d.tech ? ' · ' + d.tech : ''}` : d.tech, d);
+  y = head(ctx, im, L, Rt, y, 'VISIT NOTE', NE.report, d.date, d.bs ? `${d.bs}${d.tech ? ' · ' + d.tech : ''}` : d.tech, d);
   ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(cx + cw, y); ctx.stroke();
-  // band: today's water
-  y += 18; const bh = 78;
-  ctx.save(); rr(ctx, L, y, IW, bh, 14); ctx.clip();
-  const g = ctx.createLinearGradient(L, y, L + IW, y + bh); g.addColorStop(0, '#0f3a73'); g.addColorStop(0.7, '#1f6fb2'); g.addColorStop(1, '#2d86c8'); ctx.fillStyle = g; ctx.fillRect(L, y, IW, bh);
-  ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(L + IW + 55, y + 25, 75, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  text(ctx, `WATER TODAY · ${NE.water}`, L + 16, y + 24, { f: font(400, 10), color: 'rgba(255,255,255,.85)', ls: 1.2 });
-  if (d.tdsBefore !== null || d.tdsAfter !== null) {
-    const a = d.tdsBefore === null ? '—' : String(d.tdsBefore), b = d.tdsAfter === null ? '—' : String(d.tdsAfter);
-    let xx = L + 16; xx += text(ctx, 'TDS', xx, y + 56, { f: font(600, 13), color: 'rgba(255,255,255,.9)' }) + 8;
-    xx += text(ctx, a, xx, y + 56, { f: font(800, 28), color: 'rgba(255,255,255,.8)' }) + 8;
-    xx += text(ctx, '→', xx, y + 54, { f: font(600, 20), color: '#8fd3f4' }) + 8;
-    xx += text(ctx, b, xx, y + 56, { f: font(800, 28), color: '#fff' }) + 6;
-    text(ctx, 'ppm', xx, y + 56, { f: font(500, 10), color: 'rgba(255,255,255,.8)' });
-  } else text(ctx, d.type, L + 16, y + 56, { f: font(800, 22), color: '#fff' });
-  ctx.font = font(800, 10.5); const pw = ctx.measureText('CHECKED').width + 44;
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.18)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2; ctx.fillStyle = C.green; rr(ctx, Rt - 16 - pw, y + 16, pw, 22, 11); ctx.fill(); ctx.restore();
-  icon(ctx, 'check', Rt - 16 - pw + 10, y + 21, 12, C.greenInk, 3.2);
-  text(ctx, 'CHECKED', Rt - 16 - 12, y + 31, { f: font(800, 10.5), color: C.greenInk, align: 'right', ls: 0.6 });
-  if (d.flow !== null) text(ctx, `${d.flow} L/min`, Rt - 16, y + 56, { f: font(500, 10), color: 'rgba(255,255,255,.85)', align: 'right' });
-  y += bh + 18;
-  // who
-  const col2 = L + IW / 2 + 7, colW = IW / 2 - 10;
-  const kv = (k, v, x0, yy) => { text(ctx, k, x0, yy, { f: font(400, 9.5), color: C.mute, ls: 0.8 }); text(ctx, v, x0, yy + 15, { f: font(600, 12.5), color: C.ink, max: colW }); };
-  kv('CUSTOMER · ग्राहक', d.name, L, y + 10); kv('CUSTOMER CODE', d.code, col2, y + 10);
-  y += 44; ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rt, y); ctx.stroke();
-  // what we did
-  y += 18; text(ctx, `WHAT WE DID · ${NE.did}`, L, y, { f: font(600, 9.5), color: C.mute, ls: 1 }); y += 4;
-  const rows = [];
-  rows.push({ ic: 'drop', t: d.type, s: d.minutes ? `${d.minutes} min on site` : '' });
-  if (d.filters.length) rows.push({ ic: 'lock', t: `Filters changed: ${d.filters.join(', ')}`, s: 'old ones taken away' });
-  if (d.sanitised) rows.push({ ic: 'check', t: 'Sanitised · सफाइ', s: 'housings, tube and tap' });
-  for (const it of rows) {
+  y += 24; text(ctx, 'We came by today.', L, y, { f: font(800, 19), color: C.navy }); y += 16; text(ctx, 'आज हामी आयौं', L, y, { f: font(500, 10), color: C.mute });
+  y += 14; ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rt, y); ctx.stroke();
+  for (const it of d.rows) {
     const top = y + 9; ctx.fillStyle = C.sky; rr(ctx, L, top, 24, 24, 7); ctx.fill(); icon(ctx, it.ic, L + 5, top + 5, 14, C.blue);
     text(ctx, it.t, L + 33, top + 13, { f: font(400, 12.5), color: C.ink, max: IW - 36 });
     if (it.s) text(ctx, it.s, L + 33, top + 27, { f: font(400, 9.5), color: C.mute });
     y += it.s ? 46 : 36; ctx.save(); ctx.setLineDash([1, 2]); ctx.strokeStyle = '#cfd7e1'; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rt, y); ctx.stroke(); ctx.restore();
   }
-  // filters due
-  if (d.filtersDue.length) {
-    y += 16; text(ctx, `YOUR FILTERS · ${NE.filters}`, L, y, { f: font(600, 9.5), color: C.mute, ls: 1 }); y += 6;
-    const n = d.filtersDue.length, bw = (IW - (n - 1) * 6) / n;
-    d.filtersDue.forEach((q, i) => { const x0 = L + i * (bw + 6); ctx.fillStyle = q.status === 'overdue' ? '#fde8e8' : q.status === 'soon' ? '#fff4d6' : C.sky; rr(ctx, x0, y, bw, 40, 10); ctx.fill();
-      text(ctx, q.type, x0 + bw / 2, y + 16, { f: font(700, 11), color: C.navy, align: 'center' }); text(ctx, q.due, x0 + bw / 2, y + 31, { f: font(400, 8.5), color: C.skyInk, align: 'center', max: bw - 6 }); });
-    y += 40;
-  }
-  // next visit
-  if (d.next) { y += 12; ctx.fillStyle = C.sky; rr(ctx, L, y, IW, 34, 12); ctx.fill(); icon(ctx, 'cal', L + 12, y + 11, 13, C.blue); text(ctx, `Next visit · ${NE.next}`, L + 30, y + 22, { f: font(600, 11), color: C.navy }); text(ctx, d.next, Rt - 12, y + 22, { f: font(700, 11), color: C.navy, align: 'right', max: IW - 130 }); y += 34; }
+  if (d.ppChanged) { y += 10; const gw = (IW - 10) / 2, ph = 88; photoBox(ctx, L, y, gw, ph, d.ppBefore, d.ppMonths ? `used PP · ${d.ppMonths} months` : 'used PP', 24); photoBox(ctx, L + gw + 10, y, gw, ph, d.ppAfter, 'new PP', 24); y += ph + 24; }
+  if (d.next) { y += 12; ctx.fillStyle = C.sky; rr(ctx, L, y, IW, 34, 12); ctx.fill(); icon(ctx, 'cal', L + 12, y + 11, 13, C.blue); text(ctx, `Next visit · ${NE.next}`, L + 30, y + 22, { f: font(600, 11), color: C.navy }); text(ctx, d.next, Rt - 12, y + 22, { f: font(700, 11), color: C.navy, align: 'right', max: IW - 150 }); y += 34; }
   y += 16; ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(cx + cw, y); ctx.stroke(); y += 22;
-  y = foot(ctx, d, L, Rt, IW, y, 'Generated by KORA Field · Anything wrong with the water or the purifier? WhatsApp us.');
+  y = foot(ctx, d, L, Rt, IW, y, 'Anything wrong with the water or the purifier? WhatsApp us.');
   return y - ct;
+}
+// v0.14 (#B install card): photo of the purifier · who installed · two promises · first visit
+export function installData(x, co = {}, photo = null, who = {}) {
+  const c = x.c; const first = R.isDate(c.installDate) ? R.addMonths(c.installDate, 1) : '';
+  return { name: c.name || '', code: c.code || '', date: niceDate(c.installDate), bs: bsText(c.installDate), tech: who.name || c.agent || '', photo, first: first ? `${niceDate(first)} · we come to you` : '', ...coOf(co) };
+}
+export async function drawInstallCard(d) {
+  const im = await logo(); const H2 = 450;
+  const cv = document.createElement('canvas'); cv.width = W * SCALE; cv.height = H2 * SCALE; const ctx = cv.getContext('2d'); ctx.scale(SCALE, SCALE);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H2);
+  const L = 22, Rt = W - 22, IW = Rt - L; let y = 26;
+  y = head(ctx, im, L, Rt, y, 'INSTALLED', 'जडान भयो', d.date, d.bs, d);
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  y += 24; text(ctx, 'Your KORA is in.', L, y, { f: font(800, 19), color: C.navy }); y += 16; text(ctx, 'तपाईंको KORA जडान भयो', L, y, { f: font(500, 10), color: C.mute });
+  y += 14; const pw = 118, ph = 80; photoBox(ctx, L, y, pw, ph, d.photo, '', 0);
+  ctx.beginPath(); ctx.arc(L + pw + 36, y + ph / 2, 19, 0, Math.PI * 2); ctx.fillStyle = '#d6dde6'; ctx.fill(); ctx.strokeStyle = C.blue; ctx.lineWidth = 2; ctx.stroke(); icon(ctx, 'user', L + pw + 36 - 9, y + ph / 2 - 9, 18, C.navy);
+  text(ctx, `Installed by ${d.tech || 'KORA CARE'}`, L + pw + 64, y + 24, { f: font(700, 12), color: C.navy, max: IW - pw - 70 });
+  text(ctx, `${d.date}${d.bs ? ' · ' + d.bs : ''}`, L + pw + 64, y + 42, { f: font(400, 9.5), color: C.mute, max: IW - pw - 70 });
+  text(ctx, 'your KORA person', L + pw + 64, y + 58, { f: font(400, 9.5), color: C.mute });
+  y += ph + 14; ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rt, y); ctx.stroke();
+  for (const it of [{ ic: 'swap', t: 'We change every filter — you never buy one', s: 'PP every 4 months · the others on schedule' }, { ic: 'phone', t: 'We call you in 7 days to check all is well', s: '' }]) {
+    const top = y + 9; ctx.fillStyle = C.sky; rr(ctx, L, top, 24, 24, 7); ctx.fill(); icon(ctx, it.ic, L + 5, top + 5, 14, C.blue);
+    text(ctx, it.t, L + 33, top + 13, { f: font(400, 12.5), color: C.ink, max: IW - 36 }); if (it.s) text(ctx, it.s, L + 33, top + 27, { f: font(400, 9.5), color: C.mute });
+    y += it.s ? 46 : 36; ctx.save(); ctx.setLineDash([1, 2]); ctx.strokeStyle = '#cfd7e1'; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rt, y); ctx.stroke(); ctx.restore();
+  }
+  if (d.first) { y += 12; ctx.fillStyle = C.sky; rr(ctx, L, y, IW, 34, 12); ctx.fill(); icon(ctx, 'cal', L + 12, y + 11, 13, C.blue); text(ctx, 'First visit', L + 30, y + 22, { f: font(600, 11), color: C.navy }); text(ctx, d.first, Rt - 12, y + 22, { f: font(700, 11), color: C.navy, align: 'right', max: IW - 110 }); y += 34; }
+  const fy = H2 - 62; ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(0, fy - 16); ctx.lineTo(W, fy - 16); ctx.stroke();
+  foot(ctx, d, L, Rt, IW, fy + 4, 'Anything wrong with the water or the purifier? WhatsApp us.');
+  return cv;
 }

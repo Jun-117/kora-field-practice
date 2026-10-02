@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.13.4 (2026-10-02)';
+export const APP_VERSION = 'kf-v0.14.0 (2026-10-03)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -164,7 +164,13 @@ export const MSG_DEFAULTS = {
   omwNe: 'नमस्ते {name} जी 🙏 म KORA CARE बाट {tech}। तपाईंको पानी प्युरिफायर भ्रमणका लागि आउँदैछु — करिब {eta} मिनेटमा। अहिले मिल्दैन भने यहीँ जवाफ दिनुहोस्।',
   missEn: 'Namaste {name} ji 🙏 KORA CARE came today at {time} for your water purifier visit, but nobody was home. We will come again on {retry}. If another day is better, reply here.',
   missNe: 'नमस्ते {name} जी 🙏 KORA CARE आज {time} मा तपाईंको पानी प्युरिफायर भ्रमणका लागि आएको थियो, तर घरमा कोही हुनुहुन्नथ्यो। हामी फेरि {retry} मा आउँछौं। अर्को दिन मिल्छ भने यहीँ जवाफ दिनुहोस्।',
+  nextEn: 'Namaste {name} ji 🙏 This is {tech} from KORA CARE. We plan to come tomorrow ({date}) for your water purifier visit. If tomorrow does not suit, reply here and we will pick another day.',
+  nextNe: 'नमस्ते {name} जी 🙏 म KORA CARE बाट {tech}। भोलि ({date}) तपाईंको पानी प्युरिफायर भ्रमणका लागि आउने योजना छ। भोलि मिल्दैन भने यहीँ जवाफ दिनुहोस्, अर्को दिन मिलाउँछौं।',
+  confEn: 'Namaste {name} ji 🙏 KORA CARE here. Your purifier installation is on {date} — is that still fine? Reply here if you need another day.',
+  confNe: 'नमस्ते {name} जी 🙏 KORA CARE। तपाईंको प्युरिफायर जडान {date} मा छ — ठीक छ? अर्को दिन चाहिए यहीँ जवाफ दिनुहोस्।',
 };
+export const nextText = (c, date) => { const o = { name: firstName(c), tech: myName() || 'KORA CARE', date }; return fillMsg(msgT('nextEn'), o) + '\n\n' + fillMsg(msgT('nextNe'), o); }; /* v0.14 (#4): the evening-before notice */
+export const confText = (c, date) => { const o = { name: firstName(c), date }; return fillMsg(msgT('confEn'), o) + '\n\n' + fillMsg(msgT('confNe'), o); }; /* v0.14 (#4): 3-day confirm for a booked install */
 const fillMsg = (tpl, o) => String(tpl).replace(/\{(\w+)\}/g, (_, k) => (o[k] ?? ''));
 const firstName = (c) => String((c && c.name) || '').trim().split(/\s+/)[0] || '';
 const msgT = (k) => (S.settings && String(S.settings[k] || '').trim()) || MSG_DEFAULTS[k];
@@ -382,6 +388,7 @@ export function model() {
   const byCust = (list) => { const m = new Map(); for (const x of list) { if (!m.has(x.customerId)) m.set(x.customerId, []); m.get(x.customerId).push(x); } return m; };
   const payBy = byCust(D.payments), visBy = byCust(D.visits), chkBy = byCust(D.checkins);
   const ledgers = new Map(); const cust = new Map();
+  const FM = R.learnedMonths(D.customers, D.visits, S.settings.learnFilters !== 'No'); /* v0.14 (#3): observed intervals once 5+ changes */
   for (const c of D.customers) {
     const led = R.ledger(c, payBy.get(c.id) || [], t);
     ledgers.set(c.id, led);
@@ -389,7 +396,7 @@ export function model() {
     const status = c.status || 'Active';
     const dn = status === 'Active' ? R.dunning(led, t) : null;
     const nv = status === 'Active' ? R.nextVisit(c, vs) : null;
-    const fd = status === 'Active' ? R.filterDues(c, vs, t) : [];
+    const fd = status === 'Active' ? R.filterDues(c, vs, t, FM) : [];
     const ob = status === 'Active' ? R.onboarding(c, chkBy.get(c.id) || [], t) : [];
     const chases = R.chaseLog(chkBy.get(c.id)); const pr = status === 'Active' && led.overdue > 0 ? R.promiseOf(chases, payBy.get(c.id), t) : null; /* v0.9 #1 */
     const dot = status === 'Churned' ? 'k' : status === 'Paused' ? 'b' : led.daysOverdue >= 7 ? 'r' : led.overdue > 0 ? 'y' : 'g';
@@ -741,7 +748,7 @@ FORMS.install = {
     }
     if (isNew && ok && vial) save(`waterTests/${newId('waterTests')}`, { customerId: id, sampledDate: v.installDate, result: '', by: myName() }, true); /* v0.9 #10 */
     const np = (isNew ? savePhotos(id, `customers/${id}`, 'install') : savePhotos(id, `customers/${id}`, 'customer')) + (isNew && ok ? saveSign(id, `customers/${id}`, sig, v.signName) : 0);
-    return { ok, np, go: ['customers', 'detail', { id }] };
+    return { ok, np, go: ['customers', 'detail', { id, inst: id }] }; /* v0.14: installed card button on the page */
   },
 };
 FORMS.customerEdit = {
@@ -1975,7 +1982,8 @@ function viewDetail(p) {
   const refs = m.referrals.filter((r) => r.who.id === c.id && !r.done);
   const stPill = { Active: 'ok', Paused: 'blue', Churned: 'grey' }[x.status];
   const receipt = p.receipt && m.D.payments.find((q) => q.id === p.receipt);
-  if (p.vrep && !S.desk && String(p.vrep) !== S.rcAuto) { S.rcAuto = String(p.vrep); setTimeout(() => imageCard('visit', p.vrep), 120); } /* v0.13: the visit report preview opens by itself after a visit is saved (once) */
+  const vrep = p.vrep && m.D.visits.find((q) => q.id === p.vrep); /* v0.14 (#7): no auto popup — a button; Tara decides whether the note goes out */
+  const inst = p.inst && c.id === p.inst;
   const bills = led.bills.slice(-6); const spans = R.pauseSpans(c, t); /* v0.9 #2 */
   const hasGps = c.gps && Number.isFinite(c.gps.lat) && Number.isFinite(c.gps.lng);
   const dest = hasGps ? `${c.gps.lat.toFixed(6)},${c.gps.lng.toFixed(6)}` : '';
@@ -1986,6 +1994,7 @@ function viewDetail(p) {
   else if (x.pr && x.pr.status === 'broken') todo.push({ lvl: 'bad', ic: '🤝', t: `promise broken (${x.pr.date})`, s: `${x.pr.amount ? R.npr(x.pr.amount) + ' promised · ' : ''}${R.npr(x.pr.paid)} paid by then` });
   else if (x.dn && x.dn.stage === 'reminder') todo.push({ lvl: 'info', ic: '💰', t: `Bill ${R.npr(x.dn.owed)} due ${x.dn.bill.due}`, s: 'Send the reminder 3 days before', a: `<a class="btn small ghost" href="${esc(waLink(c.phone, dunText(x)))}" target="_blank" rel="noopener">💬 Remind</a>` });
   const fo = x.fd.filter((f) => f.status === 'overdue');
+  if (x.c.installDate && x.c.installDate > t && c.phone) todo.push({ lvl: 'info', ic: '📅', t: `Installation booked ${x.c.installDate}`, s: R.daysBetween(t, x.c.installDate) <= 3 ? 'confirm with the customer' : 'confirm 3 days before', a: `<a class="btn small ghost" href="${esc(waLink(c.phone, confText(c, x.c.installDate)))}" target="_blank" rel="noopener">💬 Confirm date</a>` }); /* v0.14 (#4): a booked install gets a 3-day confirm */
   const ns = x.nv && x.nv.noShow; // 🚪 nobody home on the last try (v0.8 #7)
   if (ns && String(ns.date).slice(0, 10) === t) todo.push({ lvl: 'warn', ic: '🚪', t: 'Nobody home today', s: `${ns.noShowReason || 'Nobody home'} · trying again ${ns.retryDate}`, a: c.phone ? `<a class="btn small ghost" href="${esc(waLink(c.phone, missText(c, ns)))}" target="_blank" rel="noopener">💬 Sorry we missed you</a>` : '' });
   if (x.nv && x.nv.date <= t) todo.push({ lvl: x.nv.date < t ? 'bad' : 'warn', ic: '🔧', t: `Visit due ${x.nv.date === t ? 'today' : x.nv.date}`, s: x.nv.source, a: `${can('visit') ? omwBtn(c, 'btn small ghost') : ''}<button class="btn small" data-go-form="visit" data-cid="${esc(c.id)}">🔧 Visit</button>` });
@@ -2015,11 +2024,13 @@ function viewDetail(p) {
     ${can('visit') ? `<button data-go-form="request" data-cid="${esc(c.id)}">📋 Request</button>` : ''}
     ${can('visit') && x.status !== 'Churned' ? omwBtn(c) : ''}
     ${canEdit ? `<button data-go-form="customerEdit" data-id="${esc(c.id)}">✏️ Edit</button>` : ''}${canForm('contract') ? `<button data-go-form="contract" data-cid="${esc(c.id)}">📜 Contract</button>` : ''}
-    ${x.status === 'Active' ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && String(q.status).includes('Completed')).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">🧪 Visit report</button>` : ''; })()}
+    ${x.status === 'Active' ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && String(q.status).includes('Completed')).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">📨 Visit note</button>` : ''; })()}${x.status === 'Active' ? `<button data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card</button>` : ''}
   </div>
   ${S.desk ? '' : '<button class="btn ghost small" data-act="moreLinks" style="margin-top:6px">⋯ More</button>'}
   ${can('visit') && x.status !== 'Churned' ? omwChips(c) : ''}
   ${receipt ? receiptCard(x, receipt) : ''}
+  ${vrep ? `<div class="card" style="border-color:var(--ok)"><div class="status">🔧 Visit saved · ${esc(vrep.date)}</div><button type="button" class="btn ok" style="display:block;width:100%;margin-top:10px" data-act="rcVisit" data-vid="${esc(vrep.id)}">📨 Visit note → WhatsApp</button></div>` : ''}
+  ${inst ? `<div class="card" style="border-color:var(--ok)"><div class="status">🎉 Installed</div><button type="button" class="btn ok" style="display:block;width:100%;margin-top:10px" data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card → WhatsApp</button><div class="muted" style="margin-top:6px;font-size:12px">Then the receipt below.</div></div>` : ''}
   <div id="rcBox" class="hidden"></div>
   ${nowCard}
   <div class="sec">Location</div>
@@ -2054,7 +2065,7 @@ function viewDetail(p) {
     ${x.chases && x.chases.length ? `<div class="sec-mini">📞 Payment contacts (${x.chases.length})</div>${x.chases.slice(0, 8).map((q) => { const pq = R.isDate(q.promiseDate) ? R.promiseOf([q], pays, t) : null; return `<div class="muted" style="margin:3px 0">${esc(q.date)} · ${esc(q.channel || '')} · <span>${esc(q.reached || '—')}</span>${q.by ? ' · ' + esc(q.by) : ''}${pq ? ` · 🤝 <span>${esc(`promised by ${pq.date}`)}</span>${pq.amount ? ' ' + R.npr(pq.amount) : ''} <span class="pill ${{ kept: 'ok', late: 'warn', broken: 'bad', waiting: 'blue' }[pq.status]}">${esc({ kept: 'kept', late: 'paid late', broken: 'broken', waiting: 'waiting' }[pq.status])}</span>` : ''}${q.lateReason ? ' · ' + esc(q.lateReason) : ''}${q.notes ? ` · “${esc(q.notes)}”` : ''}</div>`; }).join('')}` : ''}
     ${refs.length ? `<div class="note">🎁 Referral reward: ${refs.map((r) => `${r.role === 'referee' ? '1 month free (off bill 2)' : '1 month free (referrer)'} ${r.ready ? `— <a href="#" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">apply</a>` : `(${esc(r.waiting)})`}`).join(' · ')}</div>` : ''}
   </div>
-  <div class="sec">Photos</div><div class="card"><div class="thumbs" id="photoBox"><span class="muted">Loading…</span></div><div class="row"><button class="btn ghost small" data-go-form="photo" data-cid="${esc(c.id)}">📷 Add photos</button>${DEMO ? '' : `<button class="btn ghost small" data-act="photosNet" data-cid="${esc(c.id)}">☁️ Load from server</button>`}</div></div>
+  <details class="card tl" style="padding:10px 14px"><summary class="sec" style="margin:0;cursor:pointer">🗂️ Photo timeline <span class="muted">(ours · not sent)</span></summary><div class="thumbs" id="photoBox"><span class="muted">Loading…</span></div></details><div class="card"><div class="row"><button class="btn ghost small" data-go-form="photo" data-cid="${esc(c.id)}">📷 Add photos</button>${DEMO ? '' : `<button class="btn ghost small" data-act="photosNet" data-cid="${esc(c.id)}">☁️ Load from server</button>`}</div></div>
   ${rels.length ? `<div class="sec">Relocations (${rels.length})</div><div class="card flush">${rels.map((r) => `<div class="item" data-edit="relocation" data-id="${esc(r.id)}"><div class="main"><div class="t">${esc(r.moveDate || '')} · ${esc(r.status)}</div><div class="s">${esc(r.oldTole === 'Other' ? r.oldToleOther : r.oldTole || '?')} → ${esc(r.newTole === 'Other' ? r.newToleOther : r.newTole || '?')}${r.newSerial ? ' · new device ' + esc(r.newSerial) : ''}</div></div><div class="r">›</div></div>`).join('')}</div>` : ''}
   <div class="sec">Visits (${x.vs.length})</div>
   <div class="card">${x.vs.length ? `<div class="timeline">${x.vs.slice().reverse().map((v) => `<div class="ev"><b>${esc(v.date)}</b> · ${esc(v.visitType || 'Visit')} <span class="pill ${isDone(v.status) ? 'ok' : 'grey'}">${esc(String(v.status || '').replace(/^\S+\s/, ''))}</span>${v.signed ? ' ✍️' : ''}${v._pending ? ' <span class="pill warn">on phone</span>' : ''}<div class="muted">${esc((v.filters || []).join(', ') || 'no filter')} · PP ${esc(v.ppColor || '–')} · TDS ${esc(v.tdsBefore ?? '–')}→${esc(v.tdsAfter ?? '–')} · flow ${esc(v.flow ?? '–')} · ${esc(v.technician || '')}</div>${v.notes ? `<div class="muted">“${esc(v.notes)}”</div>` : ''}</div>`).join('')}</div>` : '<div class="empty">No visits yet</div>'}</div>
@@ -2105,26 +2116,29 @@ function tdsChart(vs, c) {
     <text class="ax" x="8" y="${h - 2}">${esc(pts[0][0])}</text><text class="ax" x="${w - 8}" y="${h - 2}" text-anchor="end">${esc(pts[pts.length - 1][0])}</text><text class="ax" x="${w - 8}" y="10" text-anchor="end">max ${Math.max(...ys)}</text></svg></div>`;
 }
 // Receipt: deposit and subscription on separate lines (G-1 §1-2 · lawyer R3 D2(c)).
-function receiptCard(x, pay) {
-  const sp = x.led.splits[pay.id] || {};
-  const lines = sp.extra !== undefined ? [[pay.type, sp.extra]] : [['Installation / first month', sp.install], ['Subscription', sp.subscription], ['Refundable deposit (not a fee)', sp.deposit], ['Credit carried forward', sp.unallocated]].filter(([, v]) => v > 0.01);
-  const rd = RC.receiptData(x, pay, {}); /* v0.12.3: same number + next bill as the picture */
-  const text = `KORA CARE — receipt ${rd.no}\n${x.c.name} (${x.c.code})\nDate: ${pay.date}\n` + lines.map(([l, v]) => `${l}: NPR ${Math.round(v).toLocaleString('en-IN')}`).join('\n') + `\nTotal: NPR ${Math.round(pay.amount).toLocaleString('en-IN')}${Number(pay.discount) > 0 ? `\nDiscount: NPR ${Math.round(pay.discount).toLocaleString('en-IN')}${pay.approval === 'Pending' ? ' (waiting for approval)' : pay.approval === 'Rejected' ? ' (not approved)' : ''}` : ''}\n${rd.credit ? 'Credit: ' + pay.type : 'Paid by: ' + (pay.method || '') + (pay.ref ? ' · ' + pay.ref : '')}\nNext bill: ${rd.next}\nThank you! 🙏`;
-  return `<div class="card" style="border-color:var(--ok)"><div class="status">🧾 Receipt</div><pre class="diag" style="color:var(--ink);margin:10px 0 0">${esc(text)}</pre>
-    <a class="btn ok" style="display:block;text-align:center;text-decoration:none;line-height:56px" href="${esc(waLink(x.c.phone, text))}" target="_blank" rel="noopener">💬 Send receipt on WhatsApp</a>
-    <button type="button" class="btn" style="display:block;width:100%;margin-top:8px" data-act="rcImg" data-pid="${esc(pay.id)}">🧾 Image receipt</button></div>`;
+function receiptCard(x, pay) { /* v0.14 (Jun 10/3 #6): the picture is the receipt — the text version is gone */
+  return `<div class="card" style="border-color:var(--ok)"><div class="status">🧾 Receipt saved · ${esc(RC.receiptNo(pay))}</div>
+    <button type="button" class="btn ok" style="display:block;width:100%;margin-top:10px" data-act="rcImg" data-pid="${esc(pay.id)}">🧾 Receipt → WhatsApp</button></div>`;
 }
 /* v0.12 image receipt (Jun 2026-10-01 "이거로 하자"): the picture version of the same payment, drawn on this phone (receipt.js),
    then the share sheet → WhatsApp → the customer. Falls back to "save the image" where the share sheet cannot take files. */
 /* v0.12 image receipt (Jun 2026-10-01 "이거로 하자") + v0.13 referral card · visit report (Jun 10/2 "뭐 할거 더 없어?") — all drawn on this phone
    (receipt.js) then the share sheet → WhatsApp → the customer. Falls back to "save the image" where the share sheet cannot take files. */
+async function visitPhotos(parent) { /* v0.14: the first two photos saved with a record (phone copies first, then the cache) → Image objects for the canvas */
+  const out = []; const toImg = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+  for (const e of myJournal().filter((e) => e.photo && e.data && e.data.parent === parent)) { const img = await photoGet(e.id); if (img && out.length < 2) out.push(img); }
+  if (out.length < 2 && !DEMO) { try { const q = query(collection(db, 'photos'), where('parent', '==', parent), qLimit(4)); (await getDocsFromCache(q)).forEach((d) => { const x = d.data(); if (typeof x.img === 'string' && x.img.startsWith('data:image/') && out.length < 2) out.push(x.img); }); } catch (e) {} }
+  const ims = []; for (const src of out) { const im = await toImg(src); if (im) ims.push(im); }
+  return { before: ims[0] || null, after: ims[1] || null };
+}
 async function imageCard(kind, id) {
   const box = $('#rcBox'); if (!box) return;
   const co = { name: S.settings.coName || 'KORA CARE Pvt. Ltd.', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '' };
   let x, draw, name, alt;
   if (kind === 'receipt') { const pay = S.D.payments.get(id); if (!pay) return; x = model().cust.get(pay.customerId); if (!x) { toast('Customer not found'); return; } const d = RC.receiptData(x, pay, co); draw = () => RC.drawReceipt(d); name = `${d.no}.png`; alt = 'receipt'; }
   else if (kind === 'referral') { x = model().cust.get(id); if (!x) return; const d = RC.referralData(x, co); draw = () => RC.drawReferralCard(d); name = `KORA-referral-${d.code || 'card'}.png`; alt = 'referral card'; }
-  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return; x = model().cust.get(v.customerId); if (!x) return; const d = RC.visitData(x, v, co); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit report'; }
+  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return; x = model().cust.get(v.customerId); if (!x) return; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; const d = RC.visitData(x, v, co, ph); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; }
+  else if (kind === 'install') { x = model().cust.get(id); if (!x) return; const ph = await visitPhotos(`customers/${id}`); const d = RC.installData(x, co, ph.before || ph.after || null, { name: myName() }); draw = () => RC.drawInstallCard(d); name = `KORA-installed-${d.code || ''}.png`; alt = 'installed card'; }
   else return;
   box.classList.remove('hidden'); box.innerHTML = '<div class="muted" style="margin-top:8px">Making the picture…</div>';
   try {
@@ -2151,8 +2165,9 @@ async function loadPhotos(cid, parent, net = false) { /* v0.11.1 (#2): the serve
   const seen = new Map();
   const show = () => {
     const b = $('#drawer #photoBox') || $('#photoBox'); if (!b) return;
-    const list = [...seen.values()].filter((x) => typeof x.img === 'string' && (x.img.startsWith('data:image/') || isPdf(x.img))).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    b.innerHTML = list.map((x) => figOf(x, `${esc(x.kind || '')} ${esc(x.date || '')}${x.local ? ' · 🟡' : ''}`)).join('') || '<span class="muted">No photos yet</span>';
+    const list = [...seen.values()].filter((x) => typeof x.img === 'string' && (x.img.startsWith('data:image/') || isPdf(x.img))).sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))); /* v0.14 (#5): a timeline — oldest first */
+    const stage = (x) => String(x.parent || '').startsWith('visits/') ? (x.kind === 'repair' ? '🛠️ repair' : '🔧 visit') : String(x.parent || '').startsWith('customers/') ? '🏠 install' : esc(x.kind || '');
+    b.innerHTML = list.map((x) => figOf(x, `${stage(x)} · ${esc(x.date || '')}${x.local ? ' · 🟡' : ''}`)).join('') || '<span class="muted">No photos yet</span>';
   };
   const mine = (d) => (parent ? d.parent === parent : d.customerId === cid);
   for (const e of myJournal().filter((e) => e.photo && mine(e.data) && e.state !== 'done')) { const img = await photoGet(e.id); if (img) seen.set(e.id, { ...e.data, img, local: true }); }
@@ -2563,6 +2578,8 @@ export function viewReport(p) {
       <label>Extra technician names (comma separated)</label><input name="techNames" value="${esc(S.settings.techNames || '')}" placeholder="e.g. Ramesh, Sita">
       <label>Extra days the office is closed (YYYY-MM-DD, comma separated)</label><textarea name="holidays" placeholder="e.g. 2026-10-12, 2026-10-13">${esc(S.settings.holidays || '')}</textarea><div class="hint">Saturdays and the official 2083 public holidays (Home Ministry + Gandaki notices) are already in the calendar. Add only your own extra days off. Used for the calendar and the breakdown reply clock.</div>
       <h3>🧪 Filters (order dates)</h3>
+      <label>Filter interval from real data</label><select name="learnFilters"><option value="Yes" ${S.settings.learnFilters !== 'No' ? 'selected' : ''}>Yes — once a filter has 5+ real changes, use the observed average</option><option value="No" ${S.settings.learnFilters === 'No' ? 'selected' : ''}>No — always the E-2 booking interval</option></select>
+      <div class="muted" style="margin:-4px 0 10px">Now: ${esc(R.FILTER_TYPES.filter((t2) => R.FILTER_MONTHS[t2]).map((t2) => { const r = R.filterLearning([...S.D.customers.values()], [...S.D.visits.values()]).find((q) => q.type === t2) || {}; return `${t2} ${R.FILTER_MONTHS[t2]}mo${r.n >= R.LEARN_MIN && r.avgMonths ? ' → ' + Math.round(r.avgMonths) + 'mo (' + r.n + ' changes)' : ' (' + (r.n || 0) + ' changes)'}`; }).join(' · '))}</div>
       <label>Filter lead time — order to shelf (weeks)</label><input name="filterLeadWeeks" type="number" min="0" value="${esc(S.settings.filterLeadWeeks ?? '')}" placeholder="${R.FILTER_ORDER.leadWeeks} (guess)"><div class="hint">🔴 Filters may come from China or India — put the real number after the first order.</div>
       <label>Safety weeks before running out</label><input name="filterSafetyWeeks" type="number" min="0" value="${esc(S.settings.filterSafetyWeeks ?? '')}" placeholder="${R.FILTER_ORDER.safetyWeeks}">
       <label>Months one order should cover</label><input name="filterCoverMonths" type="number" min="1" value="${esc(S.settings.filterCoverMonths ?? '')}" placeholder="${R.FILTER_ORDER.coverMonths}">
@@ -2990,6 +3007,7 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'rcImg') { ev.preventDefault(); imageCard('receipt', a.dataset.pid); }
   else if (act === 'rcRef') { ev.preventDefault(); imageCard('referral', a.dataset.cid); }
   else if (act === 'rcVisit') { ev.preventDefault(); imageCard('visit', a.dataset.vid); }
+  else if (act === 'rcInst') { ev.preventDefault(); imageCard('install', a.dataset.cid); }
   else if (act === 'rcShare') { ev.preventDefault(); if (!S.rcBlob) return; const r = await RC.shareImage(S.rcBlob, S.rcName || 'receipt.png'); toast(r === 'shared' ? '✅ Shared' : r === 'unsupported' ? 'Sharing not available here — save the image' : 'Share cancelled'); }
   else if (act === 'demoWho') { if (DEMO) demoWho(); }
   else if (act === 'demoAs') { if (DEMO) demoAs(a.dataset.as || ''); }
@@ -3100,7 +3118,7 @@ document.addEventListener('submit', async (ev) => {
     if (!S.isAdmin) { toast('Only Jun changes settings'); return; }
     const e = f.elements; const pan = e.coPan.value.replace(/\s/g, '');
     if (pan && !/^\d{9}$/.test(pan)) { toast('Company PAN has 9 digits'); return; }
-    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
+    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
       apprDiscountOver: e.apprDiscountOver.value.trim() === '' ? null : Math.max(0, Number(e.apprDiscountOver.value) || 0), apprRefundOver: e.apprRefundOver.value.trim() === '' ? null : Math.max(0, Number(e.apprRefundOver.value) || 0), apprWho: e.apprWho.value }; // numbers: the rules compare them
     auditLog('settings', 'app', S.settings, data); save('settings/app', data, false); S.settings = { ...S.settings, ...data }; B.setOverrides(data.bsOverride); bump(); toast('Settings saved'); goBack();
   }

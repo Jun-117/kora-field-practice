@@ -114,7 +114,9 @@ function page(scr, m) {
   if (scr === 'customers') return pageCustomers(m);
   if (scr === 'money') return pageMoney(m);
   if (scr === 'field') return pageField(m);
-  if (scr === 'map') return `<div class="panel" style="--i:0"><div class="ph"><span class="t"><b>Map</b> · every household</span><span class="sp"></span>${legend()}<button class="btn small" data-act="replay" style="margin:0 0 0 10px">▶ Replay growth</button></div><div id="mapBox" class="mapbox tall"></div><div class="muted" style="margin-top:6px">📍 = your location (needs location allowed for this site) · scroll gently to zoom</div></div>`;
+  if (scr === 'map') { const m = model(); const todayList = [...new Map([...m.visitsDue.map((x) => [x.c.id, { x, k: x.filterOnly ? '🧪' : '🔧', t: x.filterOnly ? 'filter due' : 'visit due ' + x.due }]), ...m.collections.filter((x) => x.dn.stage === 'visit').map((x) => [x.c.id, { x, k: '💰', t: R.npr(x.dn.owed) + ' · ' + x.dn.days + ' d late' }]), ...m.openReq.filter((o) => o.c).map((o) => [o.c.c.id, { x: o.c, k: '🛠', t: o.r.type + ' · ' + o.r.status }])]).values()];
+    return `<div class="cc mapcc"><div class="panel s9" style="--i:0"><div class="ph"><span class="t"><b>Map</b> · every household</span><span class="sp"></span>${legend()}<button class="btn small" data-act="replay" style="margin:0 0 0 10px">▶ Replay growth</button></div><div id="mapBox" class="mapbox tall"></div><div class="muted" style="margin-top:6px">pin colour = money · icon = the job (🔧 visit · 🧪 filter · 💰 collect · 🛠 request) · zoom out for tole totals · 📍 = you</div></div>
+    <div class="panel s3 mlist" style="--i:1"><div class="ph"><span class="t"><b>Today</b> · ${todayList.length} homes</span></div><div class="ml">${todayList.map(({ x, k, t }) => `<div class="ml-i" data-mfly="${esc(x.c.id)}"><span class="k">${k}</span><div class="main"><b>${esc(x.c.name)}</b><div class="muted">${esc(toleOf(x.c))} · ${esc(t)}</div></div>${R.assigneeOf(x.c, m.t) ? `<span class="pill">${esc(R.assigneeOf(x.c, m.t))}</span>` : ''}</div>`).join('') || '<div class="empty">Nothing due today 🏖️</div>'}</div></div></div>`; }
   if (scr === 'history') return pageHistory(m);
   if (scr === 'reports') return pageReports();
   if (scr === 'status') return screenHtml({ screen: 'status', params: {} });
@@ -1146,6 +1148,7 @@ function pagePhones(m) {
   </div>`;
 }
 document.addEventListener('click', (ev) => { const a = ev.target.closest && ev.target.closest('[data-act="fleetReload"]'); if (a && S.desk) { S.fleetAt = 0; loadFleet(true); } });
+document.addEventListener('click', (ev) => { /* v0.14 (#2): a row in the Today list → fly to its pin and open the card */ const fl = ev.target.closest && ev.target.closest('[data-mfly]'); if (!fl || !map || !S.desk) return; ev.preventDefault(); const c = S.D.customers.get(fl.dataset.mfly); if (!c || !c.gps) return; map.setView([c.gps.lat, c.gps.lng], Math.max(map.getZoom(), 16), { animate: true }); layer.eachLayer((l) => { if (l.getLatLng && l.getPopup && Math.abs(l.getLatLng().lat - c.gps.lat) < 1e-9 && Math.abs(l.getLatLng().lng - c.gps.lng) < 1e-9) l.openPopup(); }); });
 
 // ---------- ⚠️ watch list: homes to look after this week (points from the records · not a forecast) ----------
 const WCAT = { money: ['💰', 'Money'], service: ['🔧', 'Service & water'], stage: ['🌱', 'Stage of life'] };
@@ -1242,18 +1245,30 @@ export async function mountMap(box) {
 }
 function drawMarkers() {
   if (!map || replay) return [];
+  if (!map._kfZoomHook) { map._kfZoomHook = true; map.on('zoomend', () => { if (S.route.screen === 'map' && !replay) drawMarkers(); }); }
   if (S.route.screen === 'live') { layer.clearLayers(); return drawLive(); }
   if (S.route.screen === 'watch') { layer.clearLayers(); return drawWatch(); }
-  const m = model(); layer.clearLayers(); const pts = [];
+  const m = model(); layer.clearLayers(); const pts = []; const clusters = {};
   for (const x of m.cust.values()) {
     const g = x.c.gps; if (!g || !Number.isFinite(g.lat) || !Number.isFinite(g.lng)) continue;
     pts.push([g.lat, g.lng]);
     const col = HEX[x.dot] || HEX.g;
-    const mk = x.dot === 'r' ? Lf.marker([g.lat, g.lng], { icon: Lf.divIcon({ className: '', html: '<div class="pulse-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }), zIndexOffset: 500 })
-      : Lf.circleMarker([g.lat, g.lng], { radius: 6, color: col, weight: 2, fillColor: col, fillOpacity: 0.75 });
-    mk.bindPopup(`<b>${esc(x.c.name)}</b> <span class="mono">${esc(x.c.code)}</span><br>${esc(toleOf(x.c))} · ${x.led.overdue ? `<span style="color:${HEX.r}">${R.npr(x.led.overdue)} overdue</span>` : 'paid up'}<br>${x.nv ? 'next visit ' + esc(x.nv.date) : ''}<br><button class="btn small" data-cust="${esc(x.c.id)}" style="margin-top:6px">Open</button>`);
-    layer.addLayer(mk);
+    /* v0.14 (#2 · Jun 10/2 "점이랑 텍스트만이잖아"): a pin that says what is going on — colour = money, icon = the job */
+    const job = (m.openReq.some((o) => o.c && o.c.c.id === x.c.id)) ? '🛠' : (x.nv && x.nv.date <= m.t) ? '🔧' : (x.fd || []).some((q) => q.status === 'overdue') ? '🧪' : x.led.overdue ? '💰' : '';
+    const today = m.visitsDue.some((y) => y.c.id === x.c.id) || m.collections.some((y) => y.c.id === x.c.id && y.dn.stage === 'visit');
+    const mk = Lf.marker([g.lat, g.lng], { icon: Lf.divIcon({ className: '', html: `<div class="mpin ${x.dot}${today ? ' today' : ''}${x.dot === 'r' ? ' hot' : ''}" style="--c:${col}"><span>${job}</span></div>`, iconSize: [26, 32], iconAnchor: [13, 32], popupAnchor: [0, -30] }), zIndexOffset: x.dot === 'r' ? 500 : today ? 300 : 0 });
+    const who = R.assigneeOf(x.c, m.t) || '—';
+    mk.bindPopup(`<div class="mcard"><div class="mc-h"><b>${esc(x.c.name)}</b><span class="mono">${esc(x.c.code)}</span></div>
+      <div class="mc-r"><span>📍 ${esc(toleOf(x.c))}</span><span>👤 ${esc(who)}</span></div>
+      <div class="mc-r">${x.led.overdue ? `<span class="bad">💰 ${R.npr(x.led.overdue)} overdue · ${x.led.daysOverdue} d</span>` : '<span class="ok">💰 paid up</span>'}</div>
+      <div class="mc-r">${x.nv ? `<span>🔧 next visit ${esc(x.nv.date)}${x.nv.date <= m.t ? ' · <b>due</b>' : ''}</span>` : '<span class="muted">🔧 no visit planned</span>'}</div>
+      ${(x.fd || []).filter((q) => q.status === 'overdue').length ? `<div class="mc-r"><span class="warn">🧪 filter due: ${esc((x.fd || []).filter((q) => q.status === 'overdue').map((q) => q.type).join(', '))}</span></div>` : ''}
+      <div class="mc-b"><button class="btn small" data-cust="${esc(x.c.id)}">Open</button>${x.c.phone ? `<a class="btn small ghost" href="${esc(waLink(x.c.phone, ''))}" target="_blank" rel="noopener">💬</a><a class="btn small ghost" href="https://www.google.com/maps/dir/?api=1&destination=${g.lat},${g.lng}" target="_blank" rel="noopener">🧭</a>` : ''}</div></div>`, { maxWidth: 280 });
+    layer.addLayer(mk); if (x.status !== 'Churned') (clusters[toleOf(x.c)] = clusters[toleOf(x.c)] || { n: 0, late: 0, due: 0, lat: 0, lng: 0 }).n++;
+    const cl = clusters[toleOf(x.c)]; if (cl) { cl.lat += g.lat; cl.lng += g.lng; if (x.led.overdue) cl.late++; if (today) cl.due++; }
   }
+  // zoomed out → one badge per tole (homes · late · today)
+  if (map.getZoom() <= 13) for (const [tl, cl] of Object.entries(clusters)) { if (!cl.n) continue; const mk = Lf.marker([cl.lat / cl.n, cl.lng / cl.n], { icon: Lf.divIcon({ className: '', html: `<div class="mclu"><b>${esc(tl)}</b><span>${cl.n}</span>${cl.late ? `<i class="r">${cl.late} late</i>` : ''}${cl.due ? `<i class="y">${cl.due} today</i>` : ''}</div>`, iconSize: [120, 34], iconAnchor: [60, 17] }), zIndexOffset: 800, interactive: false }); layer.addLayer(mk); }
   return pts;
 }
 

@@ -2205,7 +2205,7 @@ function qrImage() { const src = S.settings.coQr; if (!src) return Promise.resol
 // v0.16 #4 (optimisation, Jun 10/3 "최적화를 하자"): a customer picture is drawn once and kept. Right after a payment, visit or
 // install is saved, its card is drawn in the background, so the WhatsApp button shows it at once. The key is the card's content
 // (photos counted by size), so a change — a payment, a setting, a new photo — draws it again instead of showing an old picture.
-const RC_CACHE = new Map(); const RC_MAX = 6;
+const RC_CACHE = new Map(); const RC_MAX = 4; /* the PNG is kept, not the canvas — a 1440 × 2800 canvas is ~16 MB of phone memory */
 const imgKey = (k, v) => (v && typeof v === 'object' && typeof v.src === 'string' && 'naturalWidth' in v ? 'img:' + v.src.length : v);
 export const rcCacheKeys = () => [...RC_CACHE.keys()];
 async function cardSpec(kind, id) {
@@ -2221,7 +2221,8 @@ async function cardSpec(kind, id) {
 }
 async function cardImage(sp) {
   const hit = RC_CACHE.get(sp.key); if (hit) { RC_CACHE.delete(sp.key); RC_CACHE.set(sp.key, hit); return { ...hit, cached: true }; }
-  const cv = await sp.draw(); const blob = await RC.canvasBlob(cv); const e = { cv, blob, url: URL.createObjectURL(blob), name: sp.name, alt: sp.alt };
+  const cv = await sp.draw(); const blob = await RC.canvasBlob(cv); const e = { w: cv.width, h: cv.height, blob, url: URL.createObjectURL(blob), name: sp.name, alt: sp.alt };
+  cv.width = cv.height = 0; /* free the canvas memory at once (iOS keeps it otherwise) */
   RC_CACHE.set(sp.key, e);
   while (RC_CACHE.size > RC_MAX) { const [k0, e0] = RC_CACHE.entries().next().value; RC_CACHE.delete(k0); if (e0.url !== S.rcUrl) { try { URL.revokeObjectURL(e0.url); } catch (err) {} } }
   return { ...e, cached: false };
@@ -2237,7 +2238,7 @@ async function imageCard(kind, id) {
   try {
     const sp = await cardSpec(kind, id); if (!sp || sp.err) { clearTimeout(slow); if (sp && sp.err) toast(sp.err); box.classList.add('hidden'); return; }
     const r = await cardImage(sp); clearTimeout(slow);
-    S.rcCanvas = r.cv; S.rcKind = kind; S.rcBlob = r.blob; S.rcUrl = r.url; S.rcName = r.name; S.rcFromCache = r.cached;
+    S.rcCanvas = { width: r.w, height: r.h }; S.rcKind = kind; /* the size only — the picture itself is the PNG */ S.rcBlob = r.blob; S.rcUrl = r.url; S.rcName = r.name; S.rcFromCache = r.cached;
     const can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([r.blob], S.rcName, { type: 'image/png' })] }));
     box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(r.alt)}">
       ${can ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcShare">📤 Share → WhatsApp</button>` : ''}

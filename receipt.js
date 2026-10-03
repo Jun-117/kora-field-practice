@@ -1,11 +1,11 @@
 // Customer pictures (v0.12 image receipt → v0.16 theme v2, Jun 2026-10-03 "이거로 당연히 적용 시켜야지"): drawn on a canvas on the phone,
-// 360-wide design units × 3 = 1080 px wide, height = the content (0 px of page around the card). No library, works offline.
+// 360-wide design units × 4 = 1440 px wide (v0.16 · Jun 10/3 "해상도 이따구로 안좋게 나가냐?" — was × 3 = 1080), height = the content. No library, works offline.
 // THEME v2 (one theme for every card): navy→blue header band carrying the legal name on its first line, a white logo chip and the card title ·
 // white body · icons = white line icons in solid navy / blue circles · one gradient band per card · sky "next" row · the same footer everywhere.
 import * as R from './logic.js';
 import * as B from './bs.js';
 
-const W = 360, SCALE = 3;
+const W = 360, SCALE = 4; /* 1440 px wide: sharper when the customer zooms in, and an HD WhatsApp send keeps it */
 const C = { navy: '#0d2d5e', blue: '#1f6fb2', sky: '#dff1fb', skyLine: '#bfe0f5', ink: '#15202b', mute: '#6b7786', line: '#e6ebf1', green: '#22c55e', greenInk: '#06321a', skyInk: '#3b5a7c', tot: '#f3f6fa', lite: '#8fd3f4', photo: '#b9c5d3' };
 const FONT = '-apple-system, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, "Noto Sans Devanagari", sans-serif';
 const font = (w, px) => `${w} ${px}px ${FONT}`;

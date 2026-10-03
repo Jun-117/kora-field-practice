@@ -2223,14 +2223,21 @@ export const waWebUrl = (phone, demo = DEMO) => { const d = String(phone || '').
 export function waWebOpen(phone) { /* one named tab: the next card reuses it instead of opening WhatsApp Web again */
   try { return window.open(waWebUrl(phone), 'kora-wa'); } catch (e) { return null; }
 }
+function csLayout() { /* v0.16.0 (7): 8 rows on screen, the rest behind "+N more" · counts follow the rows */
+  const L = document.querySelector('.cs-list'); if (!L) return;
+  const rows = [...L.querySelectorAll('.cs-i')]; const open = L.classList.contains('cs-open');
+  rows.forEach((r, i) => r.classList.toggle('hidden', !open && i >= 8));
+  const mb = document.querySelector('[data-act="cardsMore"]'); if (mb) { if (!open && rows.length > 8) mb.textContent = `+${rows.length - 8} more`; else mb.remove(); }
+  const n = document.querySelector('[data-cards-todo]'); if (n) { n.textContent = `${rows.length} to send`; n.classList.toggle('warn', rows.length > 0); n.classList.toggle('ok', !rows.length); }
+  if (!rows.length && !L.querySelector('.empty')) L.insertAdjacentHTML('beforeend', '<div class="empty">Nothing to send</div>');
+}
 function syncSentUi(key, on) { /* in place — re-rendering the modal would drop the picture */
-  for (const r of document.querySelectorAll('[data-cardrow]')) {
-    if (r.dataset.cardrow !== key) continue; r.classList.toggle('sent', on);
-    const dot = r.querySelector('.dot'); if (dot) dot.className = 'dot ' + (on ? 'g' : 'y');
-    const b = r.querySelector('[data-act="cardSent"]'); if (b) b.textContent = on ? '↩ Not sent' : '✓ Sent';
-  }
   for (const b of document.querySelectorAll('#rcBox [data-act="cardSent"]')) if (b.dataset.key === key) b.textContent = on ? '✓ Sent' : 'Mark as sent';
-  const n = document.querySelector('[data-cards-todo]'); if (n) n.textContent = `${document.querySelectorAll('.cs-i:not(.sent)').length} to send`;
+  if (on) {
+    let gone = 0; for (const r of document.querySelectorAll('[data-cardrow]')) if (r.dataset.cardrow === key) { r.remove(); gone++; }
+    const sp = document.querySelector('[data-cards-sent]'); if (gone && sp) { const k = (Number(sp.dataset.cardsSent) || 0) + 1; sp.dataset.cardsSent = String(k); sp.textContent = `${k} sent`; }
+    csLayout();
+  } else S.staleDesk = true; /* un-marked in the card window: the row comes back when the window closes and the desk redraws */
 }
 async function cardSpec(kind, id) {
   const co = { name: S.settings.coName || 'Kora Care Private Limited', nameNe: S.settings.coNameNe || '', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '', bankLine: S.settings.coBankLine || '' };
@@ -3167,6 +3174,7 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'rcShare') { ev.preventDefault(); if (!S.rcBlob) return; const r = await RC.shareImage(S.rcBlob, S.rcName || 'receipt.png'); toast(r === 'shared' ? '✅ Shared' : r === 'unsupported' ? 'Sharing not available here — save the image' : 'Share cancelled'); }
   else if (act === 'rcWaWeb') { ev.preventDefault(); if (!S.rcUrl) return; const w = waWebOpen(S.rcPhone); const dl = document.createElement('a'); dl.href = S.rcUrl; dl.download = S.rcName || 'kora-card.png'; document.body.appendChild(dl); dl.click(); dl.remove(); toast(!w ? 'Pop-up blocked — allow pop-ups for this site, then tap again' : DEMO ? 'Practice: made-up numbers, so no chat was opened' : '⬇️ Saved · drag the picture into the chat'); } /* v0.16.0 (5) ④ */
   else if (act === 'cardOpen') { ev.preventDefault(); const k = a.dataset.kind, id = a.dataset.id, cid = a.dataset.cid; if (!k || !id || !cid) return; nav('customers', 'detail', k === 'receipt' ? { id: cid, receipt: id } : k === 'visit' ? { id: cid, vrep: id } : { id: cid, inst: cid }); setTimeout(() => imageCard(k, id), 450); } /* ⑥ from the desk list: the home opens with the card drawn */
+  else if (act === 'cardsMore') { ev.preventDefault(); const L = document.querySelector('.cs-list'); if (L) { L.classList.add('cs-open'); csLayout(); } } /* v0.16.0 (7) */
   else if (act === 'cardSent') { ev.preventDefault(); const k = a.dataset.key; if (!k) return; const on = markCardSent(k, !cardsSent()[k]); syncSentUi(k, on); toast(on ? '✓ Marked as sent' : 'Marked as not sent'); } /* ⑥ */
   else if (act === 'demoWho') { if (DEMO) demoWho(); }
   else if (act === 'demoAs') { if (DEMO) demoAs(a.dataset.as || ''); }

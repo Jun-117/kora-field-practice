@@ -849,3 +849,4 @@ a.btn { display:inline-flex; align-items:center; justify-content:center; text-de
 .cs-i .btn.small { flex:none; }
 .cs-i.sent { opacity:.5; }
 .cs-list .empty { grid-column:1 / -1; }
+.cs-morebtn { margin-top:8px; }

@@ -316,7 +316,7 @@ function anomalyChips(m) {
 }
 // ---- v0.16.0 (5) · Jun 10/3 "요원은 밖에서 할거 ㅈㄴ많을탠데 … 일단 내가 하는거로. 맥으로": cards to send from the desk —
 // receipts (credit notes too), visit notes and installed cards of the last 14 days, not-yet-sent first. "Sent" lives on this computer (app.js cardsSent).
-export function cardsToSend(m, days = 14) {
+export function cardsToSend(m, days = 1) { /* v0.16.0 (7) Jun 10/3 "보낼 카드 줄여, 50개 뭐야": today + yesterday (was 14 days) */
   const from = R.addDays(m.t, -days), sent = cardsSent(), out = [];
   const inWin = (d) => R.isDate(d) && d >= from && d <= m.t;
   for (const p of m.D.payments) { if (!(Number(p.amount) > 0) || !inWin(p.date)) continue; const x = m.cust.get(p.customerId); if (!x) continue; out.push({ key: 'receipt:' + p.id, kind: 'receipt', id: p.id, c: x.c, date: p.date, what: `${R.isNonCash(p) ? '🎁 Credit note' : '🧾 Receipt'} · ${R.npr(p.amount)}` }); }
@@ -325,10 +325,10 @@ export function cardsToSend(m, days = 14) {
   for (const e of out) e.sent = !!sent[e.key];
   return out.sort((a, b) => (a.sent - b.sent) || String(b.date).localeCompare(String(a.date)));
 }
-function cardsPanel(m) {
-  const xs = cardsToSend(m, 14), todo = xs.filter((e) => !e.sent).length;
-  const row = (e) => `<div class="item cs-i${e.sent ? ' sent' : ''}" data-cardrow="${esc(e.key)}"><span class="dot ${e.sent ? 'g' : 'y'}"></span><div class="main"><div class="t">${esc(e.what)}</div><div class="s" data-noi18n>${esc(e.date)} · ${esc(e.c.name || '')} (${esc(e.c.code || '')})</div></div><button class="btn small" data-act="cardOpen" data-kind="${e.kind}" data-id="${esc(e.id)}" data-cid="${esc(e.c.id)}">🖼 Card</button><button class="btn small ghost" data-act="cardSent" data-key="${esc(e.key)}">${e.sent ? '↩ Not sent' : '✓ Sent'}</button></div>`;
-  return panel('s12', 6, '<b>📨 Cards to send</b> · last 14 days', `<div class="mini-list cs-list">${xs.slice(0, 48).map(row).join('') || '<div class="empty">Nothing to send</div>'}</div><div class="sub muted" style="margin-top:6px">Sent marks are kept on this computer only</div>`, `<span class="pill ${todo ? 'warn' : 'ok'}" data-cards-todo>${todo} to send</span>`);
+function cardsPanel(m) { /* v0.16.0 (7): only what is still to send · sent ones = a count · 8 rows, the rest behind "+N more" */
+  const xs = cardsToSend(m, 1), todo = xs.filter((e) => !e.sent), sentN = xs.length - todo.length;
+  const row = (e, i) => `<div class="item cs-i${i >= 8 ? ' hidden' : ''}" data-cardrow="${esc(e.key)}"><span class="dot y"></span><div class="main"><div class="t">${esc(e.what)}</div><div class="s" data-noi18n>${esc(e.date)} · ${esc(e.c.name || '')} (${esc(e.c.code || '')})</div></div><button class="btn small" data-act="cardOpen" data-kind="${e.kind}" data-id="${esc(e.id)}" data-cid="${esc(e.c.id)}">🖼 Card</button><button class="btn small ghost" data-act="cardSent" data-key="${esc(e.key)}">✓ Sent</button></div>`;
+  return panel('s12', 6, '<b>📨 Cards to send</b> · today + yesterday', `<div class="mini-list cs-list">${todo.map(row).join('') || '<div class="empty">Nothing to send</div>'}</div>${todo.length > 8 ? `<button class="btn small ghost cs-morebtn" data-act="cardsMore">+${todo.length - 8} more</button>` : ''}<div class="sub muted" style="margin-top:6px">Sent marks are kept on this computer only</div>`, `<span class="pill ${todo.length ? 'warn' : 'ok'}" data-cards-todo>${todo.length} to send</span> <span class="pill grey" data-cards-sent="${sentN}">${sentN} sent</span>`);
 }
 function pageCommand(m) {
   const M = m.metrics, t = m.t;

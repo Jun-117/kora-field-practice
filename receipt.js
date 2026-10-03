@@ -44,40 +44,56 @@ const NE = { // 🔴 Nepali drafts — Tara to check
   installed: 'जडान भयो', isIn: 'तपाईंको KORA जडान भयो', came: 'आज हामी आयौं', receipt: 'भुक्तानी रसिद', creditNote: 'क्रेडिट नोट', total: 'जम्मा', customer: 'ग्राहक', codeK: 'कोड', bill: 'बिल', payBy: 'माध्यम', deposit: 'धरौटी',
   billDue: 'बिल तिर्ने', thisMonth: 'यो महिना', bankApp: 'बैंकको एप → ग्यालरीबाट QR स्क्यान', scan: 'स्क्यान गरी तिर्नुहोस्', paidQ: 'तिर्नुभयो? स्क्रिनसट पठाउनुहोस्',
 };
+// v0.16: bill k's day with pauses counted (a paused home's bill days move — the plain schedule printed "2 Nov → 1 Nov")
+const dueOf = (c, k) => { const d = R.billDays(c).dues[k - 1]; return R.isDate(d) ? d : R.billDue(c.installDate, k); };
 const coOf = (co) => ({ phone: co.phone || '', web: co.web || 'koracarenepal.com', ward: co.ward || 'Pokhara-13', pan: co.pan || '', company: co.name || 'Kora Care Private Limited', companyNe: co.nameNe || NE_CO, bankLine: co.bankLine || '' });
 
 // ================= data =================
 // What goes on the receipt. x = the customer's model row (c, led), pay = the payment, co = company lines.
-export function receiptData(x, pay, co = {}) {
+export function receiptData(x, pay, co = {}, pays = null, today = '') {
   const led = x.led || { splits: {}, bills: [], depositCollected: 0, nextBill: null };
   const sp = led.splits[pay.id] || {};
   const p = R.PRICES;
-  const paidBill = sp.extra !== undefined ? null : (led.bills.find((b) => b.paidOn === pay.date) || led.bills.filter((b) => b.paid > 0 && b.due <= pay.date).slice(-1)[0] || null);
+  // v0.16: the customer's newest payment → its bills = the ones whose paid amount it actually changed (a credit or a part-payment lands
+  // where the money went — credits are booked first, so the old "paid on this date" guess pointed at the wrong bill), and "next bill" = the
+  // first bill still open now, with only what is left on it. An older receipt (the ledger has moved on since) keeps the old reading.
+  let paidBill = null, firstBill = null, nextOpen = null;
+  const own = Array.isArray(pays) ? pays.filter((q) => q.customerId === x.c.id && Number(q.amount) > 0) : null;
+  if (own && sp.extra === undefined && R.isDate(today) && !own.some((q) => q.id !== pay.id && String(q.date) > String(pay.date))) {
+    const l0 = R.ledger(x.c, own.filter((q) => q.id !== pay.id), today);
+    const touched = led.bills.filter((b) => { const b0 = l0.bills.find((q) => q.k === b.k); return Math.abs((Number(b.paid) || 0) - (b0 ? Number(b0.paid) || 0 : 0)) > 0.0001; });
+    if (touched.length) { firstBill = touched[0]; paidBill = touched[touched.length - 1]; nextOpen = led.nextBill || null; }
+  }
+  if (!paidBill) paidBill = sp.extra !== undefined ? null : (led.bills.find((b) => b.paidOn === pay.date) || led.bills.filter((b) => b.paid > 0 && b.due <= pay.date).slice(-1)[0] || null);
+  if (!firstBill) firstBill = paidBill;
   const shortDate = (iso) => niceDate(iso).replace(/ \d{4}$/, '');
-  const after = (b) => led.bills.find((q) => q.k === b.k + 1) || (R.isDate(x.c.installDate) ? { k: b.k + 1, due: R.billDue(x.c.installDate, b.k + 1), amount: R.billAmount(b.k + 1, p).amount, paid: 0 } : null); /* the ledger stops at today — the next bill may not exist yet */
+  const after = (b) => led.bills.find((q) => q.k === b.k + 1) || (R.isDate(x.c.installDate) ? { k: b.k + 1, due: dueOf(x.c, b.k + 1), amount: R.billAmount(b.k + 1, p).amount, paid: 0 } : null); /* the ledger stops at today — the next bill may not exist yet */
   const span = (b) => { const nx = after(b); return [b.due, nx ? R.addDays(nx.due, -1) : R.addDays(b.due, 29)]; };
-  const period = (b) => { if (!b) return ''; const [f, to] = span(b); return `${shortDate(f)} → ${niceDate(to)}`; };
-  const periodBs = (b) => { if (!b) return ''; const [f, to] = span(b); return `${bsShort(f)} → ${bsShort(to)}`; }; /* every date also in BS (Tara 10/3) */
+  const many = !!(paidBill && firstBill && firstBill.k !== paidBill.k);
+  const period = (b) => { if (!b) return ''; const f = (many && b === paidBill ? firstBill : b).due; const to = span(b)[1]; return `${shortDate(f)} → ${niceDate(to)}`; };
+  const periodBs = (b) => { if (!b) return ''; const f = (many && b === paidBill ? firstBill : b).due; const to = span(b)[1]; return `${bsShort(f)} → ${bsShort(to)}`; }; /* every date also in BS (Tara 10/3) */
+  const kLabel = (b) => (many ? `${ord(firstBill.k)}–${ord(b.k)}` : ord(b.k));
   const lines = [];
   if (sp.extra !== undefined) lines.push({ ic: 'credit', bg: C.blue, t: String(pay.type || 'Payment'), s: '', v: sp.extra });
   else {
     if (sp.install > 0.01) lines.push({ ic: 'install', bg: C.navy, t: 'Installation / first month · जडान', s: 'first-day 4,900 · includes month 1', v: sp.install });
-    if (sp.subscription > 0.01) lines.push({ ic: 'drop', bg: C.navy, t: 'Monthly subscription · मासिक शुल्क', s: paidBill ? `${ord(paidBill.k)} bill · ${period(paidBill)}` : 'monthly bill', v: sp.subscription });
-    if (sp.deposit > 0.01) lines.push({ ic: 'lock', bg: C.blue, t: 'Refundable deposit · फिर्ता हुने धरौटी', s: `instalment ${paidBill ? Math.max(1, Math.min(p.depositMonths, paidBill.k - 1)) : Math.round(sp.deposit / p.depositMonthly)} of ${p.depositMonths} · not a fee`, v: sp.deposit });
+    if (sp.subscription > 0.01) lines.push({ ic: 'drop', bg: C.navy, t: 'Monthly subscription · मासिक शुल्क', s: paidBill ? `${kLabel(paidBill)} bill · ${period(paidBill)}` : 'monthly bill', v: sp.subscription });
+    if (sp.deposit > 0.01) lines.push({ ic: 'lock', bg: C.blue, t: 'Refundable deposit · फिर्ता हुने धरौटी', s: `${many ? 'instalments ' + Math.max(1, Math.min(p.depositMonths, firstBill.k - 1)) + '–' : 'instalment '}${paidBill ? Math.max(1, Math.min(p.depositMonths, paidBill.k - 1)) : Math.round(sp.deposit / p.depositMonthly)} of ${p.depositMonths} · not a fee`, v: sp.deposit });
     if (sp.unallocated > 0.01) lines.push({ ic: 'credit', bg: C.blue, t: 'Credit carried forward · अग्रिम', s: 'counts toward the next bill', v: sp.unallocated });
   }
   const discount = Number(pay.discount) > 0 && pay.approval !== 'Rejected' ? Number(pay.discount) : 0;
-  const discountNote = discount && pay.approval === 'Pending' ? 'discount · waiting for approval' : 'discount';
+  const discountNote = discount && pay.approval === 'Pending' ? 'waiting for approval' : ''; /* v0.16: no repeated word under "Discount" */
   const credit = R.isNonCash(pay); /* referral / service credit: nothing was paid — a credit note */
   // deposit held as of this bill (an old receipt shows what was held then, not today's total)
   const held = Math.round(paidBill ? led.bills.filter((b) => b.k <= paidBill.k).reduce((t, b) => t + (b.parts ? b.parts.deposit : 0), 0) : (led.depositCollected || 0)), segs = Math.max(0, Math.min(p.depositMonths, Math.round(held / p.depositMonthly)));
-  const nb = (paidBill && after(paidBill)) || led.nextBill;
+  const nb = nextOpen || (paidBill && after(paidBill)) || led.nextBill;
+  const nbLeft = !nb ? 0 : nb === nextOpen ? Math.max(0, (Number(nb.amount) || 0) - (Number(nb.paid) || 0)) : Number(nb.amount) || 0; /* newest payment: what is left now · older receipt: the bill as it was */
   return {
     name: x.c.name || '', code: x.c.code || '', no: receiptNo(pay), date: niceDate(pay.date), bs: bsText(pay.date),
     method: credit ? String(pay.type || 'Credit') : (pay.method || ''), ref: credit ? '' : (pay.ref || ''), total: Number(pay.amount) || 0, lines, discount, discountNote, credit,
-    bill: paidBill ? `${ord(paidBill.k)} · ${period(paidBill)}` : (sp.extra !== undefined ? String(pay.type || '') : '—'), billBs: paidBill ? periodBs(paidBill) : '',
+    bill: paidBill ? `${kLabel(paidBill)} · ${period(paidBill)}` : (sp.extra !== undefined ? String(pay.type || '') : '—'), billBs: paidBill ? periodBs(paidBill) : '',
     held, segs, depMonths: p.depositMonths, depTotal: p.depositTotal,
-    next: nb ? `${niceDate(nb.due)} · NPR ${money(nb.amount)}` : 'Paid up · सबै तिरिएको', nextBs: nb ? bsText(nb.due) : '',
+    next: nb ? `${niceDate(nb.due)} · NPR ${money(nbLeft)}` : 'Paid up · सबै तिरिएको', nextBs: nb ? bsText(nb.due) : '',
     ...coOf(co),
   };
 }
@@ -119,7 +135,7 @@ export function billData(x, co = {}, qr = null, today = '') {
   const until = R.isDate(today) && today > first.due ? today : first.due;
   let open = led.bills.filter((q) => q.status !== 'paid' && R.isDate(q.due) && q.due >= first.due && q.due <= until); if (!open.length) open = [first];
   const last = open[open.length - 1];
-  const nx = led.bills.find((q) => q.k === last.k + 1) || (R.isDate(x.c.installDate) && last.k ? { due: R.billDue(x.c.installDate, last.k + 1) } : null);
+  const nx = led.bills.find((q) => q.k === last.k + 1) || (R.isDate(x.c.installDate) && last.k ? { due: dueOf(x.c, last.k + 1) } : null);
   const to = nx ? R.addDays(nx.due, -1) : R.addDays(last.due, 29);
   const comp = (q) => (q.subscription !== undefined ? q : R.billAmount(q.k || 2, p)); /* a ledger bill carries its make-up; otherwise the price rule */
   const left = (q, part) => Math.max(0, (Number(comp(q)[part]) || 0) - (q.parts ? Number(q.parts[part]) || 0 : 0)); /* what is still unpaid of that part */
@@ -229,7 +245,7 @@ function paintReceipt(ctx, d, im, H) {
   text(ctx, d.credit ? `CREDIT APPLIED · ${NE.creditNote}` : `TOTAL PAID · ${NE.total}`, L + 12, y + 20, { f: font(400, 9), color: 'rgba(255,255,255,.8)', ls: 1.4 });
   const nw = text(ctx, 'NPR', L + 12, y + 50, { f: font(600, 15), color: 'rgba(255,255,255,.9)' }); text(ctx, money(d.total), L + 12 + nw + 6, y + 50, { f: font(800, 28), color: '#fff' });
   text(ctx, `${d.date}${d.bs ? ' · ' + d.bs : ''}`, L + 12, y + 68, { f: font(400, 10), color: 'rgba(255,255,255,.85)', max: IW * 0.62 });
-  ctx.font = font(800, 10); const pw = ctx.measureText(d.credit ? 'CREDIT' : 'PAID').width + 36; ctx.fillStyle = C.green; rr(ctx, Rt - 12 - pw, y + 14, pw, 20, 10); ctx.fill();
+  ctx.font = font(800, 10); if ('letterSpacing' in ctx) ctx.letterSpacing = '0.8px'; const pw = ctx.measureText(d.credit ? 'CREDIT' : 'PAID').width + 38; if ('letterSpacing' in ctx) ctx.letterSpacing = '0px'; ctx.fillStyle = C.green; rr(ctx, Rt - 12 - pw, y + 14, pw, 20, 10); ctx.fill();
   icon(ctx, 'check', Rt - 12 - pw + 9, y + 18, 11, C.greenInk, 3.2); text(ctx, d.credit ? 'CREDIT' : 'PAID', Rt - 12 - 10, y + 28, { f: font(800, 10), color: C.greenInk, align: 'right', ls: 0.8 });
   text(ctx, [d.method, d.ref].filter(Boolean).join(' · '), Rt - 12, y + 52, { f: font(400, 10), color: 'rgba(255,255,255,.85)', align: 'right', max: IW * 0.4 });
   y += bh + 14;
@@ -284,7 +300,7 @@ function paintVisit(ctx, d, im, H) {
   y += 16 + 19; y = h1(ctx, L, y, 'We came by today.', '', NE.came, IW);
   y += 14; avatar(ctx, L, y, 19, d.techPhoto); text(ctx, d.tech || 'KORA CARE', L + 48, y + 16, { f: font(700, 12), color: C.navy, max: IW - 52 }); text(ctx, `your KORA person · ${NE.person}`, L + 48, y + 31, { f: font(400, 9.5), color: C.mute, max: IW - 52 });
   y += 38 + 12; hline(ctx, L, Rt, y);
-  for (const it of d.rows) y = row(ctx, L, Rt, y, it);
+  d.rows.forEach((it, i) => { y = row(ctx, L, Rt, y, { ...it, noLine: i === d.rows.length - 1 && !d.ppChanged && !d.next }); }); /* no double rule above the footer */
   if (d.ppChanged) { y += 12; const gw = (IW - 10) / 2, ph = 88; photoBox(ctx, L, y, gw, ph, d.ppBefore, d.ppMonths ? `used PP · ${d.ppMonths} months` : 'used PP', 26); photoBox(ctx, L + gw + 10, y, gw, ph, d.ppAfter, 'new PP', 26); y += ph + 26; }
   if (d.next) { y += 12; y += nextBox(ctx, L, Rt, IW, y, `Next visit · ${NE.next}`, d.next, d.nextBs); }
   y += 18; return foot(ctx, d, L, Rt, IW, y, `Thank you · ${NE.thanks}`, 'Anything wrong with the water or the purifier? WhatsApp us.');

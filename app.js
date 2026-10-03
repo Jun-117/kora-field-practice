@@ -148,9 +148,11 @@ function newCode() {
   return 'KC-' + Date.now().toString(36).toUpperCase().slice(-5);
 }
 export function normPhone(raw) {
-  let d = String(raw || '').replace(/[^\d]/g, '');
+  const s0 = String(raw || '').trim(); let d = s0.replace(/[^\d]/g, '');
   if (d.length === 13 && d.startsWith('977')) d = d.slice(3);
-  return /^9\d{9}$/.test(d) ? '+977' + d : null;
+  if (/^9\d{9}$/.test(d)) return '+977' + d;
+  if (s0.startsWith('+') && /^\d{8,15}$/.test(d) && !d.startsWith('977')) return '+' + d; /* v0.16.0 (8) Jun 10/3 "내 번호로 해보게 풀어봐": a non-Nepal number written with + and its country code */
+  return null;
 }
 export const custLabel = (c) => c ? `${c.name || '(no name)'} (${c.code || '?'})` : '(unknown customer)';
 export const toleOf = (c) => (c && (c.tole === 'Other' ? c.toleOther : c.tole)) || '—';
@@ -722,7 +724,7 @@ FORMS.install = {
     if (!v.name || v.name.length < 2) errs.name = 'Enter the customer name.';
     const phone = normPhone(v.phone);
     if (!phone) errs.phone = 'Enter a 10-digit mobile number starting with 9 (e.g. 98XXXXXXXX).';
-    else { const dup = arr('customers').find((c) => c.phone === phone && c.id !== v._id); if (dup && !confirmed) warns.phone = `Same number as ${custLabel(dup)}. Save anyway only if this is really a different household.`; }
+    else { const dup = arr('customers').find((c) => c.phone === phone && c.id !== v._id); if (dup && !confirmed) warns.phone = `Same number as ${custLabel(dup)}. Save anyway only if this is really a different household.`; else if (!phone.startsWith('+977') && !confirmed) warns.phone = 'Not a Nepal number — fine for a test or a foreign phone (WhatsApp still works).'; }
     need(errs, v, 'zone', 'Choose a zone.'); need(errs, v, 'ward', 'Choose a ward.'); need(errs, v, 'tole', 'Choose a tole.');
     if (v.tole === 'Other' && !v.toleOther) errs.toleOther = 'Write the tole name.';
     if (!inRange(v.householdSize, 1, 40)) errs.householdSize = 'Check this number (1–40).';
@@ -2669,7 +2671,7 @@ export function viewReport(p) {
     `<div class="card">${COLS.filter((c) => ((c !== 'audit' && c !== 'payroll') || isBoss()) && (c !== 'milestones' || S.isAdmin)).map((c) => `<button class="btn ghost" data-csv="col:${c}">⬇️ ${esc(c)} (${S.D[c].size}) CSV</button>`).join('')}<button class="btn" data-act="exportJson">⬇️ Everything as one JSON file</button></div>`;
   if (k === 'users') return head('🪪 Staff & permissions', 'Admin (Jun) has every right and cannot be changed. Everyone else: pick a preset, then switch single rights. Areas only tidy their screens — they are not a security wall. The server checks who may write money, expenses, new customers and approvals — but every staff account can read the shared records (rights and areas decide what the screens show).') + '<div id="usersBox" class="card">Loading… (needs internet)</div>';
   if (k === 'payroll') {
-    if (S.settings.payroll !== 'Yes') return head('💼 Payroll', '') + `<div class="card"><div class="empty">${esc('Payroll is off (Settings → Staff on payroll?). No salaries before the work permit.')}</div></div>`;
+    if (S.settings.payroll === 'No') return head('💼 Payroll', '') + `<div class="card"><div class="empty">${esc('Payroll is off (Settings → Staff on payroll?). No salaries before the work permit.')}</div></div>`;
     const b0 = B.adToBs(m.t); const [py, pm] = p.pm ? p.pm.split('-').map(Number) : [b0.y, b0.m]; const key = `${py}-${String(pm).padStart(2, '0')}`;
     const { rows, rg, dashain } = payrollRows(m, key); const prev = B.addBsMonths(py, pm, -1), next = B.addBsMonths(py, pm, 1);
     const T = rows.reduce((s2, r) => { for (const k2 of ['gross', 'ssfE', 'ssfR', 'net', 'cost']) s2[k2] += r.P[k2]; s2.tds += r.P.tds || 0; return s2; }, { gross: 0, ssfE: 0, ssfR: 0, net: 0, cost: 0, tds: 0 });
@@ -2747,7 +2749,7 @@ export function viewReport(p) {
       <h3>🗓️ Calendar</h3>
       <label>Payday — day of the Nepali month</label><input name="payday" value="${esc(S.settings.payday ?? '')}" placeholder="empty = last day · e.g. 1 · off"><div class="hint">Shown in the company calendar. Empty = the last day of each Nepali month. Type "off" to hide it.</div>
       <label>TDS table from the CA (one line per bracket: yearly amount up to, rate %; last line: rest, rate %)</label><textarea name="taxTable" rows="4" data-noi18n placeholder="${esc(R.TAX_DEFAULT.replace(/\n/g, ' · '))}">${esc(S.settings.taxTable || '')}</textarea><div class="hint">Empty = the Inland Revenue table for 2083/84 (🟢, single = couple). SSF members pay no 1% band. Type the CA's table here to replace it.</div>
-      <label>Staff on payroll?</label><select name="payroll"><option value="No"${S.settings.payroll === 'Yes' ? '' : ' selected'}>No — no salaries yet</option><option value="Yes"${S.settings.payroll === 'Yes' ? ' selected' : ''}>Yes — show TDS and SSF deadlines</option></select>
+      <label>Staff on payroll?</label><select name="payroll"><option value="No"${S.settings.payroll === 'No' ? ' selected' : ''}>No — no salaries yet</option><option value="Yes"${S.settings.payroll === 'No' ? '' : ' selected'}>Yes — show TDS and SSF deadlines</option></select>
       <h3>🧾 Company (for the CA pack)</h3>
       <label>Legal company name</label><input name="coName" value="${esc(S.settings.coName || '')}" placeholder="Kora Care Private Limited (as on the PAN / VAT certificate)"><div class="hint">The first line of every customer picture, in capitals.</div>
       <label>Legal name in Nepali</label><input name="coNameNe" value="${esc(S.settings.coNameNe || '')}" data-noi18n placeholder="कोरा केयर प्राइभेट लिमिटेड"><div class="hint">Empty = the registered name (OCR certificate).</div>

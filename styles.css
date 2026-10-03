@@ -850,3 +850,5 @@ a.btn { display:inline-flex; align-items:center; justify-content:center; text-de
 .cs-i.sent { opacity:.5; }
 .cs-list .empty { grid-column:1 / -1; }
 .cs-morebtn { margin-top:8px; }
+/* v0.16.0 (8) watch list: .mini-list .item (padding:9px 0) beat .watch-i padding → names sat on the coloured rail */
+.mini-list .item.watch-i { padding-left:14px; }

@@ -67,7 +67,7 @@ export function deadlines(from, to, st = {}) {
     const y = Math.floor(k / 12), m = (k % 12) + 1; const nx = B.addBsMonths(y, m, 1); if (!B.inRange(nx.y)) continue;
     const label = B.bsLabel(y, m);
     if (y * 12 + m >= VAT_FIRST[0] * 12 + VAT_FIRST[1]) push(bsDay(nx.y, nx.m, 25), { ic: '🧾', t: `VAT return · ${label}`, sub: 'file even with no sales · IRD online', g: y === VAT_FIRST[0] && m === VAT_FIRST[1] ? '🔴' : '🟢', kind: 'tax' });
-    if (st.payroll === 'Yes') {
+    if (st.payroll !== 'No') { /* v0.16.0 (8) Jun 10/3 "급여 기능 켜라 (처음부터 켜라)": on unless switched off */
       push(bsDay(nx.y, nx.m, 25), { ic: '🧾', t: `TDS on salaries · ${label}`, sub: 'e-TDS · §90(1): 25 days', g: '🟢', kind: 'tax' });
       push(bsDay(nx.y, nx.m, 25), { ic: '🛡️', t: `SSF contribution · ${label}`, sub: 'SSF Act §4(4): 25 days', g: '🟢', kind: 'tax' });
     }

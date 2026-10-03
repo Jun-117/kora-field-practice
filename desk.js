@@ -4,7 +4,7 @@ import * as R from './logic.js';
 import * as B from './bs.js';
 import { langSegHtml, fmtDate, fmtTime, getLang, setLang } from './i18n.js';
 import { loadLeaflet, MAP_OPTS, TILE, POKHARA, addLocate, hereIfAllowed, drawMe, hereNow } from './geo.js';
-import { isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem } from './app.js';
+import { MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem } from './app.js';
 import * as CA from './capack.js';
 import * as CAL from './cal.js';
 import * as SIM from './sim.js';
@@ -12,7 +12,7 @@ export { loadLeaflet };
 
 const NPT = 'Asia/Kathmandu';
 const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN');
-const fmtK = (v) => (Math.abs(v) >= 100000 ? (v / 100000).toFixed(1) + 'L' : Math.abs(v) >= 1000 ? Math.round(v / 1000) + 'k' : fmtN(v));
+const fmtK = (v) => (Math.abs(v) >= 100000 ? (v / 100000).toFixed(1) + ' lakh' : Math.abs(v) >= 1000 ? Math.round(v / 1000) + 'k' : fmtN(v)); /* v0.15: 'L' read as a letter → lakh */
 const HEX = { g: '#2ee59d', y: '#ffcc4d', o: '#ff9a3d', r: '#ff5c5c', k: '#5d7085', b: '#6aa8ff' };
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monLabel = (mk) => `${MON[Number(mk.slice(5, 7)) - 1]} ${mk.slice(0, 4)}`;
@@ -25,9 +25,10 @@ const SIDE = [
   ['customers', '👥', 'Customers', '', 'Customers & growth'], ['watch', '⚠️', 'Watch list', '', 'Customers & growth'], ['leavers', '🚪', 'Leavers', '', 'Customers & growth'], ['network', '🕸️', 'Referrals', '', 'Customers & growth'],
   ['money', '💰', 'Money', 'money', 'Money & plans'], ['history', '📅', 'History', 'money', 'Money & plans'], ['whatif', '🎛️', 'What-if', 'money', 'Money & plans'],
   ['devices', '📦', 'Devices', '', 'Company'], ['staff', '🪪', 'Staff', 'admin', 'Company'], ['phones', '📱', 'Phones', 'admin', 'Company'], ['changes', '🕵️', 'Change log', 'admin', 'Company'], ['reports', '📑', 'Reports', '', 'Company'], ['backup', '💾', 'Backup', 'admin', 'Company'], ['status', '⚙️', 'Sync & settings', '', 'Company'],
+  ['board', '🧱', 'Milestones', 'admin', 'Company build'], /* v0.15: gate chain · shipment — one board kind, many boards */
 ];
 export const DESK_PAGES = [...SIDE.map((x) => x[0]), 'report'];
-const sideOk = (x) => !x[3] || (x[3] === 'admin' ? isBoss() : can(x[3]));
+const sideOk = (x) => (!x[3] || (x[3] === 'admin' ? isBoss() : can(x[3]))) && (x[0] !== 'network' || referralOn()); /* v0.15: the referral tree only during a campaign */
 let last = { side: '', tick: '', bell: '' };
 export function renderDesk(root, fresh) {
   const m = model(); const scr = S.route.screen; NOTES = chartNotes(m);
@@ -119,6 +120,7 @@ function page(scr, m) {
     <div class="panel s3 mlist" style="--i:1"><div class="ph"><span class="t"><b>Today</b> · ${todayList.length} homes</span></div><div class="ml">${todayList.map(({ x, k, t }) => `<div class="ml-i" data-mfly="${esc(x.c.id)}"><span class="k">${k}</span><div class="main"><b>${esc(x.c.name)}</b><div class="muted">${esc(toleOf(x.c))} · ${esc(t)}</div></div>${R.assigneeOf(x.c, m.t) ? `<span class="pill">${esc(R.assigneeOf(x.c, m.t))}</span>` : ''}</div>`).join('') || '<div class="empty">Nothing due today 🏖️</div>'}</div></div></div>`; }
   if (scr === 'history') return pageHistory(m);
   if (scr === 'reports') return pageReports();
+  if (scr === 'board') return pageBoard(m);
   if (scr === 'status') return screenHtml({ screen: 'status', params: {} });
   return pageCommand(m);
 }
@@ -201,7 +203,7 @@ function noteMarks(keys, x, top, bottom, iconY = top + 9) {
   const marks = nts.map((ns, i) => { if (!ns.length) return ''; for (const n of ns) if (!seen.has(n.t + n.d)) seen.set(n.t + n.d, n);
     return `<g class="cnote"><line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${top}" y2="${bottom}" stroke="var(--muted)" stroke-dasharray="2 3" opacity=".6"/><text x="${x(i).toFixed(1)}" y="${iconY}" text-anchor="middle" style="font-size:12px">${ns.map((n) => n.ic).filter((v, j, a) => a.indexOf(v) === j).join('')}</text><title>${esc(ns.map((n) => n.t).join(' · '))}</title></g>`; }).join('');
   const list = [...seen.values()];
-  return { marks, legend: list.length ? `<div class="cnotes">${list.slice(0, 6).map((n) => `<span title="${esc(n.d)}">${n.ic} ${esc(n.t)} <i>${esc(n.d.slice(2, 7))}</i></span>`).join('')}${list.length > 6 ? `<span>+${list.length - 6}</span>` : ''}</div>` : '' };
+  return { n: list.length, marks, legend: list.length ? `<div class="cnotes">${list.slice(0, 6).map((n) => `<span title="${esc(n.d)}">${n.ic} ${esc(n.t)} <i>${esc(n.d.slice(2, 7))}</i></span>`).join('')}${list.length > 6 ? `<span>+${list.length - 6}</span>` : ''}</div>` : '' };
 }
 function bars(vals, labels, color = 'var(--brand)', w = 560, h = 180, fmt = fmtN, opts = {}) {
   const { top: max, ticks } = niceAxis(Math.max(0, ...vals), vals.every((v) => Number.isInteger(v))); const pad = 34; const bw = (w - pad) / Math.max(1, vals.length);
@@ -209,8 +211,14 @@ function bars(vals, labels, color = 'var(--brand)', w = 560, h = 180, fmt = fmtN
   const bs = vals.map((v, i) => { const bh = (v / max) * (h - 24); const x = pad + i * bw + bw * 0.18; const hi = opts.hi === i; return `<rect class="barr${hi ? ' hi' : ''}" x="${x.toFixed(1)}" y="${(h - 20 - bh).toFixed(1)}" width="${(bw * 0.64).toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="4" fill="${hi ? 'var(--warn)' : color}" style="animation-delay:${i * 40}ms" ${opts.data ? opts.data(i) : ''}><title>${esc(labels[i])}: ${fmt(v)}</title></rect>`; }).join('');
   const every = Math.ceil(labels.length / 9);
   const ls = labels.map((l, i) => (i % every === 0 || opts.hi === i ? `<text class="ax${opts.hi === i ? ' hi' : ''}" x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${h - 4}" text-anchor="middle">${esc(l)}</text>` : '')).join('');
-  const nm = opts.keys ? noteMarks(opts.keys, (i) => pad + i * bw + bw / 2, 2, h - 20) : { marks: '', legend: '' };
-  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}">${grid}${bs}${nm.marks}${ls}</svg></div>${nm.legend}`;
+  const nm = opts.keys ? noteMarks(opts.keys, (i) => pad + i * bw + bw / 2, 2, h - 20) : { marks: '', legend: '', n: 0 };
+  // v0.15 (Jun 10/3 "이게 무슨 의미인지 헷갈림"): the number sits on every bar, the highlighted bar is explained in words, and the
+  // event marks (📣 💲 🏖️ + dashed lines) hide behind a 📌 toggle instead of floating over the bars
+  const showV = opts.vals !== false && vals.length <= 24;
+  const vl = showV ? vals.map((v, i) => { if (!v) return ''; const bh = (v / max) * (h - 24); const x = pad + i * bw + bw / 2; return `<text class="vl${opts.hi === i ? ' hi' : ''}" x="${x.toFixed(1)}" y="${Math.max(9, h - 20 - bh - 3).toFixed(1)}" text-anchor="middle">${fmt(v)}</text>`; }).join('') : '';
+  const leg = (opts.hi !== undefined && opts.hi >= 0 ? `<span class="cl"><i class="sw" style="background:var(--warn)"></i>${esc(opts.hiLabel || 'the month you picked')}</span>` : '') + (opts.legend || '');
+  const tgl = nm.n ? `<button type="button" class="cn-tgl" data-act="chartNotes">📌 ${nm.n} ${nm.n === 1 ? 'event' : 'events'} on this chart</button>` : '';
+  return `<div class="chartw"><div class="chart"><svg viewBox="0 0 ${w} ${h}">${grid}${bs}${nm.marks}${vl}${ls}</svg></div>${leg || tgl ? `<div class="cfoot">${leg}${tgl}</div>` : ''}${nm.legend}</div>`;
 }
 function gauge(value, trigger, label, meta, good = 'high', judgeable = true) {
   const r = 58, cx = 80, cy = 80, a0 = Math.PI * 0.8, a1 = Math.PI * 2.2; const L = r * (a1 - a0);
@@ -662,8 +670,8 @@ function pageHistory(m) {
     ${panel('s3 kpi', 2, '<b>Cash in</b> · this month', `<div class="v">${counter('h_cash', A.cash)}</div><div class="sub"><span>VAT ${X.vat ? fmtN(X.vat.vat) : 0}</span><span>deposit ${X.vat ? fmtN(X.vat.deposit) : 0}</span>${P ? `<span>${delta(A.cash, P.A.cash, fmtK)}</span>` : ''}</div>`)}
     ${panel('s3 kpi', 3, '<b>Collection</b> · bills due by month end', `<div class="v">${M.collection === null ? '—' : counter('h_col', M.collection, 'pct')}</div><div class="sub"><span>${M.billsPaid}/${M.billsDue} bills</span><span style="color:var(--bad)">overdue ${fmtN(M.overdueAmt)}</span></div>`)}
     ${panel('s3 kpi', 4, '<b>In · out</b> · this month', `<div class="v">+${A.installs.length}<small> / −${A.churns.length}</small></div><div class="sub"><span>deposit held ${fmtN(X.dep.held)}</span><span>MRR ${fmtN(M.mrr)}</span></div>`)}
-    ${panel('s6', 5, '<b>Households</b> · active at each month end', bars(actV, lab, 'var(--brand)', 560, 170, fmtN, { keys: H.months, hi: i, data: (k) => `data-hist="${H.months[k]}" style="cursor:pointer"` }))}
-    ${panel('s6', 6, '<b>Cash in</b> · every month', bars(cashV, lab, 'var(--ok)', 560, 170, fmtK, { keys: H.months, hi: i, data: (k) => `data-hist="${H.months[k]}" style="cursor:pointer"` }))}
+    ${panel('s6', 5, '<b>Households</b> · active at each month end · each bar = homes paying at that month’s end', bars(actV, lab, 'var(--brand)', 560, 170, fmtN, { keys: H.months, hi: i, hiLabel: 'the month you picked · tap a bar to move', data: (k) => `data-hist="${H.months[k]}" style="cursor:pointer"` }))}
+    ${panel('s6', 6, '<b>Cash in</b> · every month', bars(cashV, lab, 'var(--ok)', 560, 170, fmtK, { keys: H.months, hi: i, hiLabel: 'the month you picked · NPR received in that month', data: (k) => `data-hist="${H.months[k]}" style="cursor:pointer"` }))}
     ${panel('s4', 7, `<b>Money</b> · ${esc(monLabel(sel))}`, `${hbars(payRows.map(([k, v]) => ({ l: k, v })), 'var(--ok)', fmtK)}<div class="kv" style="margin-top:10px"><div class="k">Taxable (VAT incl.)</div><div class="v num">${X.vat ? fmtN(X.vat.taxable + X.vat.forfeits) : 0}</div><div class="k">VAT 13%</div><div class="v num">${X.vat ? X.vat.vat.toFixed(2) : '0.00'}</div><div class="k">Deposit received</div><div class="v num">${X.vat ? fmtN(X.vat.deposit) : 0}</div></div>`, `<button class="a" data-csv="hist:payments:${sel}">⬇️ CSV</button>`)}
     ${panel('s4', 8, `<b>Field</b> · ${esc(monLabel(sel))}`, `<div class="kv"><div class="k">Installs</div><div class="v num">${A.installs.length}</div><div class="k">Visits done</div><div class="v num">${A.visits.length}</div>${Object.entries(A.visitTypes).map(([k, v]) => `<div class="k">· ${esc(k)}</div><div class="v num">${v}</div>`).join('')}<div class="k">Filters changed</div><div class="v num">${Object.values(A.filters).reduce((s, v) => s + v, 0)} <span class="muted">${esc(Object.entries(A.filters).map(([k, v]) => `${k} ${v}`).join(' · '))}</span></div><div class="k">Sanitised</div><div class="v num">${A.sanitised}</div><div class="k">Requests in · done</div><div class="v num">${A.requestsIn.length} · ${A.requestsDone.length}</div><div class="k">Calls logged</div><div class="v num">${A.checkins.length}</div><div class="k">Recovery cases</div><div class="v num">${A.recoveries.length}</div></div>`, `<button class="a" data-csv="hist:visits:${sel}">⬇️ CSV</button>`)}
     ${panel('s4', 9, `<b>Installs & leavers</b> · ${esc(monLabel(sel))}`, `<div class="mini-list">${A.installs.map((c) => `<div class="item" data-cust="${esc(c.id)}"><span class="dot g"></span><div class="main"><div class="t">${esc(c.name)}</div><div class="s">${esc(c.installDate)} · ${esc(toleOf(c))} · ${esc(c.agent || '')}</div></div></div>`).join('')}${A.churns.map((c) => `<div class="item" data-cust="${esc(c.id)}"><span class="dot k"></span><div class="main"><div class="t">${esc(c.name)} · left</div><div class="s">${esc(c.churnDate)} · ${esc(toleOf(c))}</div></div></div>`).join('') || (A.installs.length ? '' : '<div class="empty">None this month</div>')}</div>`, `<button class="a" data-csv="hist:installs:${sel}">⬇️ CSV</button>`)}
@@ -713,10 +721,10 @@ export function historyCsv(kind, mk) {
 function pageReports() {
   const t = (r, ic, l, s, list, ok = true) => (ok ? `<button class="tile" ${list ? `data-list="${r}"` : `data-report="${r}"`}><span class="ic">${ic}</span><span>${l}</span><span class="s">${s}</span></button>` : '');
   const money = can('money');
-  return `<div class="panel" style="--i:0"><div class="ph"><span class="t"><b>Reports</b> · open on the right</span></div><div class="heat" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+  return `<div class="panel" style="--i:0"><div class="ph"><span class="t"><b>Reports</b> · open in the middle · click outside to go back</span></div><div class="heat" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
     ${t('capack', '🧾', 'CA pack', 'sales + purchase book · Excel', 0, money)}${t('expenses', '🧾', 'Expenses', 'bills · input VAT', 0, can('expense') || money)}${t('payments', '💵', 'Payments', 'all money in', 0, money)}${t('vat', '🧾', 'VAT by month', 'AD months · CSV', 0, money)}${t('deposits', '🏦', 'Deposit book', 'liability per home', 0, money)}
     ${t('devices', '📦', 'Devices', 'every serial')}${t('relocations', '🚚', 'Relocations', 'moving house', 1)}${t('contract', '📜', 'Contract events', 'notice · transfer · lost', 1)}${t('screenings', '🔎', 'Screenings', 'sign-up checks', 1)}${t('proof', '✍️', 'Proof of visit', 'signatures · 30 days', 1)}${t('water', '🧫', 'Raw-water vials', 'E. coli · PoC', 1)}${t('claims', '📮', 'Supplier claims', 'defects → PI', 1, can('stock'))}${t('quality', '🩺', 'Data to fix', 'missing GPS · bill no.')}${t('gate', '🧭', 'Direction gate', 'with sample sizes', 0, money)}${t('stock', '📦', 'Stock & FCL', 'order signal', 0, can('stock'))}${t('learning', '🧪', 'Filter learning', 'real intervals')}
-    ${t('referrals', '🎁', 'Referrals', 'G-1 §4 rewards')}${t('leavers', '🚪', 'Leavers', 'why homes left')}${t('capacity', '👷', 'Field capacity', 'jobs vs hands')}${t('funnel', '⏳', 'Sales stage days', 'lead → first payment')}${t('perform', '📑', 'Grant KPIs', 'PAYGo PERFORM', 0, money)}${t('billing', '🌊', 'Billing moves', 'new · left · month 14', 0, money)}${t('noshows', '🚪', 'Wasted trips', 'nobody home')}${t('callbacks', '🔁', 'Callbacks', 'problems soon after a job')}${t('trainings', '🎓', 'Trainings', 'records', 0, !!S.isAdmin)}${t('leads', '🧲', 'Leads', 'pipeline', 1)}
+    ${t('referrals', '🎁', 'Referrals', 'G-1 §4 rewards', 0, referralOn())}${t('leavers', '🚪', 'Leavers', 'why homes left')}${t('capacity', '👷', 'Field capacity', 'jobs vs hands')}${t('funnel', '⏳', 'Sales stage days', 'lead → first payment')}${t('perform', '📑', 'Grant KPIs', 'PAYGo PERFORM', 0, money)}${t('billing', '🌊', 'Billing moves', 'new · left · month 14', 0, money)}${t('noshows', '🚪', 'Wasted trips', 'nobody home')}${t('callbacks', '🔁', 'Callbacks', 'problems soon after a job')}${t('trainings', '🎓', 'Trainings', 'records', 0, !!S.isAdmin)}${t('leads', '🧲', 'Leads', 'pipeline', 1)}
     ${t('help', '❓', 'How to use', 'staff one-pager')}${t('recoveries', '📦', 'Recoveries', 'cases', 1)}${t('paused', '⏸️', 'Paused', 'customers', 1)}${t('tomorrow', '📅', 'Bills tomorrow', 'reminders', 1)}
     ${isBoss() ? t('handover', '🆘', 'If Jun cannot work', 'handover page') + t('payroll', '💼', 'Payroll', 'SSF · TDS · payslips') : ''}${isBoss() ? t('users', '🪪', 'Staff & permissions', 'who can do what') + t('bank', '🏧', 'Bank CSV match', 'plan #2') + t('settings', '⚙️', 'Settings', 'company · calendar · techs') : ''}${t('export', '💾', 'Export all data', 'backup', 0, can('export'))}
   </div></div>`;
@@ -1192,6 +1200,46 @@ function drawWatch() {
   return pts;
 }
 
+// ---------- v0.15 milestone boards (Jun 10/3 "선적 트래커·게이트 보드 = 관제실 카테고리 · 등급 칸") ----------
+// Waiting made visible: who holds the ball and for how many days, what is due, how sure each date is. Finished boards sink to the bottom.
+function pageBoard(m) {
+  const t = m.t; const all = arr('milestones'); const boards = msBoards();
+  const p = S.route.params || {}; const sel = p.b && boards.includes(p.b) ? p.b : boards[0] || '';
+  const items = all.filter((x) => (x.board || 'Board') === sel).sort((a1, b1) => (Number(a1.order) || 0) - (Number(b1.order) || 0) || String(a1.due || '9').localeCompare(String(b1.due || '9')));
+  const open = items.filter((x) => x.state !== 'Done'), done = items.filter((x) => x.state === 'Done');
+  const days = (x) => (R.isDate(x.since) ? R.daysBetween(x.since, t) : null);
+  const waiting = open.filter((x) => x.state === 'Waiting' || x.state === 'Blocked');
+  const longest = waiting.slice().sort((a1, b1) => (days(b1) || 0) - (days(a1) || 0))[0];
+  const soon = open.filter((x) => R.isDate(x.due) && x.due <= R.addDays(t, 14)); const late = open.filter((x) => R.isDate(x.due) && x.due < t);
+  const who = {}; for (const x of open) { const k = x.who || 'Other'; who[k] = (who[k] || 0) + 1; }
+  const gd = (g) => (String(g || '').startsWith('🟢') ? 'g' : String(g || '').startsWith('🟡') ? 'y' : 'r');
+  const bsOf = (iso) => { const b = B.adToBs(iso); return b ? `${B.BS_MONTHS_NE[b.m - 1]} ${b.d}` : ''; };
+  const row = (x) => { const dd = days(x); const isLate = R.isDate(x.due) && x.due < t && x.state !== 'Done';
+    return `<div class="item ms-i" data-go-form="milestone" data-id="${esc(x.id)}" title="Open to edit">
+      <span class="pill ${x.state === 'Done' ? 'ok' : x.state === 'Blocked' ? 'bad' : x.state === 'Waiting' ? 'warn' : 'grey'}">${esc(x.state || 'Todo')}</span>
+      <div class="main"><div class="t">${esc(x.title || '')}</div>
+        <div class="s">${x.who ? `👤 ${esc(x.who)}${x.whoName ? ' · ' + esc(x.whoName) : ''}` : ''}${dd !== null && x.state !== 'Done' && x.state !== 'Todo' ? ` · <b class="${dd > 14 ? 'bad' : ''}">${dd} d</b> with them` : ''}${R.isDate(x.due) ? ` · ${x.state === 'Done' ? 'was due' : 'due'} <b class="${isLate ? 'bad' : ''}">${esc(x.due)}</b> <span class="muted" data-noi18n>${esc(bsOf(x.due))}</span>` : ''}${x.state === 'Done' && R.isDate(x.doneDate) ? ` · done ${esc(x.doneDate)}` : ''}</div>
+        ${x.note ? `<div class="s muted">${esc(x.note)}</div>` : ''}${x.src ? `<div class="s muted" data-noi18n>📎 ${esc(x.src)}</div>` : ''}</div>
+      <span class="dot ${gd(x.grade)}" title="${esc(x.grade || '🔴 guess')}"></span>
+      ${x.state !== 'Done' ? `<button class="btn small ghost" data-msdone="${esc(x.id)}" title="Done">✓</button>` : `<button class="btn small ghost" data-msreopen="${esc(x.id)}" title="Open again">↩</button>`}
+    </div>`; };
+  const tabs = boards.map((b) => { const n = all.filter((x) => (x.board || 'Board') === b && x.state !== 'Done').length; return `<button data-msboard="${esc(b)}" class="${b === sel ? 'on' : ''}" data-noi18n>${esc(b)} <b>${n}</b></button>`; }).join('');
+  return `<div class="cc board">
+    <div class="panel s12 wt-bar" style="--i:0"><div class="seg">${tabs}</div><span class="sp"></span>
+      <button class="btn small" data-go-form="milestone" data-board="${esc(sel)}">＋ Item</button><button class="btn small ghost" data-go-form="milestone" data-board="__new__">＋ Board</button>
+      <label class="btn small ghost" style="margin:0">📥 Import JSON<input type="file" id="msImport" accept=".json,application/json" hidden></label>${sel ? `<button class="btn small ghost" data-msexport="${esc(sel)}">⬇️ JSON</button>` : ''}</div>
+    ${panel('s3 kpi', 1, '<b>Waiting on others</b>', `<div class="v" style="color:${waiting.length ? 'var(--warn)' : 'inherit'}">${waiting.length}</div><div class="sub">${Object.entries(who).sort((a1, b1) => b1[1] - a1[1]).map(([k, n]) => `<span>${esc(k)} ${n}</span>`).join('') || '<span>nobody</span>'}</div>`)}
+    ${panel('s3 kpi', 2, '<b>Longest wait</b>', `<div class="v" style="color:${longest && days(longest) > 14 ? 'var(--bad)' : 'inherit'}">${longest ? days(longest) + ' d' : '—'}</div><div class="sub"><span>${longest ? esc(longest.title) : 'nothing waiting'}</span></div>`)}
+    ${panel('s3 kpi', 3, '<b>Due in 14 days</b>', `<div class="v" style="color:${late.length ? 'var(--bad)' : soon.length ? 'var(--warn)' : 'inherit'}">${soon.length}</div><div class="sub">${late.length ? `<span style="color:var(--bad)">${late.length} past due</span>` : ''}${soon.filter((x) => x.due >= t).slice(0, 2).map((x) => `<span>${esc(x.due)} ${esc(x.title)}</span>`).join('')}</div>`)}
+    ${panel('s3 kpi', 4, '<b>Done</b>', `<div class="v">${done.length} <span class="muted" style="font-size:16px">/ ${items.length}</span></div><div class="sub"><span>${items.length ? Math.round((done.length / items.length) * 100) : 0}% of this board</span></div>`)}
+    ${panel('s8', 5, `<b>${esc(sel || 'Board')}</b> · ${open.length} open`, `<div class="mini-list">${open.map(row).join('') || '<div class="empty">Nothing open on this board 🏖️</div>'}</div>${done.length ? `<details class="ms-done"><summary>✅ Done · ${done.length}</summary><div class="mini-list">${done.map(row).join('')}</div></details>` : ''}`)}
+    <div class="s4 wt-side" style="--i:6">
+      ${panel('', 6, '<b>Who holds the ball</b> · open items', Object.keys(who).length ? hbars(Object.entries(who).sort((a1, b1) => b1[1] - a1[1]).map(([l, v]) => ({ l, v, color: l === 'Us' ? 'var(--brand)' : 'var(--warn)' })), 'var(--warn)') : '<div class="empty">—</div>')}
+      ${panel('', 7, '<b>Dates on this board</b>', `<div class="mini-list">${items.filter((x) => R.isDate(x.due)).sort((a1, b1) => a1.due.localeCompare(b1.due)).map((x) => `<div class="item" data-go-form="milestone" data-id="${esc(x.id)}"><span class="dot ${gd(x.grade)}"></span><div class="main"><div class="t">${esc(x.due)} <span class="muted" data-noi18n>${esc(bsOf(x.due))}</span></div><div class="s">${esc(x.title)}${x.state === 'Done' ? ' · ✅' : ''}</div></div></div>`).join('') || '<div class="empty">No dates yet</div>'}</div>`)}
+      ${panel('', 8, '<b>How to read it</b>', `<div class="muted">🟢 measured · 🟡 someone said so · 🔴 our guess — the dot is how sure the date is, not how important the item is.<br>Days = how long the ball has been with them. Tap an item to edit; ✓ closes it. Nothing here is typed into the code — import a JSON to fill a board.</div>`)}
+    </div>
+  </div>`;
+}
 // ---------- search ----------
 export function onSearch(q) {
   const box = document.getElementById('deskSearchRes'); if (!box) return;
@@ -1206,6 +1254,8 @@ const reDesk = () => renderDesk(document.getElementById('view'), false);
 document.addEventListener('click', (ev) => {
   if (!S.desk) return;
   const box = document.getElementById('deskSearchRes'); if (box && !ev.target.closest('#deskSearchRes') && ev.target.id !== 'deskSearch') box.classList.add('hidden');
+  const mb = ev.target.closest('[data-msboard]'); if (mb) { S.route.params.b = mb.dataset.msboard; reDesk(); return; } /* v0.15 board tabs */
+  const cn = ev.target.closest('[data-act="chartNotes"]'); if (cn) { ev.preventDefault(); const wq = cn.closest('.chartw'); if (wq) wq.classList.toggle('notes-on'); return; } /* v0.15 */
   const s = ev.target.closest('[data-dseg]'); if (s) { S.route.params.f = s.dataset.dseg; reDesk(); return; }
   const so = ev.target.closest('th[data-sort]'); if (so) { S.route.params.sort = so.dataset.sort; reDesk(); return; }
   const to = ev.target.closest('[data-tole]'); if (to) { S.route.params.tole = to.dataset.tole || ''; reDesk(); return; }

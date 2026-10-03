@@ -508,6 +508,16 @@ export function learnedMonths(customers, visits, on = true) {
   for (const r of filterLearning(customers, visits)) { if (r.n >= LEARN_MIN && r.avgMonths && FILTER_MONTHS[r.type]) out[r.type] = Math.max(1, Math.min(36, Math.round(r.avgMonths))); }
   return out;
 }
+// v0.15 filters-together (Jun 10/3 "모든 필터 한번에 해야지 pp 따로 cto 따로 이건 아닌듯"): one filter visit, not one per filter.
+// The next change = the earliest due filter; every filter that would fall due before the change after that goes in on the same visit.
+export function filterBatch(fd, months = FILTER_MONTHS) {
+  const real = (fd || []).filter((f) => f.due && f.type !== 'Sanitise' && (months[f.type] || FILTER_MONTHS[f.type]));
+  if (!real.length) return null;
+  const first = real.slice().sort((a, b) => String(a.due).localeCompare(String(b.due)))[0];
+  const horizon = addMonths(first.due, months[first.type] || FILTER_MONTHS[first.type]);
+  const types = FILTER_TYPES.filter((t) => real.some((f) => f.type === t && f.due < horizon));
+  return { date: first.due, types, horizon, status: first.status, lead: first.type };
+}
 export function filterDues(customer, cVisits, today, months = FILTER_MONTHS) {
   const res = [];
   if (!customer || !isDate(customer.installDate)) return res;
@@ -575,17 +585,20 @@ export function requestSla(receivedMs, isHoliday = (d) => d.getDay() === 6) {
 // ---------- referrals: G-1 §4 ----------
 // Referee: first month free (at sign-up). Referrer: one month free 3 months after the referee signed up,
 // only once the referee is installed and the install fee is paid (§4-2).
-export function referralRewards(customers, payments, ledgers, today) {
-  const out = [];
+export const REFERRAL_SHARE = 0.5; /* v0.15: the referrer gets half a month off (Tara 10/3 "한 달 무료는 너무 퍼주는거" → Jun "50% 추천인 쿠폰") */
+export const referralAmount = () => Math.round(PRICES.monthly * REFERRAL_SHARE);
+// on = Settings "Referral campaign" — off (the default) means no rewards, no card, no page: the campaign is switched on only when installs slow down (Jun 10/3)
+export function referralRewards(customers, payments, ledgers, today, on = true) {
+  const out = []; if (!on) return out;
   const byId = new Map(customers.map((c) => [c.id, c]));
   const credited = (cid, forId) => payments.some((p) => p.type === 'Referral credit' && p.customerId === cid && p.referralFor === forId);
   for (const c of customers) {
     if (!c.referrerId || !byId.has(c.referrerId)) continue;
     const r = byId.get(c.referrerId); const led = ledgers.get(c.id);
     const feePaid = !!(led && led.paidThrough >= 1);
-    out.push({ who: c, forId: c.id, role: 'referee', due: c.signUpDate || c.installDate, amount: PRICES.monthly, ready: true, done: credited(c.id, c.id) });
+    /* v0.15: only the referrer is rewarded (50% of a month); the new customer's own free month is gone */
     const due = addMonths(c.signUpDate || c.installDate, 3);
-    out.push({ who: r, forId: c.id, role: 'referrer', due, amount: PRICES.monthly, ready: feePaid && due <= today, waiting: !feePaid ? 'install fee not paid yet' : due > today ? `from ${due}` : '', done: credited(r.id, c.id) });
+    out.push({ who: r, forId: c.id, role: 'referrer', due, amount: referralAmount(), ready: feePaid && due <= today, waiting: !feePaid ? 'install fee not paid yet' : due > today ? `from ${due}` : '', done: credited(r.id, c.id) });
   }
   return out;
 }

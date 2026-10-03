@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.14.0 (2026-10-03)';
+export const APP_VERSION = 'kf-v0.15.0 (2026-10-03)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -111,8 +111,8 @@ export function can(p) {
 }
 const UV_FLOW_LIMIT = 1.2; // L/min — UV 6W verdict 2026-09-22: passes at or below 1.2
 const MAX_PHOTOS = 3, PHOTO_MAX_PX = 1024, PHOTO_Q = 0.6, PHOTO_MAX_CHARS = 950000;
-const COLS = ['customers', 'visits', 'payments', 'requests', 'leads', 'recoveries', 'trainings', 'checkins', 'stockMoves', 'expenses', 'deviceEvents', 'relocations', 'events', 'audit', 'contractEvents', 'screenings', 'claims', 'tools', 'payroll', 'waterTests'];
-const colsForMe = () => COLS.filter((c) => (c !== 'expenses' || can('expense') || can('money')) && (c !== 'audit' || isBoss()) && (c !== 'payroll' || isBoss())); // the change log and payroll: Jun and the deputy (rules too)
+const COLS = ['customers', 'visits', 'payments', 'requests', 'leads', 'recoveries', 'trainings', 'checkins', 'stockMoves', 'expenses', 'deviceEvents', 'relocations', 'events', 'audit', 'contractEvents', 'screenings', 'claims', 'tools', 'payroll', 'waterTests', 'milestones']; /* v0.15: milestone boards (Jun + deputy) */
+const colsForMe = () => COLS.filter((c) => (c !== 'expenses' || can('expense') || can('money')) && (c !== 'audit' || isBoss()) && (c !== 'payroll' || isBoss()) && (c !== 'milestones' || isBoss())); // the change log, payroll and the boards: Jun and the deputy (rules too)
 
 // ---------- Firebase ----------
 const app = initializeApp(firebaseConfig);
@@ -221,6 +221,20 @@ const photoPut = (id, v) => photoOp('readwrite', (st) => st.put(v, id));
 export const photoGet = (id) => photoOp('readonly', (st) => st.get(id));
 const photoDel = (id) => photoOp('readwrite', (st) => st.delete(id));
 
+// v0.15: a small square JPEG for the staff photo on the customer cards (≤ ~12 KB in the users doc)
+function shrinkAvatar(file, px = 160) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => {
+      const s = Math.min(img.naturalWidth, img.naturalHeight); const sx = (img.naturalWidth - s) / 2, sy = (img.naturalHeight - s) / 2;
+      const c = document.createElement('canvas'); c.width = px; c.height = px; c.getContext('2d').drawImage(img, sx, sy, s, s, 0, 0, px, px); URL.revokeObjectURL(url);
+      let q = 0.82, d = c.toDataURL('image/jpeg', q); while (d.length > 24000 && q > 0.3) { q -= 0.1; d = c.toDataURL('image/jpeg', q); }
+      resolve(d);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('cannot read this photo')); };
+    img.src = url;
+  });
+}
 function shrinkPhoto(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file); const img = new Image();
@@ -397,10 +411,11 @@ export function model() {
     const dn = status === 'Active' ? R.dunning(led, t) : null;
     const nv = status === 'Active' ? R.nextVisit(c, vs) : null;
     const fd = status === 'Active' ? R.filterDues(c, vs, t, FM) : [];
+    const fb = status === 'Active' && S.settings.filterMode !== 'Separate' ? R.filterBatch(fd, FM) : null; /* v0.15: filters go together */
     const ob = status === 'Active' ? R.onboarding(c, chkBy.get(c.id) || [], t) : [];
     const chases = R.chaseLog(chkBy.get(c.id)); const pr = status === 'Active' && led.overdue > 0 ? R.promiseOf(chases, payBy.get(c.id), t) : null; /* v0.9 #1 */
     const dot = status === 'Churned' ? 'k' : status === 'Paused' ? 'b' : led.daysOverdue >= 7 ? 'r' : led.overdue > 0 ? 'y' : 'g';
-    cust.set(c.id, { c, led, dn, nv, fd, ob, vs, dot, status, chases, pr });
+    cust.set(c.id, { c, led, dn, nv, fd, fb, ob, vs, dot, status, chases, pr });
   }
   const act = [...cust.values()].filter((x) => x.status === 'Active');
   // Dispatch: once Jun gives a staff member their own homes, their field lists show those + the unassigned ones.
@@ -425,7 +440,7 @@ export function model() {
   const metrics = R.metrics(D, ledgers, t, S.settings);
   const deposits = R.depositBook(D.customers, ledgers, D.recoveries);
   const vat = R.vatByMonth(D.payments, ledgers, D.recoveries);
-  const referrals = R.referralRewards(D.customers, D.payments, ledgers, t);
+  const referrals = R.referralRewards(D.customers, D.payments, ledgers, t, referralOn()); /* v0.15: off unless the campaign is switched on */
   const learning = R.filterLearning(D.customers.filter((c) => c.status !== 'Churned'), D.visits);
   const filtersAll = act.flatMap((x) => x.fd.filter((f) => f.status !== 'none').map((f) => ({ ...f, x })));
   // Alerts: things that need a person today (each links to its list)
@@ -521,6 +536,7 @@ async function wipePhone() {
   S.wiped = true; S.profile = {};
 }
 export const myName = () => (S.isAdmin ? 'Jun' : (S.profile && S.profile.name) || (S.user && S.user.email ? S.user.email.split('@')[0] : ''));
+export const referralOn = () => S.settings.referralCampaign === 'Yes'; /* v0.15: the referral campaign (card · rewards · tree) is off until Settings says Yes */
 export const techNames = () => { const base = ['Tara', 'Jun']; const extra = String(S.settings.techNames || '').split(',').map((s) => s.trim()).filter(Boolean); return [...new Set([...base, ...extra])]; };
 
 // ================= forms =================
@@ -813,7 +829,7 @@ FORMS.visit = {
     { k: 'waitedMin', l: 'Minutes you waited or called', t: 'number', show: (v) => R.isNoShow(v) },
     { k: 'retryDate', l: 'Try again on', t: 'date', show: (v) => R.isNoShow(v), hint: 'The visit stays owed — this date becomes the next visit. After saving, send the "sorry we missed you" message from the customer page.' },
     { t: 'section', k: 'secFilters', l: 'Filters', hint: 'Booking intervals are a guide — decide by what you see. PP brown/black → replace now.', show: (v) => !R.isNoShow(v) },
-    { k: 'filters', l: 'Filters changed', t: 'chips', multi: 1, o: OPT.filters, show: (v) => !R.isNoShow(v) },
+    { k: 'filters', l: 'Filters changed', t: 'chips', multi: 1, o: OPT.filters, show: (v) => !R.isNoShow(v), hint: S.settings.filterMode === 'Separate' ? '' : 'Filters go together: everything that falls due before the next change is done on this visit (pre-ticked).' },
     { k: 'ppColor', l: 'Old PP filter colour', t: 'chips', o: OPT.ppColor, show: (v) => !R.isNoShow(v) },
     { k: 'oldCollected', l: 'Old filters taken back?', t: 'chips', o: OPT.yesNo, show: (v) => !R.isNoShow(v) && (v.filters || []).length > 0 },
     { k: 'oldCount', l: 'How many old filters', t: 'number', show: (v) => !R.isNoShow(v) && (v.filters || []).length > 0, hint: 'One old filter back for each new one.' },
@@ -844,7 +860,7 @@ FORMS.visit = {
     const line = (s) => `<div>${s}</div>`;
     return line(`<b>${esc('Due at this house')}</b>: ${due.length ? esc(due.join(' · ')) : esc('no filter due')}`) + (last ? line(`${esc('Last visit')} ${esc(last.date)} · ${esc(last.visitType || '')}${last.ppColor ? ' · PP ' + esc(last.ppColor) : ''}${last.tdsAfter ? ' · TDS ' + esc(last.tdsAfter) : ''}${esc(last.notes ? ' · ' + String(last.notes).slice(0, 60) : '')}`) : line(esc('No completed visit yet'))) + (x.led && x.led.overdue ? line(`<span style="color:var(--bad)">${esc('Overdue ' + R.npr(x.led.overdue) + ' — ask for it while you are there')}</span>`) : '');
   },
-  prefill(p) { const c = S.D.customers.get(p.cid); const x = p.cid ? model().cust.get(p.cid) : null; const due = x ? (x.fd || []).filter((f) => f.status === 'overdue').map((f) => f.type) : []; return { customerId: p.cid || '', nextVisitDate: c ? R.suggestNextVisit(c.installDate, today()) : '', retryDate: R.addDays(today(), 1), signName: c ? c.name || '' : '', ...(due.length ? { filters: due, visitType: 'Filter change' } : {}) }; },
+  prefill(p) { const c = S.D.customers.get(p.cid); const x = p.cid ? model().cust.get(p.cid) : null; const due = x ? (x.fb && x.fb.date <= R.addDays(today(), 14) ? x.fb.types : (x.fd || []).filter((f) => f.status === 'overdue').map((f) => f.type)) : []; /* v0.15: together → the whole batch */ return { customerId: p.cid || '', nextVisitDate: c ? R.suggestNextVisit(c.installDate, today()) : '', retryDate: R.addDays(today(), 1), signName: c ? c.name || '' : '', ...(due.length ? { filters: due, visitType: 'Filter change' } : {}) }; },
   check(v, confirmed) {
     const errs = {}, warns = {};
     if (!v.customerId || !S.D.customers.has(v.customerId)) errs.customerId = 'Choose the customer.';
@@ -1371,6 +1387,34 @@ FORMS.claim = {
     return { ok, np, go: ['today', 'list', { list: 'claims' }] };
   },
 };
+// v0.15 milestone boards (Jun 10/3 "게이트 보드·선적 트래커 = 관제실 카테고리 · 등급 칸"): one kind of board, many boards.
+// An item = what · who holds the ball · state · since when · due · how sure the date is (🟢🟡🔴) · source · note. Values live here, never in code.
+export const MS_WHO = ['Us', 'Ministry', 'Lawyer', 'Supplier', 'Forwarder', 'Bank', 'CA', 'Immigration', 'Other'];
+export const MS_STATE = ['Todo', 'Waiting', 'Blocked', 'Done'];
+export const MS_GRADE = ['🟢 measured', '🟡 second-hand', '🔴 guess'];
+export const msBoards = () => [...new Set(arr('milestones').map((x) => x.board || 'Board'))];
+FORMS.milestone = {
+  col: 'milestones', title: 'Milestone', icon: '🧱',
+  spec: () => [
+    { k: 'board', l: 'Board', t: 'text', req: 1, ph: 'e.g. Company & licences · 1st shipment', hint: msBoards().length ? 'Boards now: ' + msBoards().join(' · ') + ' — type a new name for a new board.' : 'Type a name — a board is made from its first item.' },
+    { k: 'title', l: 'What', t: 'text', req: 1, ph: 'e.g. Import licence (EXIM code)' },
+    { k: 'who', l: 'Who holds the ball', t: 'chips', o: MS_WHO, req: 1, def: 'Us' },
+    { k: 'whoName', l: 'Name (optional)', t: 'text', ph: 'the officer · the forwarder · the lawyer' },
+    { k: 'state', l: 'State', t: 'chips', o: MS_STATE, req: 1, def: 'Todo' },
+    { k: 'since', l: 'With them since', t: 'date', show: (v) => v.state === 'Waiting' || v.state === 'Blocked', def: today, hint: 'The board counts the days from here.' },
+    { k: 'due', l: 'Due / expected', t: 'date' },
+    { k: 'grade', l: 'How sure is that date', t: 'chips', o: MS_GRADE, def: MS_GRADE[2] },
+    { k: 'src', l: 'Source', t: 'text', ph: 'file:line · who said it · link' },
+    { k: 'note', l: 'Note', t: 'textarea' },
+    { k: 'order', l: 'Order on the board', t: 'number', def: 10, hint: 'Smaller = higher.' },
+  ],
+  prefill(p) { return { board: p.board && p.board !== '__new__' ? p.board : (msBoards()[0] || ''), since: today(), grade: MS_GRADE[2], order: 10 * (arr('milestones').filter((x) => (x.board || 'Board') === p.board).length + 1) }; },
+  check(v) { const errs = {}; need(errs, v, 'board', 'Which board?'); need(errs, v, 'title', 'What is it?'); need(errs, v, 'who', 'Who has it?'); need(errs, v, 'state'); if (!inRange(v.order, 0, 9999)) errs.order = 'A number.'; return { errs, warns: {} }; },
+  save(v, id, isNew) {
+    const d = { ...v, board: String(v.board || '').trim().slice(0, 60), title: String(v.title || '').trim().slice(0, 160), doneDate: v.state === 'Done' ? (v.doneDate || today()) : '', by: myName() };
+    const ok = save(`milestones/${id}`, d, isNew); return { ok, np: 0, go: ['status', S.desk ? 'board' : 'status', { b: d.board }] };
+  },
+};
 // v0.9 #7 tools — who holds it, its state, repairs (G-1 §5-3: carelessness = the person pays half)
 FORMS.tool = {
   col: 'tools', title: 'Tool', icon: '🧰', perm: 'stock',
@@ -1730,11 +1774,12 @@ export function openDrawer(screen, params, mode = 'push') {
   if (mode === 'push') pushNav();
   paintDrawer(first ? '' : 'fwd', 0);
 }
-function drawerHead() { return `<button class="x" data-act="closeDrawer" title="Close (Esc)">✕</button>${S.drawerStack.length ? `<div class="crumbs">${S.drawerStack.slice(-3).map((d) => `<span>${esc(crumbOf(d))}</span>`).join('<i>›</i>')}<i>›</i></div>` : ''}`; }
+function drawerHead() { return `<button class="x" data-act="closeDrawer" title="Close (Esc)">✕</button><button class="fx" data-act="drawerFull" title="Full width">⤢</button>${S.drawerStack.length ? `<div class="crumbs">${S.drawerStack.slice(-3).map((d) => `<span>${esc(crumbOf(d))}</span>`).join('<i>›</i>')}<i>›</i></div>` : ''}`; }
 function crumbOf(d) { if (d.screen === 'detail') { const c = S.D.customers.get(d.params.id); return c ? c.name : 'Customer'; } if (d.screen === 'form') return (FORMS[d.params.form] || {}).title || 'Form'; if (d.screen === 'list') return d.params.list || 'List'; return d.params.r || d.screen; }
 function paintDrawer(dir, scroll) {
   let dr = $('#drawer');
   if (!dr) { const bg = document.createElement('div'); bg.id = 'drawerBg'; bg.className = 'drawer-bg'; document.body.appendChild(bg); dr = document.createElement('div'); dr.id = 'drawer'; dr.className = 'drawer'; document.body.appendChild(dr); }
+  dr.classList.toggle('wide', ['list', 'report'].includes(S.drawer.screen) && !dr.classList.contains('full')); /* v0.15: centred modal — lists and reports get the wide one */
   dr.innerHTML = drawerHead() + `<div class="dpage ${dir}">${screenHtml(S.drawer)}</div>`;
   dr.scrollTop = scroll || 0;
   afterRender(dr, S.drawer);
@@ -1934,7 +1979,7 @@ function withApproval(col, id, data) {
 }
 
 
-export const canForm = (f) => (f === 'payPerson' ? isBoss() : f === 'training' ? !!S.isAdmin : !FORM_PERM[f] || can(FORM_PERM[f])); /* payroll: Jun and the deputy only · training records: admin accounts only (Jun 2026-09-30 "내 화면에만") */
+export const canForm = (f) => (f === 'payPerson' || f === 'milestone' ? isBoss() : f === 'training' ? !!S.isAdmin : !FORM_PERM[f] || can(FORM_PERM[f])); /* payroll: Jun and the deputy only · training records: admin accounts only (Jun 2026-09-30 "내 화면에만") */
 function viewNew() {
   // v0.11: grouped rows instead of 18 coloured tiles (Tara 2026-09-30) · the group colour is the icon box
   const row = (f, l, s) => (canForm(f) ? [{ attr: `data-go-form="${f}"`, ic: FORMS[f].icon, l, s }] : []);
@@ -1993,7 +2038,7 @@ function viewDetail(p) {
   if (x.pr && x.pr.status === 'waiting') todo.push({ lvl: 'info', ic: '🤝', t: `promised by ${x.pr.date}`, s: `${x.pr.amount ? R.npr(x.pr.amount) + ' · ' : ''}${x.pr.by ? 'told ' + x.pr.by + ' · ' : ''}${x.pr.madeOn}` });
   else if (x.pr && x.pr.status === 'broken') todo.push({ lvl: 'bad', ic: '🤝', t: `promise broken (${x.pr.date})`, s: `${x.pr.amount ? R.npr(x.pr.amount) + ' promised · ' : ''}${R.npr(x.pr.paid)} paid by then` });
   else if (x.dn && x.dn.stage === 'reminder') todo.push({ lvl: 'info', ic: '💰', t: `Bill ${R.npr(x.dn.owed)} due ${x.dn.bill.due}`, s: 'Send the reminder 3 days before', a: `<a class="btn small ghost" href="${esc(waLink(c.phone, dunText(x)))}" target="_blank" rel="noopener">💬 Remind</a>` });
-  const fo = x.fd.filter((f) => f.status === 'overdue');
+  const fo = x.fb && x.fb.date <= t ? x.fd.filter((f) => x.fb.types.includes(f.type)) : x.fd.filter((f) => f.status === 'overdue'); /* v0.15: together = every filter in the batch */
   if (x.c.installDate && x.c.installDate > t && c.phone) todo.push({ lvl: 'info', ic: '📅', t: `Installation booked ${x.c.installDate}`, s: R.daysBetween(t, x.c.installDate) <= 3 ? 'confirm with the customer' : 'confirm 3 days before', a: `<a class="btn small ghost" href="${esc(waLink(c.phone, confText(c, x.c.installDate)))}" target="_blank" rel="noopener">💬 Confirm date</a>` }); /* v0.14 (#4): a booked install gets a 3-day confirm */
   const ns = x.nv && x.nv.noShow; // 🚪 nobody home on the last try (v0.8 #7)
   if (ns && String(ns.date).slice(0, 10) === t) todo.push({ lvl: 'warn', ic: '🚪', t: 'Nobody home today', s: `${ns.noShowReason || 'Nobody home'} · trying again ${ns.retryDate}`, a: c.phone ? `<a class="btn small ghost" href="${esc(waLink(c.phone, missText(c, ns)))}" target="_blank" rel="noopener">💬 Sorry we missed you</a>` : '' });
@@ -2024,7 +2069,7 @@ function viewDetail(p) {
     ${can('visit') ? `<button data-go-form="request" data-cid="${esc(c.id)}">📋 Request</button>` : ''}
     ${can('visit') && x.status !== 'Churned' ? omwBtn(c) : ''}
     ${canEdit ? `<button data-go-form="customerEdit" data-id="${esc(c.id)}">✏️ Edit</button>` : ''}${canForm('contract') ? `<button data-go-form="contract" data-cid="${esc(c.id)}">📜 Contract</button>` : ''}
-    ${x.status === 'Active' ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && String(q.status).includes('Completed')).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">📨 Visit note</button>` : ''; })()}${x.status === 'Active' ? `<button data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card</button>` : ''}
+    ${x.status === 'Active' && referralOn() ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && String(q.status).includes('Completed')).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">📨 Visit note</button>` : ''; })()}${x.status === 'Active' ? `<button data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card</button>` : ''}
   </div>
   ${S.desk ? '' : '<button class="btn ghost small" data-act="moreLinks" style="margin-top:6px">⋯ More</button>'}
   ${can('visit') && x.status !== 'Churned' ? omwChips(c) : ''}
@@ -2131,14 +2176,23 @@ async function visitPhotos(parent) { /* v0.14: the first two photos saved with a
   const ims = []; for (const src of out) { const im = await toImg(src); if (im) ims.push(im); }
   return { before: ims[0] || null, after: ims[1] || null };
 }
+// v0.15: who is on the card — full name + photo from the Staff page (users.fullName / users.photo); own profile on a staff phone; the name alone otherwise
+export async function staffWho(name) {
+  const n = String(name || '').trim(); if (!n) return {};
+  const us = [...(S.usersCache || []), ...(S.demoUsers || [])]; let u = us.find((q) => q.name === n || q.fullName === n);
+  if (!u && S.profile && (S.profile.name === n || S.profile.fullName === n || myName() === n)) u = S.profile;
+  const out = { name: (u && u.fullName) || n };
+  if (u && u.photo) out.photo = await new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = u.photo; });
+  return out;
+}
 async function imageCard(kind, id) {
   const box = $('#rcBox'); if (!box) return;
-  const co = { name: S.settings.coName || 'KORA CARE Pvt. Ltd.', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '' };
+  const co = { name: S.settings.coName || 'Kora Care Private Limited', nameNe: S.settings.coNameNe || '', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '' };
   let x, draw, name, alt;
   if (kind === 'receipt') { const pay = S.D.payments.get(id); if (!pay) return; x = model().cust.get(pay.customerId); if (!x) { toast('Customer not found'); return; } const d = RC.receiptData(x, pay, co); draw = () => RC.drawReceipt(d); name = `${d.no}.png`; alt = 'receipt'; }
   else if (kind === 'referral') { x = model().cust.get(id); if (!x) return; const d = RC.referralData(x, co); draw = () => RC.drawReferralCard(d); name = `KORA-referral-${d.code || 'card'}.png`; alt = 'referral card'; }
-  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return; x = model().cust.get(v.customerId); if (!x) return; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; const d = RC.visitData(x, v, co, ph); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; }
-  else if (kind === 'install') { x = model().cust.get(id); if (!x) return; const ph = await visitPhotos(`customers/${id}`); const d = RC.installData(x, co, ph.before || ph.after || null, { name: myName() }); draw = () => RC.drawInstallCard(d); name = `KORA-installed-${d.code || ''}.png`; alt = 'installed card'; }
+  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return; x = model().cust.get(v.customerId); if (!x) return; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; const d = RC.visitData(x, v, co, ph, await staffWho(v.technician)); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; }
+  else if (kind === 'install') { x = model().cust.get(id); if (!x) return; const ph = await visitPhotos(`customers/${id}`); const d = RC.installData(x, co, ph.before || ph.after || null, await staffWho(x.c.agent || myName())); draw = () => RC.drawInstallCard(d); name = `KORA-installed-${d.code || ''}.png`; alt = 'installed card'; }
   else return;
   box.classList.remove('hidden'); box.innerHTML = '<div class="muted" style="margin-top:8px">Making the picture…</div>';
   try {
@@ -2416,7 +2470,7 @@ function viewStatus() {
     <button class="btn ghost" data-act="persist">🛡️ Protect phone storage</button></div>
   ${rowsHtml([
     { title: 'Money', tone: 'tone-money', rows: [...rep('payments', '💵', 'Payments', 'all money in', money), ...rep('vat', '🧾', 'VAT by month', 'export CSV', money), ...rep('capack', '🧾', 'CA pack', 'IRD sales book · Excel', money), ...rep('expenses', '🧾', 'Expenses', 'bills · input VAT', can('expense') || money), ...rep('deposits', '🏦', 'Deposit book', 'what we hold', money), ...rep('billing', '🌊', 'Billing moves', 'new · left · month 14', money), ...lst('approvals', '✋', 'Money approvals', m.approvals.pending.length ? m.approvals.pending.length + ' waiting' : 'discounts · refunds', !!(m.approvals.pending.length || isApprover())), ...rep('bank', '🏧', 'Bank CSV match', 'statement → payments', !!S.isAdmin)] },
-    { title: 'Customers', tone: 'tone-field', rows: [...lst('map', '🗺️', 'Map', 'all customers'), ...lst('leads', '🧲', 'Leads', 'pipeline'), ...lst('screenings', '🔎', 'Screenings', 'sign-up checks'), ...lst('contract', '📜', 'Contract events', m.contractOpen.length ? m.contractOpen.length + ' to do' : 'notice · transfer · lost'), ...lst('relocations', '🚚', 'Relocations', 'moving house'), ...lst('recoveries', '📦', 'Recoveries', 'devices back'), ...rep('referrals', '🎁', 'Referrals', 'rewards due'), ...rep('leavers', '🚪', 'Leavers', 'why homes left')] },
+    { title: 'Customers', tone: 'tone-field', rows: [...lst('map', '🗺️', 'Map', 'all customers'), ...lst('leads', '🧲', 'Leads', 'pipeline'), ...lst('screenings', '🔎', 'Screenings', 'sign-up checks'), ...lst('contract', '📜', 'Contract events', m.contractOpen.length ? m.contractOpen.length + ' to do' : 'notice · transfer · lost'), ...lst('relocations', '🚚', 'Relocations', 'moving house'), ...lst('recoveries', '📦', 'Recoveries', 'devices back'), ...rep('referrals', '🎁', 'Referrals', 'rewards due', referralOn()), ...rep('leavers', '🚪', 'Leavers', 'why homes left')] },
     { title: 'Field work', tone: 'tone-call', rows: [...lst('filters', '🧪', 'Filter status', 'due & overdue'), ...lst('proof', '✍️', 'Proof of visit', 'signatures · 30 days'), ...rep('callbacks', '🔁', 'Callbacks', 'problems soon after a job'), ...rep('noshows', '🚪', 'Wasted trips', 'nobody home'), ...rep('capacity', '👷', 'Field capacity', 'jobs vs hands', !!m.capacity), ...lst('water', '🧫', 'Raw-water vials', `${m.vials.started} filled · PoC`), ...rep('learning', '🧪', 'Filter learning', 'real intervals')] },
     { title: 'Devices & stock', tone: 'tone-dev', rows: [...rep('devices', '📦', 'Devices', 'every serial'), ...rep('stock', '📦', 'Stock & FCL', 'order signal', can('stock')), ...lst('claims', '📮', 'Supplier claims', m.claimsSt.open.length ? m.claimsSt.open.length + ' open' : 'defects → PI', can('stock'))] },
     { title: 'Reports', tone: 'tone-rep', rows: [...rep('gate', '🧭', 'Direction gate', 'churn · retention · collection', money), ...rep('funnel', '⏳', 'Sales stage days', 'lead → first payment'), ...rep('perform', '📑', 'Grant KPIs', 'PAYGo PERFORM', money), ...rep('quality', '🩺', 'Data to fix', 'missing GPS · bill no.')] },
@@ -2536,7 +2590,7 @@ export function viewReport(p) {
     `<div class="card"><input type="file" accept=".csv,text/csv,.xls,.xlsx" id="bankFile"><div id="bankBox" class="hint">The bank / Fonepay export format is not known yet — any CSV or Excel file with date, amount and description columns works. Send Jun one real file to tune the matching.</div></div>`;
   if (k === 'backup') return head('💾 Backup', 'Everything in one go: customers, visits, payments, expenses, devices… as Excel + JSON.') + backupHtml();
   if (k === 'export') return head('💾 Export all data', 'Backup to this computer (Firestore scheduled backups need the Blaze plan).') +
-    `<div class="card">${COLS.filter((c) => (c !== 'audit' && c !== 'payroll') || isBoss()).map((c) => `<button class="btn ghost" data-csv="col:${c}">⬇️ ${esc(c)} (${S.D[c].size}) CSV</button>`).join('')}<button class="btn" data-act="exportJson">⬇️ Everything as one JSON file</button></div>`;
+    `<div class="card">${COLS.filter((c) => (c !== 'audit' && c !== 'payroll' && c !== 'milestones') || isBoss()).map((c) => `<button class="btn ghost" data-csv="col:${c}">⬇️ ${esc(c)} (${S.D[c].size}) CSV</button>`).join('')}<button class="btn" data-act="exportJson">⬇️ Everything as one JSON file</button></div>`;
   if (k === 'users') return head('🪪 Staff & permissions', 'Admin (Jun) has every right and cannot be changed. Everyone else: pick a preset, then switch single rights. Areas only tidy their screens — they are not a security wall. The server checks who may write money, expenses, new customers and approvals — but every staff account can read the shared records (rights and areas decide what the screens show).') + '<div id="usersBox" class="card">Loading… (needs internet)</div>';
   if (k === 'payroll') {
     if (S.settings.payroll !== 'Yes') return head('💼 Payroll', '') + `<div class="card"><div class="empty">${esc('Payroll is off (Settings → Staff on payroll?). No salaries before the work permit.')}</div></div>`;
@@ -2577,7 +2631,10 @@ export function viewReport(p) {
     `<form class="card" id="settingsForm"><label>FCL lead time (weeks)</label><input name="leadTimeWeeks" type="number" value="${esc(S.settings.leadTimeWeeks || R.FCL.leadTimeWeeks)}"><div class="hint">Default 13 = the "25 units" rule (8/month × 13 weeks).</div>
       <label>Extra technician names (comma separated)</label><input name="techNames" value="${esc(S.settings.techNames || '')}" placeholder="e.g. Ramesh, Sita">
       <label>Extra days the office is closed (YYYY-MM-DD, comma separated)</label><textarea name="holidays" placeholder="e.g. 2026-10-12, 2026-10-13">${esc(S.settings.holidays || '')}</textarea><div class="hint">Saturdays and the official 2083 public holidays (Home Ministry + Gandaki notices) are already in the calendar. Add only your own extra days off. Used for the calendar and the breakdown reply clock.</div>
+      <h3>🎁 Referral campaign</h3>
+      <label>Referral campaign on?</label><select name="referralCampaign"><option value="No"${referralOn() ? '' : ' selected'}>No — no card, no rewards, no tree (the usual state)</option><option value="Yes"${referralOn() ? ' selected' : ''}>Yes — referrer gets 50% off a bill (switch on when installs slow down)</option></select><div class="hint">Jun 10/3: "평소엔 없다가 설치 느려지면 50% 추천인 쿠폰". NPR ${R.referralAmount()} per neighbour who stays past month 3.</div>
       <h3>🧪 Filters (order dates)</h3>
+      <label>Filter changes</label><select name="filterMode"><option value="Together"${S.settings.filterMode === 'Separate' ? '' : ' selected'}>Together — one visit changes every filter that falls due before the next change</option><option value="Separate"${S.settings.filterMode === 'Separate' ? ' selected' : ''}>Separate — each filter on its own date</option></select><div class="hint">Together (Jun 10/3): the next change is the earliest due filter; the visit takes every filter due before the one after it.</div>
       <label>Filter interval from real data</label><select name="learnFilters"><option value="Yes" ${S.settings.learnFilters !== 'No' ? 'selected' : ''}>Yes — once a filter has 5+ real changes, use the observed average</option><option value="No" ${S.settings.learnFilters === 'No' ? 'selected' : ''}>No — always the E-2 booking interval</option></select>
       <div class="muted" style="margin:-4px 0 10px">Now: ${esc(R.FILTER_TYPES.filter((t2) => R.FILTER_MONTHS[t2]).map((t2) => { const r = R.filterLearning([...S.D.customers.values()], [...S.D.visits.values()]).find((q) => q.type === t2) || {}; return `${t2} ${R.FILTER_MONTHS[t2]}mo${r.n >= R.LEARN_MIN && r.avgMonths ? ' → ' + Math.round(r.avgMonths) + 'mo (' + r.n + ' changes)' : ' (' + (r.n || 0) + ' changes)'}`; }).join(' · '))}</div>
       <label>Filter lead time — order to shelf (weeks)</label><input name="filterLeadWeeks" type="number" min="0" value="${esc(S.settings.filterLeadWeeks ?? '')}" placeholder="${R.FILTER_ORDER.leadWeeks} (guess)"><div class="hint">🔴 Filters may come from China or India — put the real number after the first order.</div>
@@ -2616,7 +2673,8 @@ export function viewReport(p) {
       <label>TDS table from the CA (one line per bracket: yearly amount up to, rate %; last line: rest, rate %)</label><textarea name="taxTable" rows="4" data-noi18n placeholder="${esc(R.TAX_DEFAULT.replace(/\n/g, ' · '))}">${esc(S.settings.taxTable || '')}</textarea><div class="hint">Empty = the Inland Revenue table for 2083/84 (🟢, single = couple). SSF members pay no 1% band. Type the CA's table here to replace it.</div>
       <label>Staff on payroll?</label><select name="payroll"><option value="No"${S.settings.payroll === 'Yes' ? '' : ' selected'}>No — no salaries yet</option><option value="Yes"${S.settings.payroll === 'Yes' ? ' selected' : ''}>Yes — show TDS and SSF deadlines</option></select>
       <h3>🧾 Company (for the CA pack)</h3>
-      <label>Legal company name</label><input name="coName" value="${esc(S.settings.coName || '')}" placeholder="as on the PAN / VAT certificate">
+      <label>Legal company name</label><input name="coName" value="${esc(S.settings.coName || '')}" placeholder="Kora Care Private Limited (as on the PAN / VAT certificate)"><div class="hint">The first line of every customer picture, in capitals.</div>
+      <label>Legal name in Nepali</label><input name="coNameNe" value="${esc(S.settings.coNameNe || '')}" data-noi18n placeholder="कोरा केयर प्राइभेट लिमिटेड"><div class="hint">Empty = the registered name (OCR certificate).</div>
       <label>Company PAN (VAT)</label><input name="coPan" value="${esc(S.settings.coPan || '')}" inputmode="numeric" placeholder="9 digits">
       <label>Address</label><input name="coAddress" value="${esc(S.settings.coAddress || '')}" placeholder="e.g. Pokhara-13, Kaski">
       <label>Company WhatsApp number</label><input name="coPhone" value="${esc(S.settings.coPhone || '')}" placeholder="+977 9xx-xxxxxxx" hint="on the image receipt">
@@ -2730,6 +2788,8 @@ function staffCard(u, mk) {
   return `<div class="card staff" data-staff="${esc(u.uid)}">
     <div class="st-h"><span class="avatar">${esc((u.name || u.email || '?').slice(0, 1).toUpperCase())}</span><div class="main"><b>${esc(u.name || '(no name yet)')}</b><div class="muted">${esc(u.email || u.uid)} · last seen ${esc(seen)}${u.appVersion ? ' · ' + esc(u.appVersion) : ''}</div></div><span class="pill ${pill}">${esc(u.role === 'staff' ? 'active' : u.role || '?')}</span></div>
     <label>Name (shown on records)</label><input data-uname value="${esc(u.name || '')}" placeholder="e.g. Tara">
+    <label>Full name (on the visit note / installed card)</label><input data-ufull value="${esc(u.fullName || '')}" placeholder="e.g. Tara Thapa">
+    <div class="row" style="align-items:center;gap:10px;margin:4px 0 8px"><span class="avatar photo" data-uav>${u.photo ? `<img src="${esc(u.photo)}" alt="">` : esc((u.name || u.email || '?').slice(0, 1).toUpperCase())}</span><label class="btn small ghost" style="margin:0">📷 Photo<input type="file" accept="image/*" data-uphoto="${esc(u.uid)}" hidden></label><span class="muted">round photo on the customer cards · face, good light</span></div>
     <div class="lbl">Preset</div><div class="tgl-row">${Object.entries(PRESETS).map(([k, pr]) => `<button type="button" class="tgl ${u.preset === k ? 'on' : ''}" data-preset="${k}">${esc(pr.label)}</button>`).join('')}</div>
     <div class="lbl">Rights</div><div class="perm-grid">${PERMS.map(([k, l, h]) => `<button type="button" class="tgl perm ${perms[k] ? 'on' : ''}" data-perm="${k}" title="${esc(h || '')}"><span class="ck">${perms[k] ? '✓' : ''}</span>${esc(l)}</button>`).join('')}</div>
     <div class="lbl">Areas (only if “See every customer” is off)</div><div class="tgl-row">${OPT.tole.map((t) => `<button type="button" class="tgl small ${toles.has(t) ? 'on' : ''}" data-area="${esc(t)}">${esc(t)}</button>`).join('')}</div>
@@ -2764,7 +2824,9 @@ function readStaffCard(card) {
   const perms = {}; card.querySelectorAll('[data-perm]').forEach((b) => { perms[b.dataset.perm] = b.classList.contains('on') ? 1 : 0; });
   const toles = [...card.querySelectorAll('[data-area].on')].map((b) => b.dataset.area);
   const pre = card.querySelector('[data-preset].on');
-  return { name: card.querySelector('[data-uname]').value.trim(), perms, toles, preset: pre ? pre.dataset.preset : 'custom' };
+  const d = { name: card.querySelector('[data-uname]').value.trim(), fullName: (card.querySelector('[data-ufull]') || { value: '' }).value.trim().slice(0, 80), perms, toles, preset: pre ? pre.dataset.preset : 'custom' };
+  if (card.dataset.photo) d.photo = card.dataset.photo; /* v0.15: a new photo picked on this card */
+  return d;
 }
 // New staff account made by Jun: a second Firebase app signs the new person up (Jun stays signed in),
 // with a random password nobody sees — the staff member gets an email to set their own password, then stays signed in on their phone.
@@ -2941,8 +3003,13 @@ document.addEventListener('click', async (ev) => {
   const tg = t.closest('[data-tab-go]'); if (tg) { history_.length = 0; go(tg.dataset.tabGo, tg.dataset.tabGo, {}, true); return; }
   const navb = t.closest('nav.tabs button'); if (navb) { history_.length = 0; go(navb.dataset.tab, navb.dataset.tab, {}, true); return; }
   const sideb = t.closest('[data-side]'); if (sideb) { history_.length = 0; closeDrawer(true); go(sideb.dataset.side, sideb.dataset.side, {}, true); return; }
+  const md = t.closest('[data-msdone], [data-msreopen]'); if (md) { /* v0.15 boards */
+    ev.preventDefault(); ev.stopPropagation(); if (!isBoss()) return; const done = md.dataset.msdone !== undefined; const id = done ? md.dataset.msdone : md.dataset.msreopen; const x = S.D.milestones.get(id); if (!x) return;
+    auditLog('milestones', id, x, { state: done ? 'Done' : 'Waiting' }); save(`milestones/${id}`, done ? { state: 'Done', doneDate: today() } : { state: 'Waiting', doneDate: '', since: today() }, false); toast(done ? `✅ ${x.title}` : `↩ ${x.title} is open again`); scheduleRender(); return;
+  }
+  const mx = t.closest('[data-msexport]'); if (mx) { ev.preventDefault(); const b = mx.dataset.msexport; const rows = arr('milestones').filter((x) => !b || (x.board || 'Board') === b).map(({ id, createdAt, updatedAt, createdBy, updatedBy, by, ...rest }) => rest); download(`kora-board-${(b || 'all').replace(/[^\w]+/g, '_')}-${today()}.json`, JSON.stringify(rows, null, 2)); return; }
   const gf = t.closest('[data-go-form]'); if (gf && !canForm(gf.dataset.goForm)) return; // hidden rights stay hidden (no message)
-  if (gf) { ev.preventDefault(); nav(S.route.tab === 'customers' || S.route.screen === 'detail' ? 'customers' : 'new', 'form', { form: gf.dataset.goForm, cid: gf.dataset.cid, id: gf.dataset.id, lead: gf.dataset.lead, kind: gf.dataset.kind, serial: gf.dataset.serial, event: gf.dataset.kind, date: gf.dataset.date, lane: gf.dataset.lane }); return; }
+  if (gf) { ev.preventDefault(); nav(S.route.tab === 'customers' || S.route.screen === 'detail' ? 'customers' : 'new', 'form', { form: gf.dataset.goForm, cid: gf.dataset.cid, id: gf.dataset.id, lead: gf.dataset.lead, kind: gf.dataset.kind, serial: gf.dataset.serial, event: gf.dataset.kind, date: gf.dataset.date, lane: gf.dataset.lane, board: gf.dataset.board }); return; }
   const cv = t.closest('[data-convert]'); if (cv) { nav('new', 'form', { form: 'install', lead: cv.dataset.convert }); return; } /* v0.11: the install form prefills itself from the lead + its screening */
   const cb = t.closest('button[data-cust]'); if (cb && cb.dataset.cust) { nav('customers', 'detail', { id: cb.dataset.cust }); return; } // a button inside an edit row
   const ed = t.closest('[data-edit]'); if (ed) { nav(S.route.tab, 'form', { form: ed.dataset.edit, id: ed.dataset.id }); return; }
@@ -2960,7 +3027,7 @@ document.addEventListener('click', async (ev) => {
   const rf = t.closest('[data-refcredit]'); if (rf) {
     ev.preventDefault(); if (!isBoss()) { toast('Only admin applies credits'); return; }
     const [cid, forId] = rf.dataset.refcredit.split('|');
-    save(`payments/${newId('payments')}`, { customerId: cid, date: today(), type: 'Referral credit', amount: R.PRICES.monthly, referralFor: forId, method: '', notes: 'Referral reward', by: myName() }, true);
+    save(`payments/${newId('payments')}`, { customerId: cid, date: today(), type: 'Referral credit', amount: R.referralAmount(), referralFor: forId, method: '', notes: 'Referral reward', by: myName() }, true);
     toast('🎁 Referral credit applied'); scheduleRender(); return;
   }
   if (t.closest('[data-back]')) { backClick(); return; }
@@ -3003,6 +3070,7 @@ document.addEventListener('click', async (ev) => {
   const a = t.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
   if (act === 'closeDrawer') closeDrawer();
+  else if (act === 'drawerFull') { const dr = $('#drawer'); if (dr) { dr.classList.toggle('full'); if (dr.classList.contains('full')) dr.classList.remove('wide'); else if (S.drawer && ['list', 'report'].includes(S.drawer.screen)) dr.classList.add('wide'); } } /* v0.15 */
   else if (act === 'memoToggle') { ev.preventDefault(); const b = $('#memoBox'); if (!b) return; b.classList.toggle('hidden'); lsSet('kfp_memo_open', b.classList.contains('hidden') ? 0 : 1); if (!b.classList.contains('hidden')) { const ta = $('#memoTa'); if (ta) ta.focus(); } }
   else if (act === 'rcImg') { ev.preventDefault(); imageCard('receipt', a.dataset.pid); }
   else if (act === 'rcRef') { ev.preventDefault(); imageCard('referral', a.dataset.cid); }
@@ -3081,6 +3149,20 @@ document.addEventListener('change', (ev) => {
   if (ev.target.classList.contains('photoIn')) { addFormPhotos([...ev.target.files]); ev.target.value = ''; return; }
   if (ev.target.id === 'bankFile' && ev.target.files[0]) { bankUpload(ev.target.files[0]); return; }
   if (ev.target.id === 'bkCheck' && ev.target.files[0]) { checkBackupFile(ev.target.files[0]); return; }
+  if (ev.target.id === 'msImport' && ev.target.files[0]) { /* v0.15: a board from a JSON file (the real items are kept outside the public code) */
+    const file = ev.target.files[0]; ev.target.value = ''; if (!isBoss()) return;
+    const rd = new FileReader(); rd.onload = () => { try {
+      const j = JSON.parse(rd.result); const rows = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : []; const have = new Set(arr('milestones').map((x) => `${x.board}|${x.title}`)); let n = 0, skip = 0;
+      for (const r0 of rows) { const r = { board: String(r0.board || '').trim().slice(0, 60), title: String(r0.title || '').trim().slice(0, 160), who: MS_WHO.includes(r0.who) ? r0.who : 'Other', whoName: String(r0.whoName || '').slice(0, 80), state: MS_STATE.includes(r0.state) ? r0.state : 'Todo', since: R.isDate(r0.since) ? r0.since : '', due: R.isDate(r0.due) ? r0.due : '', grade: MS_GRADE.includes(r0.grade) ? r0.grade : MS_GRADE[2], src: String(r0.src || '').slice(0, 300), note: String(r0.note || '').slice(0, 600), order: Number(r0.order) || 0, doneDate: R.isDate(r0.doneDate) ? r0.doneDate : '', by: myName() };
+        if (!r.board || !r.title) { skip++; continue; } if (have.has(`${r.board}|${r.title}`)) { skip++; continue; } have.add(`${r.board}|${r.title}`); save(`milestones/${newId('milestones')}`, r, true); n++; }
+      toast(`📥 ${n} item(s) added${skip ? ` · ${skip} skipped (empty or already there)` : ''}`); scheduleRender();
+    } catch (e) { toast('Not a board file: ' + (e.message || e)); } }; rd.readAsText(file); return;
+  }
+  if (ev.target.dataset && ev.target.dataset.uphoto !== undefined && ev.target.files[0]) { /* v0.15: staff photo → 160px square → saved with the rights card */
+    const card = ev.target.closest('.staff'); const file = ev.target.files[0]; ev.target.value = '';
+    shrinkAvatar(file).then((url) => { card.dataset.photo = url; const av = card.querySelector('[data-uav]'); if (av) av.innerHTML = `<img src="${esc(url)}" alt="">`; toast('Photo ready — press Save rights to keep it'); }).catch((e) => toast('Cannot read this photo: ' + (e.message || e)));
+    return;
+  }
   const as = ev.target.closest && ev.target.closest('[data-assign]'); if (as && isBoss()) { save(`customers/${as.dataset.assign}`, { assignee: as.value, cover: null }, false); toast(as.value ? `👤 Now goes to ${as.value}` : '👤 Nobody assigned'); scheduleRender(); return; }
   const f = ev.target.closest && ev.target.closest('#theForm'); if (f) { refreshConditional(f); draftSave(f); unconfirm(f); }
 });
@@ -3118,7 +3200,7 @@ document.addEventListener('submit', async (ev) => {
     if (!S.isAdmin) { toast('Only Jun changes settings'); return; }
     const e = f.elements; const pan = e.coPan.value.replace(/\s/g, '');
     if (pan && !/^\d{9}$/.test(pan)) { toast('Company PAN has 9 digits'); return; }
-    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
+    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), coNameNe: e.coNameNe.value.trim().slice(0, 80), referralCampaign: e.referralCampaign.value, filterMode: e.filterMode.value, bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
       apprDiscountOver: e.apprDiscountOver.value.trim() === '' ? null : Math.max(0, Number(e.apprDiscountOver.value) || 0), apprRefundOver: e.apprRefundOver.value.trim() === '' ? null : Math.max(0, Number(e.apprRefundOver.value) || 0), apprWho: e.apprWho.value }; // numbers: the rules compare them
     auditLog('settings', 'app', S.settings, data); save('settings/app', data, false); S.settings = { ...S.settings, ...data }; B.setOverrides(data.bsOverride); bump(); toast('Settings saved'); goBack();
   }

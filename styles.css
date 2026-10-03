@@ -200,7 +200,7 @@ body.desk nav.tabs { display:none; }
 .panel .ph .t b { color:var(--ink); font-weight:800; }
 .panel .ph .sp { flex:1; }
 .panel .ph .a { font-size:12px; color:var(--brand); background:none; border:0; cursor:pointer; font-family:inherit; }
-.s3 { grid-column: span 3; } .s4 { grid-column: span 4; } .s5 { grid-column: span 5; } .s6 { grid-column: span 6; } .s7 { grid-column: span 7; } .s8 { grid-column: span 8; } .s12 { grid-column: span 12; }
+.s3 { grid-column: span 3; } .s4 { grid-column: span 4; } .s9 { grid-column: span 9; } .s10 { grid-column: span 10; } .s11 { grid-column: span 11; } .s5 { grid-column: span 5; } .s6 { grid-column: span 6; } .s7 { grid-column: span 7; } .s8 { grid-column: span 8; } .s12 { grid-column: span 12; }
 .r2 { grid-row: span 2; }
 .kpi .v { font-family:var(--mono); font-size:34px; font-weight:800; letter-spacing:-.02em; line-height:1.1; }
 .kpi .v small { font-size:14px; color:var(--muted); font-weight:600; margin-left:4px; }
@@ -235,8 +235,11 @@ body.desk nav.tabs { display:none; }
 .bigstat { display:flex; align-items:baseline; gap:8px; } .bigstat .v { font-family:var(--mono); font-size:22px; font-weight:800; }
 .mini-list .item { padding:9px 0; } .mini-list .item .t { font-size:14px; } .mini-list .item .s { font-size:12px; }
 .drawer-bg { position:fixed; inset:0; background:rgba(3,8,14,.55); z-index:70; animation: fadeIn .2s ease both; }
-.drawer { position:fixed; top:0; right:0; bottom:0; width:min(620px, 96vw); background:var(--bg); border-left:1px solid var(--line); z-index:71; overflow:auto; padding:6px 22px 40px; animation: slideIn .28s cubic-bezier(.2,.8,.2,1) both; box-shadow: -20px 0 60px rgba(0,0,0,.35); }
-@keyframes slideIn { from { transform: translateX(40px); opacity:0; } to { transform:none; opacity:1; } }
+.drawer { position:fixed; top:4vh; left:50%; transform:translateX(-50%); height:92vh; width:min(820px, 94vw); background:var(--bg); border:1px solid var(--line); border-radius:18px; z-index:71; overflow:auto; padding:6px 26px 40px; animation: popIn .22s cubic-bezier(.2,.8,.2,1) both; box-shadow: 0 30px 90px rgba(0,0,0,.55); } /* v0.15: centred (was a right-hand drawer) */
+.drawer.wide { width:min(1120px, 96vw); } .drawer.full { width:98vw; height:97vh; top:1.5vh; border-radius:12px; }
+.drawer .fx { position:sticky; top:0; float:right; margin:10px 8px 0 0; width:40px; height:40px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:16px; cursor:pointer; z-index:2; }
+@keyframes popIn { from { transform: translateX(-50%) translateY(14px) scale(.985); opacity:0; } to { transform: translateX(-50%); opacity:1; } }
+@keyframes slideIn { from { transform: translateX(40px); opacity:0; } to { transform:none; opacity:1; } } /* (phones: route sheet) */
 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
 .drawer .x { position:sticky; top:0; float:right; margin-top:10px; width:40px; height:40px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:18px; cursor:pointer; z-index:2; }
 .demo-flag { position:fixed; right:10px; top:calc(env(safe-area-inset-top) + 6px); z-index:90; background:var(--warn); color:#1a1300; font-size:11px; font-weight:800; letter-spacing:.14em; padding:4px 12px; border-radius:99px; box-shadow:0 6px 18px rgba(0,0,0,.25); pointer-events:none; }
@@ -821,3 +824,21 @@ nav.tabs button { transition: background .18s, color .18s; }
 .mclu{background:rgba(13,20,32,.88);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:3px 8px;font-size:11px;white-space:nowrap;display:flex;gap:6px;align-items:center;box-shadow:0 2px 10px rgba(0,0,0,.4)}.mclu b{font-weight:700}.mclu span{background:rgba(255,255,255,.18);border-radius:8px;padding:0 6px}.mclu i{font-style:normal;border-radius:8px;padding:0 6px;font-weight:600}.mclu i.r{background:#ff5c5c;color:#1a0000}.mclu i.y{background:#ffcc4d;color:#1a1200}
 .mcard{font-size:12.5px;min-width:220px}.mc-h{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:6px}.mc-h b{font-size:14px}.mc-r{display:flex;gap:12px;flex-wrap:wrap;margin:3px 0;color:var(--ink)}.mc-r .bad{color:#ff5c5c;font-weight:600}.mc-r .ok{color:#2ee59d}.mc-r .warn{color:#ffcc4d}.mc-b{display:flex;gap:6px;margin-top:8px}.mc-b a{text-decoration:none}
 .mapcc .mlist .ml{max-height:calc(100vh - 230px);overflow:auto}.ml-i{display:flex;gap:8px;align-items:center;padding:8px 6px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}.ml-i:hover{background:var(--card2)}.ml-i .k{font-size:15px;width:22px;text-align:center;flex:none}.ml-i .main{flex:1;min-width:0}.ml-i b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* v0.15 (Jun 10/3): map page = map 9 + today list 3 at every width (the ≤1480 rule turned the list into a half page) */
+.mapcc .s9 { grid-column: span 9; } .mapcc .s3 { grid-column: span 3; } @media (max-width: 1480px) { .mapcc .s9 { grid-column: span 8; } .mapcc .s3 { grid-column: span 4; } }
+/* v0.15: a link styled as a button sat at the top with an underline (📞 💬 in the watch list) */
+a.btn { display:inline-flex; align-items:center; justify-content:center; text-decoration:none; box-sizing:border-box; }
+/* v0.15: watch list — the level rail already says it; the loose dot on top of the rail went (Jun "점 위치도 그렇고") */
+.watch-i > .dot { display:none; } .watch-i { padding-left:12px; } .watch-i.lv-high { box-shadow: inset 4px 0 0 var(--bad); } .watch-i.lv-watch { box-shadow: inset 4px 0 0 var(--warn); } .watch-i.lv-low { box-shadow: inset 4px 0 0 color-mix(in srgb, var(--info) 55%, transparent); }
+/* v0.15: charts — the number on every bar · the picked month explained · event marks behind a 📌 toggle (Jun "뭔 의미인지 헷갈림") */
+.chart .vl { fill:var(--muted); font-size:9.5px; font-family:var(--mono); } .chart .vl.hi { fill:var(--warn); font-weight:800; }
+.chartw .cnote, .chartw .cnotes { display:none; } .chartw.notes-on .cnote { display:block; } .chartw.notes-on .cnotes { display:flex; }
+.cfoot { display:flex; align-items:center; flex-wrap:wrap; gap:6px 14px; margin-top:4px; font-size:12px; color:var(--muted); } .cfoot .cl { display:inline-flex; align-items:center; gap:6px; } .cfoot .sw { width:10px; height:10px; border-radius:3px; display:inline-block; }
+.cfoot .cn-tgl { font-size:12px; color:var(--brand); background:none; border:0; cursor:pointer; font-family:inherit; padding:0; } .chartw.notes-on .cn-tgl { font-weight:800; }
+.staff .avatar.photo { width:48px; height:48px; border-radius:50%; overflow:hidden; } .staff .avatar.photo img { width:100%; height:100%; object-fit:cover; display:block; }
+.ms-i .main .s b.bad { color:var(--bad); } .ms-done { margin-top:10px; } .ms-done summary { cursor:pointer; color:var(--muted); font-size:13px; padding:6px 0; } .ms-done .mini-list .item { opacity:.7; }
+.board .wt-bar .seg button b { margin-left:4px; }
+/* v0.15 #14 (Jun: MacBook 16-inch): at 1117px of height the sidebar overflowed — the last group (Milestones) sat below the fold */
+@media (max-height: 1200px) { .side { gap:2px; padding:12px 10px; } .side button { padding:6px 12px; font-size:13.5px; } .side-grp { padding:7px 12px 2px; font-size:9px; } .side .side-lang { margin:6px 0; } .side .side-lang .lbl { display:none; } }
+@media (max-height: 1000px) { .side-grp { display:none; } .side button { padding:4px 12px; font-size:13px; } }

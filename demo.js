@@ -8,6 +8,8 @@ const FIRST = ['Sita', 'Ram', 'Hari', 'Gita', 'Bikash', 'Anita', 'Sunil', 'Kamal
 const LAST = ['Gurung', 'Thapa', 'Poudel', 'Adhikari', 'Shrestha', 'Tamang', 'Magar', 'Sharma', 'Karki', 'Bhandari', 'KC', 'Pun', 'Rai', 'Subedi', 'Baral', 'Lamichhane'];
 const CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
+// v0.15: a fake staff photo (an initial on navy) so the visit note / installed card show the round photo in practice
+function demoAvatar(ch) { try { const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#0d2d5e'; g.fillRect(0, 0, 96, 96); g.fillStyle = '#fff'; g.font = '800 48px -apple-system, Helvetica, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, 48, 52); return c.toDataURL('image/jpeg', 0.8); } catch (e) { return ''; } }
 export function loadDemo(S, today) {
   const r = rng(20260928); const pick = (a) => a[Math.floor(r() * a.length)]; const int = (a, b) => a + Math.floor(r() * (b - a + 1));
   let n = 0; const id = (p) => `${p}_demo_${(++n).toString(36)}`;
@@ -121,8 +123,8 @@ export function loadDemo(S, today) {
     { id: 'dv_demo_tara2', uid: 'demo-tara', name: 'Tara', email: 'tara@example.com', appVersion: 'kf-v0.5.0 (2026-09-28)', ua: 'iOS 26.6 · Safari', desk: false, pending: 0, rejected: 1, oldestPendingAt: null, lastServerAt: agoMs(24 * 5), online: true, storageOk: true, persisted: true, standalone: false, seenAt: { toMillis: () => agoMs(24 * 5) } },
   ];
   S.demoUsers = [
-    { uid: 'demo-tara', email: 'tara@example.com', name: 'Tara', role: 'staff', preset: 'office', perms: { seeAll: 1, install: 1, visit: 1, pay: 1, cash: 1, editCust: 1, money: 1, expense: 1, stock: 1, export: 0 }, toles: [], lastSeenAt: { toMillis: () => Date.now() - 35 * 60e3 } },
-    { uid: 'demo-ram', email: 'ramesh@example.com', name: 'Ramesh', role: 'staff', preset: 'technician', perms: { seeAll: 0, install: 1, visit: 1, pay: 1, cash: 0, editCust: 0, money: 0, expense: 0, stock: 0, export: 0 }, toles: ['Lakeside', 'Baidam'], lastSeenAt: { toMillis: () => Date.now() - 5 * 3600e3 } },
+    { uid: 'demo-tara', email: 'tara@example.com', name: 'Tara', fullName: 'Tara Thapa (demo)', photo: demoAvatar('T'), role: 'staff', preset: 'office', perms: { seeAll: 1, install: 1, visit: 1, pay: 1, cash: 1, editCust: 1, money: 1, expense: 1, stock: 1, export: 0 }, toles: [], lastSeenAt: { toMillis: () => Date.now() - 35 * 60e3 } },
+    { uid: 'demo-ram', email: 'ramesh@example.com', name: 'Ramesh', fullName: 'Ramesh Gurung (demo)', photo: demoAvatar('R'), role: 'staff', preset: 'technician', perms: { seeAll: 0, install: 1, visit: 1, pay: 1, cash: 0, editCust: 0, money: 0, expense: 0, stock: 0, export: 0 }, toles: ['Lakeside', 'Baidam'], lastSeenAt: { toMillis: () => Date.now() - 5 * 3600e3 } },
     { uid: 'demo-new', email: 'sita.new@example.com', name: '', role: 'pending' },
   ];
   for (const col of ['visits', 'payments', 'customers', 'requests']) for (const x of S.D[col].values()) x.createdBy = r() < 0.6 ? 'demo-tara' : r() < 0.6 ? 'demo-ram' : 'demo-uid';
@@ -296,6 +298,25 @@ export function loadDemo(S, today) {
   // v0.9 #9 demo: two fictional staff pay records (payroll stays off until Settings says Yes)
   { put('payroll', { kind: 'person', name: 'Ramesh', job: 'Field technician', basic: 18000, allowance: 1000, ssf: 'Yes', startDate: R.addDays(today, -200), active: 'Yes', by: 'Jun' });
     put('payroll', { kind: 'person', name: 'Sita', job: 'Office', basic: 22000, allowance: 0, ssf: 'Yes', startDate: R.addDays(today, -400), active: 'Yes', by: 'Jun' });
+  }
+  // v0.15 demo: two milestone boards with generic names — the real items live in the company's own data (imported JSON), never in this public demo
+  { const b1 = 'Company & licences', b2 = '1st shipment'; let o = 0;
+    const ms = (board, title, who, state, since, due, grade, src, note) => put('milestones', { board, title, who, state, since, due, grade, src, note, order: (o += 10), doneDate: state === 'Done' ? since : '', by: 'Jun' });
+    ms(b1, 'Company registration', 'Us', 'Done', R.addDays(today, -26), '', '🟢 measured', 'registration certificate (demo)', '');
+    ms(b1, 'Tax registration (PAN / VAT)', 'Us', 'Done', R.addDays(today, -20), '', '🟢 measured', 'tax office (demo)', '');
+    ms(b1, 'Commerce department appearance', 'Ministry', 'Waiting', R.addDays(today, -3), '', '🟡 second-hand', 'lawyer: they set the date', 'in person');
+    ms(b1, 'Import licence (EXIM code)', 'Us', 'Blocked', R.addDays(today, -3), '', '🟡 second-hand', 'only after the commerce registration', '');
+    ms(b1, 'Work permit — written confirmation', 'Lawyer', 'Waiting', R.addDays(today, -33), '', '🟡 second-hand', 'lawyer letter', '');
+    ms(b1, 'Residence visa decision', 'Immigration', 'Waiting', R.addDays(today, -10), R.addDays(today, 6), '🟢 measured', 'immigration slip', 'both of us present');
+    o = 0;
+    ms(b2, 'Freight rate for this month', 'Forwarder', 'Waiting', R.addDays(today, -19), '', '🟡 second-hand', 'forwarder email', 'the old rate was for August shipping');
+    ms(b2, 'Final PI from the supplier', 'Supplier', 'Done', R.addDays(today, -50), '', '🟢 measured', 'PI pdf', '');
+    ms(b2, 'Certificate of origin (original)', 'Supplier', 'Todo', '', R.addDays(today, 9), '🟡 second-hand', 'customs document list', 'ask with the order');
+    ms(b2, 'Insurance certificate', 'Us', 'Todo', '', R.addDays(today, 9), '🟢 measured', 'customs document list', '');
+    ms(b2, 'Ship from the factory', 'Supplier', 'Todo', '', R.addDays(today, 9), '🔴 guess', 'forwarder: "2nd week"', 'production starts when the licence is filed');
+    ms(b2, 'Port handling (Kolkata)', 'Forwarder', 'Todo', '', R.addDays(today, 30), '🔴 guess', '', '');
+    ms(b2, 'Border customs', 'Forwarder', 'Todo', '', R.addDays(today, 40), '🔴 guess', '', 'festival: customs keeps working');
+    ms(b2, 'Arrival in Pokhara', 'Us', 'Todo', '', R.addDays(today, 48), '🔴 guess', 'forwarder estimate', 'worst case + 2 weeks');
   }
   // v0.9 #10 demo: 14 vials — read and unread, blue on municipal water for one recent install (an ENPHO candidate)
   { const q = rng(9292032); const cs = [...S.D.customers.values()].filter((c) => c.status === 'Active' && R.isDate(c.installDate));

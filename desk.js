@@ -12,7 +12,7 @@ export { loadLeaflet };
 
 const NPT = 'Asia/Kathmandu';
 const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN');
-const fmtK = (v) => (Math.abs(v) >= 100000 ? (v / 100000).toFixed(1) + ' lakh' : Math.abs(v) >= 1000 ? Math.round(v / 1000) + 'k' : fmtN(v)); /* v0.15: 'L' read as a letter → lakh */
+const fmtK = (v) => (Math.abs(v) >= 100000 ? (v / 100000).toFixed(1) + 'L' : Math.abs(v) >= 1000 ? Math.round(v / 1000) + 'k' : fmtN(v)); /* L = lakh (v0.16: back from ' lakh' — the space broke the translated money lines) */
 const HEX = { g: '#2ee59d', y: '#ffcc4d', o: '#ff9a3d', r: '#ff5c5c', k: '#5d7085', b: '#6aa8ff' };
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monLabel = (mk) => `${MON[Number(mk.slice(5, 7)) - 1]} ${mk.slice(0, 4)}`;
@@ -25,10 +25,10 @@ const SIDE = [
   ['customers', '👥', 'Customers', '', 'Customers & growth'], ['watch', '⚠️', 'Watch list', '', 'Customers & growth'], ['leavers', '🚪', 'Leavers', '', 'Customers & growth'], ['network', '🕸️', 'Referrals', '', 'Customers & growth'],
   ['money', '💰', 'Money', 'money', 'Money & plans'], ['history', '📅', 'History', 'money', 'Money & plans'], ['whatif', '🎛️', 'What-if', 'money', 'Money & plans'],
   ['devices', '📦', 'Devices', '', 'Company'], ['staff', '🪪', 'Staff', 'admin', 'Company'], ['phones', '📱', 'Phones', 'admin', 'Company'], ['changes', '🕵️', 'Change log', 'admin', 'Company'], ['reports', '📑', 'Reports', '', 'Company'], ['backup', '💾', 'Backup', 'admin', 'Company'], ['status', '⚙️', 'Sync & settings', '', 'Company'],
-  ['board', '🧱', 'Milestones', 'admin', 'Company build'], /* v0.15: gate chain · shipment — one board kind, many boards */
+  ['board', '🧱', 'Milestones', 'owner', 'Company build'], /* Jun only (10/3 "어차피 타라는 그런거 안봄") */ /* v0.15: gate chain · shipment — one board kind, many boards */
 ];
 export const DESK_PAGES = [...SIDE.map((x) => x[0]), 'report'];
-const sideOk = (x) => (!x[3] || (x[3] === 'admin' ? isBoss() : can(x[3]))) && (x[0] !== 'network' || referralOn()); /* v0.15: the referral tree only during a campaign */
+const sideOk = (x) => (!x[3] || (x[3] === 'admin' ? isBoss() : x[3] === 'owner' ? !!S.isAdmin : can(x[3]))) && (x[0] !== 'network' || referralOn()); /* owner = Jun only (boards) */ /* v0.15: the referral tree only during a campaign */
 let last = { side: '', tick: '', bell: '' };
 export function renderDesk(root, fresh) {
   const m = model(); const scr = S.route.screen; NOTES = chartNotes(m);
@@ -116,7 +116,7 @@ function page(scr, m) {
   if (scr === 'money') return pageMoney(m);
   if (scr === 'field') return pageField(m);
   if (scr === 'map') { const m = model(); const todayList = [...new Map([...m.visitsDue.map((x) => [x.c.id, { x, k: x.filterOnly ? '🧪' : '🔧', t: x.filterOnly ? 'filter due' : 'visit due ' + x.due }]), ...m.collections.filter((x) => x.dn.stage === 'visit').map((x) => [x.c.id, { x, k: '💰', t: R.npr(x.dn.owed) + ' · ' + x.dn.days + ' d late' }]), ...m.openReq.filter((o) => o.c).map((o) => [o.c.c.id, { x: o.c, k: '🛠', t: o.r.type + ' · ' + o.r.status }])]).values()];
-    return `<div class="cc mapcc"><div class="panel s9" style="--i:0"><div class="ph"><span class="t"><b>Map</b> · every household</span><span class="sp"></span>${legend()}<button class="btn small" data-act="replay" style="margin:0 0 0 10px">▶ Replay growth</button></div><div id="mapBox" class="mapbox tall"></div><div class="muted" style="margin-top:6px">pin colour = money · icon = the job (🔧 visit · 🧪 filter · 💰 collect · 🛠 request) · zoom out for tole totals · 📍 = you</div></div>
+    return `<div class="cc mapcc"><div class="panel s9" style="--i:0"><div class="ph"><span class="t"><b>Map</b> · every household</span><span class="sp"></span>${legend()}<button class="btn small" data-act="replay" style="margin:0 0 0 10px">▶ Replay growth</button></div><div id="mapBox" class="mapbox tall"></div><div class="muted" style="margin-top:6px"><span>pin colour = money</span> · <span>icon = the job: 🔧 visit · 🧪 filter · 💰 collect · 🛠 request</span> · <span>zoom out for tole totals</span> · <span>📍 = you</span></div></div>
     <div class="panel s3 mlist" style="--i:1"><div class="ph"><span class="t"><b>Today</b> · ${todayList.length} homes</span></div><div class="ml">${todayList.map(({ x, k, t }) => `<div class="ml-i" data-mfly="${esc(x.c.id)}"><span class="k">${k}</span><div class="main"><b>${esc(x.c.name)}</b><div class="muted">${esc(toleOf(x.c))} · ${esc(t)}</div></div>${R.assigneeOf(x.c, m.t) ? `<span class="pill">${esc(R.assigneeOf(x.c, m.t))}</span>` : ''}</div>`).join('') || '<div class="empty">Nothing due today 🏖️</div>'}</div></div></div>`; }
   if (scr === 'history') return pageHistory(m);
   if (scr === 'reports') return pageReports();
@@ -1212,14 +1212,15 @@ function pageBoard(m) {
   const longest = waiting.slice().sort((a1, b1) => (days(b1) || 0) - (days(a1) || 0))[0];
   const soon = open.filter((x) => R.isDate(x.due) && x.due <= R.addDays(t, 14)); const late = open.filter((x) => R.isDate(x.due) && x.due < t);
   const who = {}; for (const x of open) { const k = x.who || 'Other'; who[k] = (who[k] || 0) + 1; }
+  const longHtml = longest ? `<span data-noi18n>${esc(longest.title)}</span>` : '<span>nothing waiting</span>'; /* the title is data (as typed) */
   const gd = (g) => (String(g || '').startsWith('🟢') ? 'g' : String(g || '').startsWith('🟡') ? 'y' : 'r');
   const bsOf = (iso) => { const b = B.adToBs(iso); return b ? `${B.BS_MONTHS_NE[b.m - 1]} ${b.d}` : ''; };
   const row = (x) => { const dd = days(x); const isLate = R.isDate(x.due) && x.due < t && x.state !== 'Done';
     return `<div class="item ms-i" data-go-form="milestone" data-id="${esc(x.id)}" title="Open to edit">
       <span class="pill ${x.state === 'Done' ? 'ok' : x.state === 'Blocked' ? 'bad' : x.state === 'Waiting' ? 'warn' : 'grey'}">${esc(x.state || 'Todo')}</span>
-      <div class="main"><div class="t">${esc(x.title || '')}</div>
-        <div class="s">${x.who ? `👤 ${esc(x.who)}${x.whoName ? ' · ' + esc(x.whoName) : ''}` : ''}${dd !== null && x.state !== 'Done' && x.state !== 'Todo' ? ` · <b class="${dd > 14 ? 'bad' : ''}">${dd} d</b> with them` : ''}${R.isDate(x.due) ? ` · ${x.state === 'Done' ? 'was due' : 'due'} <b class="${isLate ? 'bad' : ''}">${esc(x.due)}</b> <span class="muted" data-noi18n>${esc(bsOf(x.due))}</span>` : ''}${x.state === 'Done' && R.isDate(x.doneDate) ? ` · done ${esc(x.doneDate)}` : ''}</div>
-        ${x.note ? `<div class="s muted">${esc(x.note)}</div>` : ''}${x.src ? `<div class="s muted" data-noi18n>📎 ${esc(x.src)}</div>` : ''}</div>
+      <div class="main"><div class="t" data-noi18n>${esc(x.title || '')}</div>
+        <div class="s">${x.who ? `👤 <span>${esc(x.who)}</span>${x.whoName ? ` · <span data-noi18n>${esc(x.whoName)}</span>` : ''}` : ''}${dd !== null && x.state !== 'Done' && x.state !== 'Todo' ? ` · <b class="${dd > 14 ? 'bad' : ''}">${dd} d</b> with them` : ''}${R.isDate(x.due) ? ` · ${x.state === 'Done' ? 'was due' : 'due'} <b class="${isLate ? 'bad' : ''}">${esc(x.due)}</b> <span class="muted" data-noi18n>${esc(bsOf(x.due))}</span>` : ''}${x.state === 'Done' && R.isDate(x.doneDate) ? ` · <span>done</span> ${esc(x.doneDate)}` : ''}</div>
+        ${x.note ? `<div class="s muted" data-noi18n>${esc(x.note)}</div>` : ''}${x.src ? `<div class="s muted" data-noi18n>📎 ${esc(x.src)}</div>` : ''}</div>
       <span class="dot ${gd(x.grade)}" title="${esc(x.grade || '🔴 guess')}"></span>
       ${x.state !== 'Done' ? `<button class="btn small ghost" data-msdone="${esc(x.id)}" title="Done">✓</button>` : `<button class="btn small ghost" data-msreopen="${esc(x.id)}" title="Open again">↩</button>`}
     </div>`; };
@@ -1228,14 +1229,14 @@ function pageBoard(m) {
     <div class="panel s12 wt-bar" style="--i:0"><div class="seg">${tabs}</div><span class="sp"></span>
       <button class="btn small" data-go-form="milestone" data-board="${esc(sel)}">＋ Item</button><button class="btn small ghost" data-go-form="milestone" data-board="__new__">＋ Board</button>
       <label class="btn small ghost" style="margin:0">📥 Import JSON<input type="file" id="msImport" accept=".json,application/json" hidden></label>${sel ? `<button class="btn small ghost" data-msexport="${esc(sel)}">⬇️ JSON</button>` : ''}</div>
-    ${panel('s3 kpi', 1, '<b>Waiting on others</b>', `<div class="v" style="color:${waiting.length ? 'var(--warn)' : 'inherit'}">${waiting.length}</div><div class="sub">${Object.entries(who).sort((a1, b1) => b1[1] - a1[1]).map(([k, n]) => `<span>${esc(k)} ${n}</span>`).join('') || '<span>nobody</span>'}</div>`)}
-    ${panel('s3 kpi', 2, '<b>Longest wait</b>', `<div class="v" style="color:${longest && days(longest) > 14 ? 'var(--bad)' : 'inherit'}">${longest ? days(longest) + ' d' : '—'}</div><div class="sub"><span>${longest ? esc(longest.title) : 'nothing waiting'}</span></div>`)}
-    ${panel('s3 kpi', 3, '<b>Due in 14 days</b>', `<div class="v" style="color:${late.length ? 'var(--bad)' : soon.length ? 'var(--warn)' : 'inherit'}">${soon.length}</div><div class="sub">${late.length ? `<span style="color:var(--bad)">${late.length} past due</span>` : ''}${soon.filter((x) => x.due >= t).slice(0, 2).map((x) => `<span>${esc(x.due)} ${esc(x.title)}</span>`).join('')}</div>`)}
+    ${panel('s3 kpi', 1, '<b>Waiting on others</b>', `<div class="v" style="color:${waiting.length ? 'var(--warn)' : 'inherit'}">${waiting.length}</div><div class="sub">${Object.entries(who).sort((a1, b1) => b1[1] - a1[1]).map(([k, n]) => `<span><span>${esc(k)}</span> ${n}</span>`).join('') || '<span>nobody</span>'}</div>`)}
+    ${panel('s3 kpi', 2, '<b>Longest wait</b>', `<div class="v" style="color:${longest && days(longest) > 14 ? 'var(--bad)' : 'inherit'}">${longest ? days(longest) + ' d' : '—'}</div><div class="sub">${longHtml}</div>`)}
+    ${panel('s3 kpi', 3, '<b>Due in 14 days</b>', `<div class="v" style="color:${late.length ? 'var(--bad)' : soon.length ? 'var(--warn)' : 'inherit'}">${soon.length}</div><div class="sub">${late.length ? `<span style="color:var(--bad)">${late.length} past due</span>` : ''}${soon.filter((x) => x.due >= t).slice(0, 2).map((x) => `<span data-noi18n>${esc(x.due)} ${esc(x.title)}</span>`).join('')}</div>`)}
     ${panel('s3 kpi', 4, '<b>Done</b>', `<div class="v">${done.length} <span class="muted" style="font-size:16px">/ ${items.length}</span></div><div class="sub"><span>${items.length ? Math.round((done.length / items.length) * 100) : 0}% of this board</span></div>`)}
-    ${panel('s8', 5, `<b>${esc(sel || 'Board')}</b> · ${open.length} open`, `<div class="mini-list">${open.map(row).join('') || '<div class="empty">Nothing open on this board 🏖️</div>'}</div>${done.length ? `<details class="ms-done"><summary>✅ Done · ${done.length}</summary><div class="mini-list">${done.map(row).join('')}</div></details>` : ''}`)}
+    ${panel('s8', 5, `<b data-noi18n>${esc(sel || 'Board')}</b> · ${open.length} open`, `<div class="mini-list">${open.map(row).join('') || '<div class="empty">Nothing open on this board 🏖️</div>'}</div>${done.length ? `<details class="ms-done"><summary>✅ Done · ${done.length}</summary><div class="mini-list">${done.map(row).join('')}</div></details>` : ''}`)}
     <div class="s4 wt-side" style="--i:6">
       ${panel('', 6, '<b>Who holds the ball</b> · open items', Object.keys(who).length ? hbars(Object.entries(who).sort((a1, b1) => b1[1] - a1[1]).map(([l, v]) => ({ l, v, color: l === 'Us' ? 'var(--brand)' : 'var(--warn)' })), 'var(--warn)') : '<div class="empty">—</div>')}
-      ${panel('', 7, '<b>Dates on this board</b>', `<div class="mini-list">${items.filter((x) => R.isDate(x.due)).sort((a1, b1) => a1.due.localeCompare(b1.due)).map((x) => `<div class="item" data-go-form="milestone" data-id="${esc(x.id)}"><span class="dot ${gd(x.grade)}"></span><div class="main"><div class="t">${esc(x.due)} <span class="muted" data-noi18n>${esc(bsOf(x.due))}</span></div><div class="s">${esc(x.title)}${x.state === 'Done' ? ' · ✅' : ''}</div></div></div>`).join('') || '<div class="empty">No dates yet</div>'}</div>`)}
+      ${panel('', 7, '<b>Dates on this board</b>', `<div class="mini-list">${items.filter((x) => R.isDate(x.due)).sort((a1, b1) => a1.due.localeCompare(b1.due)).map((x) => `<div class="item" data-go-form="milestone" data-id="${esc(x.id)}"><span class="dot ${gd(x.grade)}"></span><div class="main"><div class="t">${esc(x.due)} <span class="muted" data-noi18n>${esc(bsOf(x.due))}</span></div><div class="s" data-noi18n>${esc(x.title)}${x.state === 'Done' ? ' · ✅' : ''}</div></div></div>`).join('') || '<div class="empty">No dates yet</div>'}</div>`)}
       ${panel('', 8, '<b>How to read it</b>', `<div class="muted">🟢 measured · 🟡 someone said so · 🔴 our guess — the dot is how sure the date is, not how important the item is.<br>Days = how long the ball has been with them. Tap an item to edit; ✓ closes it. Nothing here is typed into the code — import a JSON to fill a board.</div>`)}
     </div>
   </div>`;

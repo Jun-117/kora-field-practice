@@ -842,3 +842,4 @@ a.btn { display:inline-flex; align-items:center; justify-content:center; text-de
 /* v0.15 #14 (Jun: MacBook 16-inch): at 1117px of height the sidebar overflowed — the last group (Milestones) sat below the fold */
 @media (max-height: 1200px) { .side { gap:2px; padding:12px 10px; } .side button { padding:6px 12px; font-size:13.5px; } .side-grp { padding:7px 12px 2px; font-size:9px; } .side .side-lang { margin:6px 0; } .side .side-lang .lbl { display:none; } }
 @media (max-height: 1000px) { .side-grp { display:none; } .side button { padding:4px 12px; font-size:13px; } }
+.qr-prev img { width:72px; height:72px; border:1px solid var(--line); border-radius:8px; background:#fff; display:block; } .card.staff.my { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }

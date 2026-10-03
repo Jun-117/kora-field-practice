@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.15.0 (2026-10-03)';
+export const APP_VERSION = 'kf-v0.16.0 (2026-10-03)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -112,7 +112,7 @@ export function can(p) {
 const UV_FLOW_LIMIT = 1.2; // L/min — UV 6W verdict 2026-09-22: passes at or below 1.2
 const MAX_PHOTOS = 3, PHOTO_MAX_PX = 1024, PHOTO_Q = 0.6, PHOTO_MAX_CHARS = 950000;
 const COLS = ['customers', 'visits', 'payments', 'requests', 'leads', 'recoveries', 'trainings', 'checkins', 'stockMoves', 'expenses', 'deviceEvents', 'relocations', 'events', 'audit', 'contractEvents', 'screenings', 'claims', 'tools', 'payroll', 'waterTests', 'milestones']; /* v0.15: milestone boards (Jun + deputy) */
-const colsForMe = () => COLS.filter((c) => (c !== 'expenses' || can('expense') || can('money')) && (c !== 'audit' || isBoss()) && (c !== 'payroll' || isBoss()) && (c !== 'milestones' || isBoss())); // the change log, payroll and the boards: Jun and the deputy (rules too)
+const colsForMe = () => COLS.filter((c) => (c !== 'expenses' || can('expense') || can('money')) && (c !== 'audit' || isBoss()) && (c !== 'payroll' || isBoss()) && (c !== 'milestones' || !!S.isAdmin)); // the change log and payroll: Jun + deputy · the boards: Jun only (10/3 "나만 봄") and the deputy (rules too)
 
 // ---------- Firebase ----------
 const app = initializeApp(firebaseConfig);
@@ -221,6 +221,19 @@ const photoPut = (id, v) => photoOp('readwrite', (st) => st.put(v, id));
 export const photoGet = (id) => photoOp('readonly', (st) => st.get(id));
 const photoDel = (id) => photoOp('readwrite', (st) => st.delete(id));
 
+// v0.16: the payment QR as a crisp 320px square PNG (contain on white) for settings/app.coQr
+function shrinkQr(file, px = 320) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = px; c.height = px; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, px, px);
+      const k = Math.min(px / img.naturalWidth, px / img.naturalHeight); const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k); g.drawImage(img, (px - w) / 2, (px - h) / 2, w, h); URL.revokeObjectURL(url);
+      const d = c.toDataURL('image/png'); d.length > 120000 ? reject(new Error('QR picture too detailed — crop it to the QR')) : resolve(d);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('cannot read this picture')); };
+    img.src = url;
+  });
+}
 // v0.15: a small square JPEG for the staff photo on the customer cards (≤ ~12 KB in the users doc)
 function shrinkAvatar(file, px = 160) {
   return new Promise((resolve, reject) => {
@@ -1396,7 +1409,7 @@ export const msBoards = () => [...new Set(arr('milestones').map((x) => x.board |
 FORMS.milestone = {
   col: 'milestones', title: 'Milestone', icon: '🧱',
   spec: () => [
-    { k: 'board', l: 'Board', t: 'text', req: 1, ph: 'e.g. Company & licences · 1st shipment', hint: msBoards().length ? 'Boards now: ' + msBoards().join(' · ') + ' — type a new name for a new board.' : 'Type a name — a board is made from its first item.' },
+    { k: 'board', l: 'Board', t: 'text', req: 1, ph: 'e.g. Licences · Shipment', hint: msBoards().length ? 'Type a new name for a new board.' : 'Type a name — a board is made from its first item.' }, /* the boards are the tabs on the page */
     { k: 'title', l: 'What', t: 'text', req: 1, ph: 'e.g. Import licence (EXIM code)' },
     { k: 'who', l: 'Who holds the ball', t: 'chips', o: MS_WHO, req: 1, def: 'Us' },
     { k: 'whoName', l: 'Name (optional)', t: 'text', ph: 'the officer · the forwarder · the lawyer' },
@@ -1630,6 +1643,7 @@ function submitForm(form) {
   const id = editId || newId(F.col);
   const r = F.save(v, id, isNew);
   if (isNew && r.ok) draftClear(form.dataset.form);
+  if (r.ok && r.go && r.go[2]) { const g = r.go[2]; if (g.receipt) prerenderCard('receipt', g.receipt); else if (g.vrep) prerenderCard('visit', g.vrep); else if (g.inst) prerenderCard('install', g.inst); } /* v0.16 #4: the card is ready before the button is tapped */
   toast(r.ok ? (navigator.onLine && !DEMO ? `🟢 Saved${r.np ? ` (+${r.np} photo)` : ''} — sending now` : `🟡 Saved on phone${r.np ? ` (+${r.np} photo)` : ''} — sends when online`) : '🔴 Could not save — write it on paper');
   if (S.desk && S.drawer) {
     // Desk: the finished form is dropped (Back must not return to it); the result opens where the form was.
@@ -1891,7 +1905,7 @@ export function dunItem(x) {
   const rs = remSent(x.c.id); const sentPill = rs ? ` <span class="pill sent">💬 sent ${esc(new Date(rs.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</span>` : '';
   if (!S.desk) return `<div class="item dun" data-cust="${esc(x.c.id)}"><div class="main"><div class="t">${esc(x.c.name)} <span class="pill ${cls}">${esc(d.short)}</span>${sentPill}</div>
     <div class="s">${R.npr(d.owed)} · ${esc(when)} · ${esc(toleOf(x.c))}</div>${prLine}${chLine}
-    <div class="dun-acts"><a class="btn small ghost" href="tel:${esc(x.c.phone)}" data-stop>📞 Call</a><a class="btn small ghost" href="${esc(waLink(x.c.phone, dunText(x)))}" target="_blank" rel="noopener" data-stop data-rem-sent="${esc(x.c.id)}">💬 WhatsApp</a>${canForm('checkin') ? `<button class="btn small ghost" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(R.CHASE_KIND)}" title="Log a payment chase">📝 Log</button>` : ''}</div></div></div>`;
+    <div class="dun-acts"><a class="btn small ghost" href="tel:${esc(x.c.phone)}" data-stop>📞 Call</a><a class="btn small ghost" href="${esc(waLink(x.c.phone, dunText(x)))}" target="_blank" rel="noopener" data-stop data-rem-sent="${esc(x.c.id)}">💬 WhatsApp</a>${canForm('checkin') ? `<button class="btn small ghost" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(R.CHASE_KIND)}" title="Log a payment chase">📝 Log</button>` : ''}${S.settings.coQr ? `<button class="btn small ghost" data-act="rcBill" data-cid="${esc(x.c.id)}" data-stop title="Bill of the month with the payment QR">🧾 QR</button>` : ''}</div></div></div>`;
   return `<div class="item" data-cust="${esc(x.c.id)}"><span class="dot ${x.dot}"></span><div class="main"><div class="t">${esc(x.c.name)} <span class="pill ${cls}">${esc(d.short)}</span></div>
     <div class="s">${R.npr(d.owed)} · ${esc(when)} · ${esc(toleOf(x.c))}</div>${prLine}${chLine}</div>
     <div class="acts">${canForm('checkin') ? `<button class="icon-btn" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(R.CHASE_KIND)}" title="Log a payment chase">📝</button>` : ''}<a class="icon-btn" href="${esc(waLink(x.c.phone, dunText(x)))}" target="_blank" rel="noopener" data-stop data-rem-sent="${esc(x.c.id)}">💬</a><a class="icon-btn" href="tel:${esc(x.c.phone)}" data-stop>📞</a></div></div>`;
@@ -1979,7 +1993,7 @@ function withApproval(col, id, data) {
 }
 
 
-export const canForm = (f) => (f === 'payPerson' || f === 'milestone' ? isBoss() : f === 'training' ? !!S.isAdmin : !FORM_PERM[f] || can(FORM_PERM[f])); /* payroll: Jun and the deputy only · training records: admin accounts only (Jun 2026-09-30 "내 화면에만") */
+export const canForm = (f) => (f === 'payPerson' ? isBoss() : f === 'milestone' ? !!S.isAdmin : f === 'training' ? !!S.isAdmin : !FORM_PERM[f] || can(FORM_PERM[f])); /* payroll: Jun and the deputy only · training records: admin accounts only (Jun 2026-09-30 "내 화면에만") */
 function viewNew() {
   // v0.11: grouped rows instead of 18 coloured tiles (Tara 2026-09-30) · the group colour is the icon box
   const row = (f, l, s) => (canForm(f) ? [{ attr: `data-go-form="${f}"`, ic: FORMS[f].icon, l, s }] : []);
@@ -2069,7 +2083,7 @@ function viewDetail(p) {
     ${can('visit') ? `<button data-go-form="request" data-cid="${esc(c.id)}">📋 Request</button>` : ''}
     ${can('visit') && x.status !== 'Churned' ? omwBtn(c) : ''}
     ${canEdit ? `<button data-go-form="customerEdit" data-id="${esc(c.id)}">✏️ Edit</button>` : ''}${canForm('contract') ? `<button data-go-form="contract" data-cid="${esc(c.id)}">📜 Contract</button>` : ''}
-    ${x.status === 'Active' && referralOn() ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && String(q.status).includes('Completed')).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">📨 Visit note</button>` : ''; })()}${x.status === 'Active' ? `<button data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card</button>` : ''}
+    ${x.status === 'Active' && referralOn() ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && String(q.status).includes('Completed')).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">📨 Visit note</button>` : ''; })()}${x.status === 'Active' ? `<button data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card</button>` : ''}${x.status === 'Active' && S.settings.coQr && (x.dn || (x.led && x.led.nextBill)) ? `<button data-act="rcBill" data-cid="${esc(c.id)}">🧾 Bill + QR</button>` : ''}
   </div>
   ${S.desk ? '' : '<button class="btn ghost small" data-act="moreLinks" style="margin-top:6px">⋯ More</button>'}
   ${can('visit') && x.status !== 'Churned' ? omwChips(c) : ''}
@@ -2179,33 +2193,58 @@ async function visitPhotos(parent) { /* v0.14: the first two photos saved with a
 // v0.15: who is on the card — full name + photo from the Staff page (users.fullName / users.photo); own profile on a staff phone; the name alone otherwise
 export async function staffWho(name) {
   const n = String(name || '').trim(); if (!n) return {};
+  if (isBoss() && !S.usersCache && !DEMO) { try { S.usersCache = await fetchUsers(); } catch (e) {} } /* Jun / the deputy can read every staff card */
   const us = [...(S.usersCache || []), ...(S.demoUsers || [])]; let u = us.find((q) => q.name === n || q.fullName === n);
   if (!u && S.profile && (S.profile.name === n || S.profile.fullName === n || myName() === n)) u = S.profile;
   const out = { name: (u && u.fullName) || n };
   if (u && u.photo) out.photo = await new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = u.photo; });
   return out;
 }
+// v0.16: the company payment QR lives in Settings (uploaded picture, never in the code)
+function qrImage() { const src = S.settings.coQr; if (!src) return Promise.resolve(null); return new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; }); }
+// v0.16 #4 (optimisation, Jun 10/3 "최적화를 하자"): a customer picture is drawn once and kept. Right after a payment, visit or
+// install is saved, its card is drawn in the background, so the WhatsApp button shows it at once. The key is the card's content
+// (photos counted by size), so a change — a payment, a setting, a new photo — draws it again instead of showing an old picture.
+const RC_CACHE = new Map(); const RC_MAX = 6;
+const imgKey = (k, v) => (v && typeof v === 'object' && typeof v.src === 'string' && 'naturalWidth' in v ? 'img:' + v.src.length : v);
+export const rcCacheKeys = () => [...RC_CACHE.keys()];
+async function cardSpec(kind, id) {
+  const co = { name: S.settings.coName || 'Kora Care Private Limited', nameNe: S.settings.coNameNe || '', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '', bankLine: S.settings.coBankLine || '' };
+  let x, d, draw, name, alt;
+  if (kind === 'receipt') { const pay = S.D.payments.get(id); if (!pay) return null; x = model().cust.get(pay.customerId); if (!x) return { err: 'Customer not found' }; d = RC.receiptData(x, pay, co); draw = () => RC.drawReceipt(d); name = `${d.no}.png`; alt = 'receipt'; }
+  else if (kind === 'referral') { x = model().cust.get(id); if (!x) return null; d = RC.referralData(x, co); draw = () => RC.drawReferralCard(d); name = `KORA-referral-${d.code || 'card'}.png`; alt = 'referral card'; }
+  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return null; x = model().cust.get(v.customerId); if (!x) return null; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; d = RC.visitData(x, v, co, ph, await staffWho(v.technician)); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; }
+  else if (kind === 'bill') { x = model().cust.get(id); if (!x) return null; d = RC.billData(x, co, await qrImage(), today()); if (!d) return { err: 'No bill to show for this home' }; draw = () => RC.drawBillCard(d); name = `KORA-bill-${d.code || ''}-${today()}.png`; alt = 'bill with QR'; } /* v0.16 #7 */
+  else if (kind === 'install') { x = model().cust.get(id); if (!x) return null; const ph = await visitPhotos(`customers/${id}`); d = RC.installData(x, co, ph.before || ph.after || null, await staffWho(x.c.agent || myName())); draw = () => RC.drawInstallCard(d); name = `KORA-installed-${d.code || ''}.png`; alt = 'installed card'; }
+  else return null;
+  return { kind, d, draw, name, alt, key: kind + '|' + id + '|' + JSON.stringify(d, imgKey) };
+}
+async function cardImage(sp) {
+  const hit = RC_CACHE.get(sp.key); if (hit) { RC_CACHE.delete(sp.key); RC_CACHE.set(sp.key, hit); return { ...hit, cached: true }; }
+  const cv = await sp.draw(); const blob = await RC.canvasBlob(cv); const e = { cv, blob, url: URL.createObjectURL(blob), name: sp.name, alt: sp.alt };
+  RC_CACHE.set(sp.key, e);
+  while (RC_CACHE.size > RC_MAX) { const [k0, e0] = RC_CACHE.entries().next().value; RC_CACHE.delete(k0); if (e0.url !== S.rcUrl) { try { URL.revokeObjectURL(e0.url); } catch (err) {} } }
+  return { ...e, cached: false };
+}
+// draw in the background after a save — idle time, never in the way of the screen that just opened
+function prerenderCard(kind, id, delay = 700) {
+  const go1 = async () => { try { const sp = await cardSpec(kind, id); if (sp && !sp.err) await cardImage(sp); } catch (e) {} };
+  setTimeout(() => (window.requestIdleCallback ? window.requestIdleCallback(go1, { timeout: 2500 }) : go1()), delay);
+}
 async function imageCard(kind, id) {
   const box = $('#rcBox'); if (!box) return;
-  const co = { name: S.settings.coName || 'Kora Care Private Limited', nameNe: S.settings.coNameNe || '', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '' };
-  let x, draw, name, alt;
-  if (kind === 'receipt') { const pay = S.D.payments.get(id); if (!pay) return; x = model().cust.get(pay.customerId); if (!x) { toast('Customer not found'); return; } const d = RC.receiptData(x, pay, co); draw = () => RC.drawReceipt(d); name = `${d.no}.png`; alt = 'receipt'; }
-  else if (kind === 'referral') { x = model().cust.get(id); if (!x) return; const d = RC.referralData(x, co); draw = () => RC.drawReferralCard(d); name = `KORA-referral-${d.code || 'card'}.png`; alt = 'referral card'; }
-  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return; x = model().cust.get(v.customerId); if (!x) return; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; const d = RC.visitData(x, v, co, ph, await staffWho(v.technician)); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; }
-  else if (kind === 'install') { x = model().cust.get(id); if (!x) return; const ph = await visitPhotos(`customers/${id}`); const d = RC.installData(x, co, ph.before || ph.after || null, await staffWho(x.c.agent || myName())); draw = () => RC.drawInstallCard(d); name = `KORA-installed-${d.code || ''}.png`; alt = 'installed card'; }
-  else return;
-  box.classList.remove('hidden'); box.innerHTML = '<div class="muted" style="margin-top:8px">Making the picture…</div>';
+  box.classList.remove('hidden'); const slow = setTimeout(() => { box.innerHTML = '<div class="muted" style="margin-top:8px">Making the picture…</div>'; }, 120);
   try {
-    const cv = await draw(); S.rcCanvas = cv; S.rcKind = kind;
-    const blob = await RC.canvasBlob(cv); if (S.rcUrl) { try { URL.revokeObjectURL(S.rcUrl); } catch (e) {} }
-    S.rcUrl = URL.createObjectURL(blob); S.rcBlob = blob; S.rcName = name;
-    const can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], S.rcName, { type: 'image/png' })] }));
-    box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(alt)}">
+    const sp = await cardSpec(kind, id); if (!sp || sp.err) { clearTimeout(slow); if (sp && sp.err) toast(sp.err); box.classList.add('hidden'); return; }
+    const r = await cardImage(sp); clearTimeout(slow);
+    S.rcCanvas = r.cv; S.rcKind = kind; S.rcBlob = r.blob; S.rcUrl = r.url; S.rcName = r.name; S.rcFromCache = r.cached;
+    const can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([r.blob], S.rcName, { type: 'image/png' })] }));
+    box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(r.alt)}">
       ${can ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcShare">📤 Share → WhatsApp</button>` : ''}
       <a class="btn ghost" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
       <div class="muted" style="margin-top:6px;font-size:12px">${can ? 'Share → choose WhatsApp → the customer' : 'Save, then send it from WhatsApp'}</div>`;
     box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  } catch (e) { box.innerHTML = `<div class="muted">Could not make the image · ${esc(e && e.message || e)}</div>`; }
+  } catch (e) { clearTimeout(slow); box.innerHTML = `<div class="muted">Could not make the image · ${esc(e && e.message || e)}</div>`; }
 }
 async function loadPrivate(id) {
   const ta = $('#drawer #privNotes') || $('#privNotes'); if (!ta || !isBoss()) return;
@@ -2590,7 +2629,7 @@ export function viewReport(p) {
     `<div class="card"><input type="file" accept=".csv,text/csv,.xls,.xlsx" id="bankFile"><div id="bankBox" class="hint">The bank / Fonepay export format is not known yet — any CSV or Excel file with date, amount and description columns works. Send Jun one real file to tune the matching.</div></div>`;
   if (k === 'backup') return head('💾 Backup', 'Everything in one go: customers, visits, payments, expenses, devices… as Excel + JSON.') + backupHtml();
   if (k === 'export') return head('💾 Export all data', 'Backup to this computer (Firestore scheduled backups need the Blaze plan).') +
-    `<div class="card">${COLS.filter((c) => (c !== 'audit' && c !== 'payroll' && c !== 'milestones') || isBoss()).map((c) => `<button class="btn ghost" data-csv="col:${c}">⬇️ ${esc(c)} (${S.D[c].size}) CSV</button>`).join('')}<button class="btn" data-act="exportJson">⬇️ Everything as one JSON file</button></div>`;
+    `<div class="card">${COLS.filter((c) => ((c !== 'audit' && c !== 'payroll') || isBoss()) && (c !== 'milestones' || S.isAdmin)).map((c) => `<button class="btn ghost" data-csv="col:${c}">⬇️ ${esc(c)} (${S.D[c].size}) CSV</button>`).join('')}<button class="btn" data-act="exportJson">⬇️ Everything as one JSON file</button></div>`;
   if (k === 'users') return head('🪪 Staff & permissions', 'Admin (Jun) has every right and cannot be changed. Everyone else: pick a preset, then switch single rights. Areas only tidy their screens — they are not a security wall. The server checks who may write money, expenses, new customers and approvals — but every staff account can read the shared records (rights and areas decide what the screens show).') + '<div id="usersBox" class="card">Loading… (needs internet)</div>';
   if (k === 'payroll') {
     if (S.settings.payroll !== 'Yes') return head('💼 Payroll', '') + `<div class="card"><div class="empty">${esc('Payroll is off (Settings → Staff on payroll?). No salaries before the work permit.')}</div></div>`;
@@ -2629,14 +2668,14 @@ export function viewReport(p) {
   }
   if (k === 'settings') return head('⚙️ Settings', 'Prices are fixed by the contract (2026-09-03) and shown for reference.') +
     `<form class="card" id="settingsForm"><label>FCL lead time (weeks)</label><input name="leadTimeWeeks" type="number" value="${esc(S.settings.leadTimeWeeks || R.FCL.leadTimeWeeks)}"><div class="hint">Default 13 = the "25 units" rule (8/month × 13 weeks).</div>
-      <label>Extra technician names (comma separated)</label><input name="techNames" value="${esc(S.settings.techNames || '')}" placeholder="e.g. Ramesh, Sita">
+      <label>Extra technician names (comma separated)</label><input name="techNames" value="${esc(S.settings.techNames || '')}" placeholder="e.g. Laxmi, Staff A">
       <label>Extra days the office is closed (YYYY-MM-DD, comma separated)</label><textarea name="holidays" placeholder="e.g. 2026-10-12, 2026-10-13">${esc(S.settings.holidays || '')}</textarea><div class="hint">Saturdays and the official 2083 public holidays (Home Ministry + Gandaki notices) are already in the calendar. Add only your own extra days off. Used for the calendar and the breakdown reply clock.</div>
       <h3>🎁 Referral campaign</h3>
-      <label>Referral campaign on?</label><select name="referralCampaign"><option value="No"${referralOn() ? '' : ' selected'}>No — no card, no rewards, no tree (the usual state)</option><option value="Yes"${referralOn() ? ' selected' : ''}>Yes — referrer gets 50% off a bill (switch on when installs slow down)</option></select><div class="hint">Jun 10/3: "평소엔 없다가 설치 느려지면 50% 추천인 쿠폰". NPR ${R.referralAmount()} per neighbour who stays past month 3.</div>
+      <label>Referral campaign on?</label><select name="referralCampaign"><option value="No"${referralOn() ? '' : ' selected'}>No — no card, no rewards, no tree (the usual state)</option><option value="Yes"${referralOn() ? ' selected' : ''}>Yes — referrer gets 50% off a bill (switch on when installs slow down)</option></select><div class="hint">Switch on only when installs slow down. NPR ${R.referralAmount()} per neighbour who stays past month 3.</div>
       <h3>🧪 Filters (order dates)</h3>
-      <label>Filter changes</label><select name="filterMode"><option value="Together"${S.settings.filterMode === 'Separate' ? '' : ' selected'}>Together — one visit changes every filter that falls due before the next change</option><option value="Separate"${S.settings.filterMode === 'Separate' ? ' selected' : ''}>Separate — each filter on its own date</option></select><div class="hint">Together (Jun 10/3): the next change is the earliest due filter; the visit takes every filter due before the one after it.</div>
+      <label>Filter changes</label><select name="filterMode"><option value="Together"${S.settings.filterMode === 'Separate' ? '' : ' selected'}>Together — one visit changes every filter that falls due before the next change</option><option value="Separate"${S.settings.filterMode === 'Separate' ? ' selected' : ''}>Separate — each filter on its own date</option></select><div class="hint">Together: the next change is the earliest due filter; the visit takes every filter due before the one after it.</div>
       <label>Filter interval from real data</label><select name="learnFilters"><option value="Yes" ${S.settings.learnFilters !== 'No' ? 'selected' : ''}>Yes — once a filter has 5+ real changes, use the observed average</option><option value="No" ${S.settings.learnFilters === 'No' ? 'selected' : ''}>No — always the E-2 booking interval</option></select>
-      <div class="muted" style="margin:-4px 0 10px">Now: ${esc(R.FILTER_TYPES.filter((t2) => R.FILTER_MONTHS[t2]).map((t2) => { const r = R.filterLearning([...S.D.customers.values()], [...S.D.visits.values()]).find((q) => q.type === t2) || {}; return `${t2} ${R.FILTER_MONTHS[t2]}mo${r.n >= R.LEARN_MIN && r.avgMonths ? ' → ' + Math.round(r.avgMonths) + 'mo (' + r.n + ' changes)' : ' (' + (r.n || 0) + ' changes)'}`; }).join(' · '))}</div>
+      <div class="muted" style="margin:-4px 0 10px"><span>Now:</span> ${(() => { const fl = R.filterLearning([...S.D.customers.values()], [...S.D.visits.values()]); return R.FILTER_TYPES.filter((t2) => R.FILTER_MONTHS[t2]).map((t2) => { const r = fl.find((q) => q.type === t2) || {}; return `<span>${esc(`${t2} ${R.FILTER_MONTHS[t2]}mo${r.n >= R.LEARN_MIN && r.avgMonths ? ' → ' + Math.round(r.avgMonths) + 'mo (' + r.n + ' changes)' : ' (' + (r.n || 0) + ' changes)'}`)}</span>`; }).join(' · '); })()}</div>
       <label>Filter lead time — order to shelf (weeks)</label><input name="filterLeadWeeks" type="number" min="0" value="${esc(S.settings.filterLeadWeeks ?? '')}" placeholder="${R.FILTER_ORDER.leadWeeks} (guess)"><div class="hint">🔴 Filters may come from China or India — put the real number after the first order.</div>
       <label>Safety weeks before running out</label><input name="filterSafetyWeeks" type="number" min="0" value="${esc(S.settings.filterSafetyWeeks ?? '')}" placeholder="${R.FILTER_ORDER.safetyWeeks}">
       <label>Months one order should cover</label><input name="filterCoverMonths" type="number" min="1" value="${esc(S.settings.filterCoverMonths ?? '')}" placeholder="${R.FILTER_ORDER.coverMonths}">
@@ -2678,6 +2717,8 @@ export function viewReport(p) {
       <label>Company PAN (VAT)</label><input name="coPan" value="${esc(S.settings.coPan || '')}" inputmode="numeric" placeholder="9 digits">
       <label>Address</label><input name="coAddress" value="${esc(S.settings.coAddress || '')}" placeholder="e.g. Pokhara-13, Kaski">
       <label>Company WhatsApp number</label><input name="coPhone" value="${esc(S.settings.coPhone || '')}" placeholder="+977 9xx-xxxxxxx" hint="on the image receipt">
+      <label>Company payment QR (bank account QR)</label><div class="row" style="align-items:center;gap:10px;margin:2px 0 8px"><span class="qr-prev">${S.settings.coQr ? `<img src="${esc(S.settings.coQr)}" alt="QR">` : '<span class="muted">none yet</span>'}</span><label class="btn small ghost" style="margin:0">📷 Upload QR<input type="file" id="coQrIn" accept="image/*" hidden></label>${S.settings.coQr ? '<button type="button" class="btn small ghost" data-coqr-remove>Remove</button>' : ''}</div><div class="hint">The picture the customer scans from their gallery (bill + QR card). Saved the moment you pick it — the QR is never written into the app code.</div>
+      <label>Bank line under the QR</label><input name="coBankLine" value="${esc(S.settings.coBankLine || '')}" placeholder="bank · account name · account number"><div class="hint">For customers whose app cannot read the QR — type the transfer details.</div>
       <label>Nepali calendar fix (only if the CA says a month length is wrong)</label><textarea name="bsOverride" placeholder="2084: 31,32,31,32,31,30,30,30,29,29,30,31">${esc(S.settings.bsOverride || '')}</textarea><div class="hint">Years 2080–2083 are checked against 3 sources. From 2084 the sources disagree — put the official month lengths here when the calendar is out.</div>
       ${S.isAdmin ? '<button class="btn" type="submit">Save settings</button>' : '<div class="hint">Only Jun (admin) changes settings — the deputy can read them.</div>'}</form>
     <div class="card"><div class="kv"><div class="k">Day 1</div><div class="v">${R.npr(R.PRICES.installFee)}</div><div class="k">Months 2–13</div><div class="v">${R.npr(R.PRICES.monthly + R.PRICES.depositMonthly)} (incl. deposit ${R.PRICES.depositMonthly})</div><div class="k">Months 14–36</div><div class="v">${R.npr(R.PRICES.monthly)}</div><div class="k">Deposit</div><div class="v">${R.npr(R.PRICES.depositTotal)}</div></div></div>`;
@@ -2788,7 +2829,7 @@ function staffCard(u, mk) {
   return `<div class="card staff" data-staff="${esc(u.uid)}">
     <div class="st-h"><span class="avatar">${esc((u.name || u.email || '?').slice(0, 1).toUpperCase())}</span><div class="main"><b>${esc(u.name || '(no name yet)')}</b><div class="muted">${esc(u.email || u.uid)} · last seen ${esc(seen)}${u.appVersion ? ' · ' + esc(u.appVersion) : ''}</div></div><span class="pill ${pill}">${esc(u.role === 'staff' ? 'active' : u.role || '?')}</span></div>
     <label>Name (shown on records)</label><input data-uname value="${esc(u.name || '')}" placeholder="e.g. Tara">
-    <label>Full name (on the visit note / installed card)</label><input data-ufull value="${esc(u.fullName || '')}" placeholder="e.g. Tara Thapa">
+    <label>Full name (on the visit note / installed card)</label><input data-ufull value="${esc(u.fullName || '')}" placeholder="e.g. Tara Sherpa">
     <div class="row" style="align-items:center;gap:10px;margin:4px 0 8px"><span class="avatar photo" data-uav>${u.photo ? `<img src="${esc(u.photo)}" alt="">` : esc((u.name || u.email || '?').slice(0, 1).toUpperCase())}</span><label class="btn small ghost" style="margin:0">📷 Photo<input type="file" accept="image/*" data-uphoto="${esc(u.uid)}" hidden></label><span class="muted">round photo on the customer cards · face, good light</span></div>
     <div class="lbl">Preset</div><div class="tgl-row">${Object.entries(PRESETS).map(([k, pr]) => `<button type="button" class="tgl ${u.preset === k ? 'on' : ''}" data-preset="${k}">${esc(pr.label)}</button>`).join('')}</div>
     <div class="lbl">Rights</div><div class="perm-grid">${PERMS.map(([k, l, h]) => `<button type="button" class="tgl perm ${perms[k] ? 'on' : ''}" data-perm="${k}" title="${esc(h || '')}"><span class="ck">${perms[k] ? '✓' : ''}</span>${esc(l)}</button>`).join('')}</div>
@@ -2816,7 +2857,7 @@ async function loadUsers() {
     const rows = all.filter((u, i) => !adm[i]).sort((a, b) => ({ pending: 0, staff: 1, blocked: 2 }[a.role] ?? 3) - ({ pending: 0, staff: 1, blocked: 2 }[b.role] ?? 3));
     S.usersCache = rows; const mk = R.monthKey(today());
     const box2 = $('#drawer #usersBox') || $('#usersBox'); if (!box2) return;
-    box2.innerHTML = newStaffHtml() + `<div class="card"><div class="status" style="font-size:15px">Who can do what</div>${staffMatrix(rows, admins)}</div>`
+    box2.innerHTML = newStaffHtml() + myCardHtml() + `<div class="card"><div class="status" style="font-size:15px">Who can do what</div>${staffMatrix(rows, admins)}</div>`
       + (rows.map((u) => staffCard(u, mk)).join('') || '<div class="card empty">No staff yet. Someone signs in with their email → they appear here as pending.</div>');
   } catch (e) { box.textContent = 'Could not load users: ' + (e.code || e.message); }
 }
@@ -2830,10 +2871,18 @@ function readStaffCard(card) {
 }
 // New staff account made by Jun: a second Firebase app signs the new person up (Jun stays signed in),
 // with a random password nobody sees — the staff member gets an email to set their own password, then stays signed in on their phone.
+// v0.16 #3: the admin's own card — full name + photo for the visit note / installed card (users/{uid}.fullName · .photo; the profile on this phone)
+function myCardHtml() {
+  const p = S.profile || {}; const init = (myName() || '?').slice(0, 1).toUpperCase();
+  return `<div class="card staff my" data-staff="me"><div class="st-h"><span class="avatar photo" data-uav>${p.photo ? `<img src="${esc(p.photo)}" alt="">` : esc(init)}</span><div class="main"><b>${esc(myName())} <span>(you)</span></b><div class="muted">${S.isAdmin ? 'admin' : 'staff'} · what the customer cards show when you did the visit</div></div><span class="pill blue">${S.isAdmin ? 'admin' : 'me'}</span></div>
+    <label>Full name (on the visit note / installed card)</label><input data-ufull value="${esc(p.fullName || '')}" placeholder="your full name">
+    <div class="row" style="align-items:center;gap:10px;margin:4px 0 8px"><label class="btn small ghost" style="margin:0">📷 Photo<input type="file" accept="image/*" data-uphoto="me" hidden></label><span class="muted">round photo on the customer cards · face, good light</span></div>
+    <div class="row"><button type="button" class="btn" data-mysave>Save my card</button></div></div>`;
+}
 function newStaffHtml() {
   return `<div class="card staff-new"><div class="status" style="font-size:15px">➕ New staff account</div>
     <div class="muted">They get an email to set their own password. After they sign in once, the phone stays signed in.</div>
-    <div class="grid2"><div><label>Name</label><input id="nsName" placeholder="e.g. Ramesh"></div><div><label>Email</label><input id="nsEmail" type="email" inputmode="email" placeholder="their own email"></div></div>
+    <div class="grid2"><div><label>Name</label><input id="nsName" placeholder="e.g. Laxmi"></div><div><label>Email</label><input id="nsEmail" type="email" inputmode="email" placeholder="their own email"></div></div>
     <div class="lbl">Preset</div><div class="tgl-row" id="nsPreset">${Object.entries(PRESETS).map(([k, pr]) => `<button type="button" class="tgl ${k === 'technician' ? 'on' : ''}" data-nspreset="${k}">${esc(pr.label)}</button>`).join('')}</div>
     <button class="btn" data-act="staffCreate">Create account &amp; send the email</button><div class="hint" id="nsOut"></div></div>`;
 }
@@ -3004,9 +3053,10 @@ document.addEventListener('click', async (ev) => {
   const navb = t.closest('nav.tabs button'); if (navb) { history_.length = 0; go(navb.dataset.tab, navb.dataset.tab, {}, true); return; }
   const sideb = t.closest('[data-side]'); if (sideb) { history_.length = 0; closeDrawer(true); go(sideb.dataset.side, sideb.dataset.side, {}, true); return; }
   const md = t.closest('[data-msdone], [data-msreopen]'); if (md) { /* v0.15 boards */
-    ev.preventDefault(); ev.stopPropagation(); if (!isBoss()) return; const done = md.dataset.msdone !== undefined; const id = done ? md.dataset.msdone : md.dataset.msreopen; const x = S.D.milestones.get(id); if (!x) return;
+    ev.preventDefault(); ev.stopPropagation(); if (!S.isAdmin) return; const done = md.dataset.msdone !== undefined; const id = done ? md.dataset.msdone : md.dataset.msreopen; const x = S.D.milestones.get(id); if (!x) return;
     auditLog('milestones', id, x, { state: done ? 'Done' : 'Waiting' }); save(`milestones/${id}`, done ? { state: 'Done', doneDate: today() } : { state: 'Waiting', doneDate: '', since: today() }, false); toast(done ? `✅ ${x.title}` : `↩ ${x.title} is open again`); scheduleRender(); return;
   }
+  const qrm = t.closest('[data-coqr-remove]'); if (qrm) { ev.preventDefault(); if (!S.isAdmin) return; save('settings/app', { coQr: '' }, false); S.settings = { ...S.settings, coQr: '' }; bump(); toast('QR removed'); scheduleRender(); return; }
   const mx = t.closest('[data-msexport]'); if (mx) { ev.preventDefault(); const b = mx.dataset.msexport; const rows = arr('milestones').filter((x) => !b || (x.board || 'Board') === b).map(({ id, createdAt, updatedAt, createdBy, updatedBy, by, ...rest }) => rest); download(`kora-board-${(b || 'all').replace(/[^\w]+/g, '_')}-${today()}.json`, JSON.stringify(rows, null, 2)); return; }
   const gf = t.closest('[data-go-form]'); if (gf && !canForm(gf.dataset.goForm)) return; // hidden rights stay hidden (no message)
   if (gf) { ev.preventDefault(); nav(S.route.tab === 'customers' || S.route.screen === 'detail' ? 'customers' : 'new', 'form', { form: gf.dataset.goForm, cid: gf.dataset.cid, id: gf.dataset.id, lead: gf.dataset.lead, kind: gf.dataset.kind, serial: gf.dataset.serial, event: gf.dataset.kind, date: gf.dataset.date, lane: gf.dataset.lane, board: gf.dataset.board }); return; }
@@ -3038,6 +3088,13 @@ document.addEventListener('click', async (ev) => {
   if (t.closest('#viewer')) { $('#viewer').style.display = 'none'; return; }
   const stg = t.closest('.staff [data-perm], .staff [data-area]'); if (stg) { stg.classList.toggle('on'); const ck = stg.querySelector('.ck'); if (ck) ck.textContent = stg.classList.contains('on') ? '✓' : ''; const card = stg.closest('.staff'); if (stg.dataset.perm) card.querySelectorAll('[data-preset]').forEach((b) => b.classList.remove('on')); return; }
   const pz = t.closest('.staff [data-preset]'); if (pz) { const card = pz.closest('.staff'); const pr = PRESETS[pz.dataset.preset].perms; card.querySelectorAll('[data-preset]').forEach((b) => b.classList.toggle('on', b === pz)); card.querySelectorAll('[data-perm]').forEach((b) => { const on = !!pr[b.dataset.perm]; b.classList.toggle('on', on); b.querySelector('.ck').textContent = on ? '✓' : ''; }); return; }
+  const my = t.closest('[data-mysave]'); if (my) { /* v0.16 #3 */
+    const card = my.closest('.staff'); const d = { fullName: card.querySelector('[data-ufull]').value.trim().slice(0, 80) }; if (card.dataset.photo) d.photo = card.dataset.photo;
+    if (S.isAdmin) d.name = myName(); /* other phones find the admin's card by the name on the visit */
+    try { if (!DEMO) await setDoc(doc(db, 'users', S.user.uid), d, { merge: true }); /* no stamps: staff may change only fullName / photo on their own doc */
+      S.profile = { ...(S.profile || {}), ...d }; lsSet('kfp_prof_' + S.user.uid, S.profile); toast('✅ Your card is saved'); loadUsers(); } catch (e) { toast('Failed: ' + (e.code || e.message)); }
+    return;
+  }
   const ss = t.closest('[data-staffsave]'); if (ss) {
     const uid = ss.dataset.staffsave; const card = ss.closest('.staff'); const d = readStaffCard(card);
     if (!d.name) { toast('Write their name first'); card.querySelector('[data-uname]').focus(); return; }
@@ -3076,6 +3133,7 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'rcRef') { ev.preventDefault(); imageCard('referral', a.dataset.cid); }
   else if (act === 'rcVisit') { ev.preventDefault(); imageCard('visit', a.dataset.vid); }
   else if (act === 'rcInst') { ev.preventDefault(); imageCard('install', a.dataset.cid); }
+  else if (act === 'rcBill') { ev.preventDefault(); ev.stopPropagation(); const cid = a.dataset.cid; if ($('#rcBox')) imageCard('bill', cid); else { nav('customers', 'detail', { id: cid }); setTimeout(() => imageCard('bill', cid), 450); } } /* v0.16 #7: from a list → open the home, then draw */
   else if (act === 'rcShare') { ev.preventDefault(); if (!S.rcBlob) return; const r = await RC.shareImage(S.rcBlob, S.rcName || 'receipt.png'); toast(r === 'shared' ? '✅ Shared' : r === 'unsupported' ? 'Sharing not available here — save the image' : 'Share cancelled'); }
   else if (act === 'demoWho') { if (DEMO) demoWho(); }
   else if (act === 'demoAs') { if (DEMO) demoAs(a.dataset.as || ''); }
@@ -3150,13 +3208,18 @@ document.addEventListener('change', (ev) => {
   if (ev.target.id === 'bankFile' && ev.target.files[0]) { bankUpload(ev.target.files[0]); return; }
   if (ev.target.id === 'bkCheck' && ev.target.files[0]) { checkBackupFile(ev.target.files[0]); return; }
   if (ev.target.id === 'msImport' && ev.target.files[0]) { /* v0.15: a board from a JSON file (the real items are kept outside the public code) */
-    const file = ev.target.files[0]; ev.target.value = ''; if (!isBoss()) return;
+    const file = ev.target.files[0]; ev.target.value = ''; if (!S.isAdmin) return;
     const rd = new FileReader(); rd.onload = () => { try {
       const j = JSON.parse(rd.result); const rows = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : []; const have = new Set(arr('milestones').map((x) => `${x.board}|${x.title}`)); let n = 0, skip = 0;
       for (const r0 of rows) { const r = { board: String(r0.board || '').trim().slice(0, 60), title: String(r0.title || '').trim().slice(0, 160), who: MS_WHO.includes(r0.who) ? r0.who : 'Other', whoName: String(r0.whoName || '').slice(0, 80), state: MS_STATE.includes(r0.state) ? r0.state : 'Todo', since: R.isDate(r0.since) ? r0.since : '', due: R.isDate(r0.due) ? r0.due : '', grade: MS_GRADE.includes(r0.grade) ? r0.grade : MS_GRADE[2], src: String(r0.src || '').slice(0, 300), note: String(r0.note || '').slice(0, 600), order: Number(r0.order) || 0, doneDate: R.isDate(r0.doneDate) ? r0.doneDate : '', by: myName() };
         if (!r.board || !r.title) { skip++; continue; } if (have.has(`${r.board}|${r.title}`)) { skip++; continue; } have.add(`${r.board}|${r.title}`); save(`milestones/${newId('milestones')}`, r, true); n++; }
       toast(`📥 ${n} item(s) added${skip ? ` · ${skip} skipped (empty or already there)` : ''}`); scheduleRender();
     } catch (e) { toast('Not a board file: ' + (e.message || e)); } }; rd.readAsText(file); return;
+  }
+  if (ev.target.id === 'coQrIn' && ev.target.files[0]) { /* v0.16 #7: the company QR → 320px square PNG in settings/app.coQr */
+    const file = ev.target.files[0]; ev.target.value = ''; if (!S.isAdmin) { toast('Only Jun changes settings'); return; }
+    shrinkQr(file).then((url) => { save('settings/app', { coQr: url }, false); S.settings = { ...S.settings, coQr: url }; bump(); toast('✅ QR saved — it goes on the bill card'); scheduleRender(); }).catch((e) => toast('Cannot read this picture: ' + (e.message || e)));
+    return;
   }
   if (ev.target.dataset && ev.target.dataset.uphoto !== undefined && ev.target.files[0]) { /* v0.15: staff photo → 160px square → saved with the rights card */
     const card = ev.target.closest('.staff'); const file = ev.target.files[0]; ev.target.value = '';
@@ -3200,7 +3263,7 @@ document.addEventListener('submit', async (ev) => {
     if (!S.isAdmin) { toast('Only Jun changes settings'); return; }
     const e = f.elements; const pan = e.coPan.value.replace(/\s/g, '');
     if (pan && !/^\d{9}$/.test(pan)) { toast('Company PAN has 9 digits'); return; }
-    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), coNameNe: e.coNameNe.value.trim().slice(0, 80), referralCampaign: e.referralCampaign.value, filterMode: e.filterMode.value, bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
+    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), coNameNe: e.coNameNe.value.trim().slice(0, 80), coBankLine: e.coBankLine.value.trim().slice(0, 120), referralCampaign: e.referralCampaign.value, filterMode: e.filterMode.value, bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
       apprDiscountOver: e.apprDiscountOver.value.trim() === '' ? null : Math.max(0, Number(e.apprDiscountOver.value) || 0), apprRefundOver: e.apprRefundOver.value.trim() === '' ? null : Math.max(0, Number(e.apprRefundOver.value) || 0), apprWho: e.apprWho.value }; // numbers: the rules compare them
     auditLog('settings', 'app', S.settings, data); save('settings/app', data, false); S.settings = { ...S.settings, ...data }; B.setOverrides(data.bsOverride); bump(); toast('Settings saved'); goBack();
   }
@@ -3253,7 +3316,7 @@ if ('serviceWorker' in navigator && !DEMO) {
 initLang(DEMO ? (new URLSearchParams(location.search).get('lang') || 'ko') : 'ko');
 if (DEMO && new URLSearchParams(location.search).get('lang')) setLang(new URLSearchParams(location.search).get('lang'), true);
 // v0.10.1 (Jun 2026-09-29 "쉽게 버튼을"): demo / practice — switch who you are with the 👤 button, no link to type
-const DEMO_WHO = { '': ['👑', 'Jun', 'Admin — everything'], office: ['⭐', 'Tara', 'Deputy admin · office — every home, money OKs, service credits (not the settings)'], technician: ['🔧', 'Ramesh', 'Technician — only his homes and today\'s route · visits, installs, cash'] };
+const DEMO_WHO = { '': ['👑', 'Jun', 'Admin — everything'], office: ['⭐', 'Tara', 'Deputy admin · office — every home, money OKs, service credits (not the settings)'], technician: ['🔧', 'Laxmi', 'Technician — only her homes and today\'s route · visits, installs, cash'] };
 function demoWho() {
   const cur = S.isAdmin ? '' : (S.profile && S.profile.preset) || '';
   peek(`<h3>👤 Practise as</h3><div class="muted">One set of data for all three — what one saves, the others see (like the real server).</div>
@@ -3283,11 +3346,11 @@ function practiceLive(d, first) {
 if (DEMO) {
   S.user = { uid: 'demo-uid', email: 'demo@local' }; S.isAdmin = true; S.role = 'admin';
   const asRole = new URLSearchParams(location.search).get('as') || (DEMO_KEEP ? lsGet('kfp_demo_as', '') : ''); // ?as=technician|office|viewer → see the app as that staff member (or the 👤 button)
-  if (asRole && PRESETS[asRole]) { S.isAdmin = false; S.role = 'staff'; S.profile = { name: asRole === 'office' ? 'Tara' : asRole === 'technician' ? 'Ramesh' : 'Viewer', preset: asRole, perms: { ...PRESETS[asRole].perms, ...(asRole === 'technician' ? { seeAll: 0 } : {}) }, toles: asRole === 'technician' ? ['Lakeside', 'Baidam'] : [] };
+  if (asRole && PRESETS[asRole]) { S.isAdmin = false; S.role = 'staff'; S.profile = { name: asRole === 'office' ? 'Tara' : asRole === 'technician' ? 'Laxmi' : 'Viewer', preset: asRole, perms: { ...PRESETS[asRole].perms, ...(asRole === 'technician' ? { seeAll: 0 } : {}) }, toles: asRole === 'technician' ? ['Lakeside', 'Baidam'] : [] };
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
-    S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'ramesh@example.com' : 'viewer@example.com' };
+    S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save};
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys};
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */

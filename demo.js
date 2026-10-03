@@ -10,6 +10,12 @@ const CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 // v0.15: a fake staff photo (an initial on navy) so the visit note / installed card show the round photo in practice
 function demoAvatar(ch) { try { const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#0d2d5e'; g.fillRect(0, 0, 96, 96); g.fillStyle = '#fff'; g.font = '800 48px -apple-system, Helvetica, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, 48, 52); return c.toDataURL('image/jpeg', 0.8); } catch (e) { return ''; } }
+// v0.16: a fake QR (random modules + finder squares) so the bill card shows the layout in practice — the real one is uploaded in Settings
+function demoQr() { try { const n = 29, px = 10, c = document.createElement('canvas'); c.width = c.height = n * px; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#0d2d5e'; let s = 7;
+  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (rnd() < 0.45) g.fillRect(x * px, y * px, px, px);
+  const fin = (x0, y0) => { g.fillStyle = '#fff'; g.fillRect(x0 * px, y0 * px, 8 * px, 8 * px); g.fillStyle = '#0d2d5e'; g.fillRect(x0 * px, y0 * px, 7 * px, 7 * px); g.fillStyle = '#fff'; g.fillRect((x0 + 1) * px, (y0 + 1) * px, 5 * px, 5 * px); g.fillStyle = '#0d2d5e'; g.fillRect((x0 + 2) * px, (y0 + 2) * px, 3 * px, 3 * px); };
+  fin(0, 0); fin(n - 7, 0); fin(0, n - 7); return c.toDataURL('image/png'); } catch (e) { return ''; } }
 export function loadDemo(S, today) {
   const r = rng(20260928); const pick = (a) => a[Math.floor(r() * a.length)]; const int = (a, b) => a + Math.floor(r() * (b - a + 1));
   let n = 0; const id = (p) => `${p}_demo_${(++n).toString(36)}`;
@@ -115,18 +121,21 @@ export function loadDemo(S, today) {
   put('trainings', { person: 'Tara', date: R.addDays(start, -20), topic: ['Install SOP (E-1)', 'A/S SOP (E-2)'], trainer: 'Jun', durationMin: 180 });
   put('trainings', { person: 'Sister', date: R.addDays(today, -60), topic: ['App use'], trainer: 'Tara', durationMin: 45 });
   // v0.5 demo: staff accounts, who entered what, expenses, device events, relocations
-  // v0.8 demo: phones reporting their sync state (heartbeat) — Tara fine, Ramesh with 3 waiting for 2 days on an old version, a Safari tab
+  // v0.8 demo: phones reporting their sync state (heartbeat) — Tara fine, Laxmi with 3 waiting for 2 days on an old version, a Safari tab
   const agoMs = (h) => Date.now() - h * 3600e3;
   S.demoDevices = [
     { id: 'dv_demo_tara', uid: 'demo-tara', name: 'Tara', email: 'tara@example.com', appVersion: 'kf-v0.8.0 (2026-09-29)', ua: 'iOS 26.6 · Safari', desk: false, pending: 0, rejected: 0, oldestPendingAt: null, lastServerAt: agoMs(0.3), online: true, storageOk: true, persisted: true, standalone: true, seenAt: { toMillis: () => agoMs(0.3) } },
-    { id: 'dv_demo_ram', uid: 'demo-ram', name: 'Ramesh', email: 'ramesh@example.com', appVersion: 'kf-v0.6.0 (2026-09-28)', ua: 'Android · Chrome', desk: false, pending: 3, rejected: 0, oldestPendingAt: agoMs(50), lastServerAt: agoMs(52), online: false, storageOk: true, persisted: false, standalone: true, seenAt: { toMillis: () => agoMs(6) } },
+    { id: 'dv_demo_ram', uid: 'demo-ram', name: 'Laxmi', email: 'laxmi@example.com', appVersion: 'kf-v0.6.0 (2026-09-28)', ua: 'Android · Chrome', desk: false, pending: 3, rejected: 0, oldestPendingAt: agoMs(50), lastServerAt: agoMs(52), online: false, storageOk: true, persisted: false, standalone: true, seenAt: { toMillis: () => agoMs(6) } },
     { id: 'dv_demo_tara2', uid: 'demo-tara', name: 'Tara', email: 'tara@example.com', appVersion: 'kf-v0.5.0 (2026-09-28)', ua: 'iOS 26.6 · Safari', desk: false, pending: 0, rejected: 1, oldestPendingAt: null, lastServerAt: agoMs(24 * 5), online: true, storageOk: true, persisted: true, standalone: false, seenAt: { toMillis: () => agoMs(24 * 5) } },
   ];
   S.demoUsers = [
-    { uid: 'demo-tara', email: 'tara@example.com', name: 'Tara', fullName: 'Tara Thapa (demo)', photo: demoAvatar('T'), role: 'staff', preset: 'office', perms: { seeAll: 1, install: 1, visit: 1, pay: 1, cash: 1, editCust: 1, money: 1, expense: 1, stock: 1, export: 0 }, toles: [], lastSeenAt: { toMillis: () => Date.now() - 35 * 60e3 } },
-    { uid: 'demo-ram', email: 'ramesh@example.com', name: 'Ramesh', fullName: 'Ramesh Gurung (demo)', photo: demoAvatar('R'), role: 'staff', preset: 'technician', perms: { seeAll: 0, install: 1, visit: 1, pay: 1, cash: 0, editCust: 0, money: 0, expense: 0, stock: 0, export: 0 }, toles: ['Lakeside', 'Baidam'], lastSeenAt: { toMillis: () => Date.now() - 5 * 3600e3 } },
+    { uid: 'demo-tara', email: 'tara@example.com', name: 'Tara', fullName: 'Tara Sherpa', photo: demoAvatar('T'), role: 'staff', preset: 'office', perms: { seeAll: 1, install: 1, visit: 1, pay: 1, cash: 1, editCust: 1, money: 1, expense: 1, stock: 1, export: 0 }, toles: [], lastSeenAt: { toMillis: () => Date.now() - 35 * 60e3 } },
+    { uid: 'demo-ram', email: 'laxmi@example.com', name: 'Laxmi', fullName: 'Laxmi Sherpa', photo: demoAvatar('L'), role: 'staff', preset: 'technician', perms: { seeAll: 0, install: 1, visit: 1, pay: 1, cash: 0, editCust: 0, money: 0, expense: 0, stock: 0, export: 0 }, toles: ['Lakeside', 'Baidam'], lastSeenAt: { toMillis: () => Date.now() - 5 * 3600e3 } },
+    { uid: 'demo-staffa', email: 'staffa@example.com', name: 'Staff A', fullName: 'Staff A', photo: '', role: 'staff', preset: 'technician', perms: { seeAll: 0, install: 1, visit: 1, pay: 1, cash: 0, editCust: 0, money: 0, expense: 0, stock: 0, export: 0 }, toles: ['Begnas'], lastSeenAt: { toMillis: () => Date.now() - 26 * 3600e3 } },
     { uid: 'demo-new', email: 'sita.new@example.com', name: '', role: 'pending' },
   ];
+  // v0.16 #3 (Jun 10/3 "나도 카드 만들어야지"): the admin's own card in practice — full name + a fake photo
+  if (S.isAdmin) S.profile = { ...(S.profile || {}), fullName: 'Jun', photo: demoAvatar('J') };
   for (const col of ['visits', 'payments', 'customers', 'requests']) for (const x of S.D[col].values()) x.createdBy = r() < 0.6 ? 'demo-tara' : r() < 0.6 ? 'demo-ram' : 'demo-uid';
   const exp = (x) => put('expenses', { vatBill: 'No', paidFrom: 'Company bank', method: 'Bank transfer', import: 'No', capital: 'No', ...x, createdBy: 'demo-tara' });
   let bn = 7000;
@@ -155,9 +164,9 @@ export function loadDemo(S, today) {
   });
   S.privCache = { [custs[0].id]: 'Dog in the yard — call before entering.' };
   // v0.6 demo: dispatch (who goes where) + own calendar events
-  S.settings = { ...S.settings, techNames: 'Ramesh' };
-  custs.forEach((c, i) => { if (i % 9 === 8) return; c.assignee = ['Lakeside', 'Baidam'].includes(c.tole) ? 'Ramesh' : 'Tara'; });
-  const rc = custs.find((c) => c.assignee === 'Ramesh' && c.status === 'Active'); if (rc) rc.cover = { to: 'Tara', until: today, from: 'Ramesh', at: today };
+  S.settings = { ...S.settings, techNames: 'Laxmi, Staff A', coQr: demoQr(), coBankLine: 'Demo Bank · KORA CARE DEMO · 0000 0000 0000 (fake)' };
+  custs.forEach((c, i) => { if (i % 9 === 8) return; c.assignee = ['Lakeside', 'Baidam'].includes(c.tole) ? 'Laxmi' : 'Tara'; });
+  const rc = custs.find((c) => c.assignee === 'Laxmi' && c.status === 'Active'); if (rc) rc.cover = { to: 'Tara', until: today, from: 'Laxmi', at: today };
   const ev = (x) => put('events', { status: 'Planned', repeat: 'Once', createdBy: 'demo-uid', by: 'Jun', ...x });
   ev({ lane: 'Company', kind: 'Meeting', kindCo: 'Meeting', title: 'CA meeting — first VAT return', date: R.addDays(today, 6), time: '11:00' });
   ev({ lane: 'Company', kind: 'Office closed', kindCo: 'Office closed', title: 'Tara day off', date: R.addDays(today, 3) });
@@ -168,7 +177,7 @@ export function loadDemo(S, today) {
   const nowMs = Date.now(); const near = (c, k) => ({ lat: c.gps.lat + 0.0004 * k, lng: c.gps.lng - 0.0003 * k, acc: 12 });
   const mk = (who, list, minsAgo) => list.forEach((c, i) => { const ms = Math.max(nowMs - minsAgo[i] * 60000, R.parseD(today).getTime() + 300000); const at = { ...near(c, i), t: ms }; /* v0.11: never before today 00:05 — after midnight the board dropped 'yesterday' records (2 flaky desk tests) */
     put('visits', { customerId: c.id, customerCode: c.code, customerName: c.name, date: today, visitType: 'Routine check', status: '✅ Completed', filters: [], technician: who, savedAt: at, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms } });
-    if (i % 2 === 0) put('payments', { customerId: c.id, date: today, type: 'Monthly subscription', amount: 1400, method: who === 'Ramesh' && i === 0 ? 'Cash' : 'Fonepay QR', by: who, savedAt: { ...at, t: ms + 90000 }, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms + 90000 } }); });
+    if (i % 2 === 0) put('payments', { customerId: c.id, date: today, type: 'Monthly subscription', amount: 1400, method: who === 'Laxmi' && i === 0 ? 'Cash' : 'Fonepay QR', by: who, savedAt: { ...at, t: ms + 90000 }, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms + 90000 } }); });
   const withGps = (who) => custs.filter((c) => c.status === 'Active' && c.assignee === who && c.gps && Number.isFinite(c.gps.lat));
   mk('Tara', withGps('Tara').slice(0, 4), [230, 170, 95, 20]);
   // v0.8 demo: two callbacks (a leak 6 and 12 days after a completed visit) — done, so open requests stay the same
@@ -177,7 +186,7 @@ export function loadDemo(S, today) {
   // v0.8 demo: why payments were late (two kinds that need different fixes)
   const lateLog = ['Money not come in yet', 'Money not come in yet', 'No money this month', 'Forgot', 'Money not come in yet'];
   [...S.D.checkins.values()].filter((q) => q.kind === 'D7').slice(0, lateLog.length).forEach((q, i) => { q.lateReason = lateLog[i]; });
-  mk('Ramesh', withGps('Ramesh').slice(0, 2), [300, 150]);
+  mk('Laxmi', withGps('Laxmi').slice(0, 2), [300, 150]);
   // v0.8 #8 demo: 3 pilot homes from 13–15 months ago (their month-14 step shows in the billing moves) + 1 home that came back after leaving
   { const q = rng(8082026); const qi = (a2, b2) => a2 + Math.floor(q() * (b2 - a2 + 1));
     const paidUp = (c, from = 1) => { for (let k = from; k <= 60; k++) { const due = R.billDue(c.installDate, k); if (due > today) break; const b = R.billAmount(k); put('payments', { customerId: c.id, date: due, type: k === 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: b.amount, method: 'Fonepay QR', ref: 'TXN' + qi(100000, 999999), billNo: String(9000 + qi(1, 999)), updatedAt: { toMillis: () => R.parseD(due).getTime() + 12 * 3600e3 } }); } };
@@ -198,18 +207,18 @@ export function loadDemo(S, today) {
     }
     // v0.8 #10: the 0–10 recommend question on some calls (NPS)
     const q10 = rng(10102026); for (const ck of [...S.D.checkins.values()].filter((x) => x.kind === 'D7')) if (q10() < 0.6) { const r10 = q10(); ck.nps = String(r10 < 0.62 ? 9 + Math.floor(q10() * 2) : r10 < 0.87 ? 7 + Math.floor(q10() * 2) : Math.floor(q10() * 7)); }
-    // v0.8 #12: money actions waiting for an OK (a discount by Ramesh, a deposit refund) + one decided
+    // v0.8 #12: money actions waiting for an OK (a discount by Laxmi, a deposit refund) + one decided
     { const act = [...S.D.customers.values()].filter((c) => c.status === 'Active' && R.isDate(c.installDate)); const c1 = act[3], c2 = act[8];
-      if (c1) put('payments', { customerId: c1.id, date: R.addDays(today, -1), type: 'Monthly subscription', amount: 900, discount: 500, discountReason: 'Promotion', method: 'Cash', by: 'Ramesh', approval: 'Pending' }).createdBy = 'demo-ram';
+      if (c1) put('payments', { customerId: c1.id, date: R.addDays(today, -1), type: 'Monthly subscription', amount: 900, discount: 500, discountReason: 'Promotion', method: 'Cash', by: 'Laxmi', approval: 'Pending' }).createdBy = 'demo-ram';
       if (c2) put('payments', { customerId: c2.id, date: R.addDays(today, -20), type: 'Monthly subscription', amount: 1100, discount: 300, discountReason: 'Claim compensation', method: 'Fonepay QR', by: 'Tara', approval: 'Approved', approvedBy: 'Jun', approvedAt: new Date(R.parseD(R.addDays(today, -19)).getTime() + 9 * 3600e3).toISOString() });
       const rc = [...S.D.recoveries.values()].find((r) => ['Recovered', 'Partial'].includes(r.outcome)); if (rc) { rc.depositRefunded = rc.depositRefunded || 1200; rc.approval = 'Pending'; } }
     // v0.8 security: a few change-log entries (edits of saved records)
-    { const au = (x) => { const r = put('audit', { at: new Date(Date.now() - x.h * 3600e3).toISOString(), ...x }); r.createdBy = x.by === 'Ramesh' ? 'demo-ram' : x.by === 'Tara' ? 'demo-tara' : 'demo-uid'; return r; }; const cs2 = [...S.D.customers.values()].filter((c) => c.status === 'Active');
+    { const au = (x) => { const r = put('audit', { at: new Date(Date.now() - x.h * 3600e3).toISOString(), ...x }); r.createdBy = x.by === 'Laxmi' ? 'demo-ram' : x.by === 'Tara' ? 'demo-tara' : 'demo-uid'; return r; }; const cs2 = [...S.D.customers.values()].filter((c) => c.status === 'Active');
       const pay = [...S.D.payments.values()].find((q) => q.type === 'Monthly subscription' && q.customerId === (cs2[5] || {}).id);
-      if (pay) au({ h: 30, col: 'payments', docId: pay.id, customerId: pay.customerId, fields: ['amount', 'discount'], before: { amount: '1,400', discount: '' }, after: { amount: '1100', discount: '300' }, by: 'Ramesh' });
+      if (pay) au({ h: 30, col: 'payments', docId: pay.id, customerId: pay.customerId, fields: ['amount', 'discount'], before: { amount: '1,400', discount: '' }, after: { amount: '1100', discount: '300' }, by: 'Laxmi' });
       if (cs2[2]) au({ h: 52, col: 'customers', docId: cs2[2].id, customerId: cs2[2].id, fields: ['phone', 'houseDetail'], before: { phone: '+9779801112233', houseDetail: 'blue gate' }, after: { phone: cs2[2].phone, houseDetail: cs2[2].houseDetail }, by: 'Tara' });
       const vis = [...S.D.visits.values()].find((v) => String(v.status).includes('Completed')); if (vis) au({ h: 75, col: 'visits', docId: vis.id, customerId: vis.customerId, fields: ['tdsAfter'], before: { tdsAfter: '410' }, after: { tdsAfter: String(vis.tdsAfter) }, by: 'Tara' });
-      au({ h: 100, col: 'settings', docId: 'app', customerId: '', fields: ['techNames'], before: { techNames: '' }, after: { techNames: 'Ramesh' }, by: 'Jun' }); }
+      au({ h: 100, col: 'settings', docId: 'app', customerId: '', fields: ['techNames'], before: { techNames: '' }, after: { techNames: 'Laxmi' }, by: 'Jun' }); }
     for (const l of [...S.D.leads.values()].filter((x) => !x.stageDates)) { const st = l.outcome || 'New'; const nw = R.addDays(today, -qi(3, 40)); l.stageDates = { New: nw }; if (st !== 'New') l.stageDates[st] = R.addDays(nw, qi(0, Math.max(0, R.daysBetween(nw, today)))); if (st === 'Demo booked' && !l.demoDate) l.demoDate = R.addDays(l.stageDates[st], qi(1, 5)); }
   }
   // v0.9 #1 demo: payment chases on late homes — promises broken / waiting, no answers — plus one kept and one paid-late promise on paid-up homes
@@ -220,7 +229,7 @@ export function loadDemo(S, today) {
     let late = lateOf();
     // v0.12.2: the small world (≈50 homes · 8 % late) can leave fewer than 5 late homes — the chase stories below need 5, so a few paid-up homes lose their last payment(s)
     for (const c of act) { if (late.length >= 5) break; if (late.some((x) => x.c.id === c.id)) continue; const all = pays.filter((p) => p.customerId === c.id); if (all.some((p) => p.approval || p.savedAt || p.discount || p.date >= R.addDays(today, -7))) continue; /* keep the homes that carry the approval / field-live stories */ const mine = all.filter((p) => p.type === 'Monthly subscription').sort((a, b) => b.date.localeCompare(a.date)); if (mine.length < 3) continue; for (const p of mine.slice(0, 1 + (late.length % 2))) { S.D.payments.delete(p.id); pays.splice(pays.indexOf(p), 1); } late = lateOf(); }
-    const chase = (c, x) => put('checkins', { customerId: c.id, kind: R.CHASE_KIND, by: q() < 0.7 ? 'Tara' : 'Ramesh', channel: 'Phone', ...x });
+    const chase = (c, x) => put('checkins', { customerId: c.id, kind: R.CHASE_KIND, by: q() < 0.7 ? 'Tara' : 'Laxmi', channel: 'Phone', ...x });
     late.forEach((x, i) => {
       const since = x.led.overdueSince; const owe = Math.round(x.led.overdue); const y = R.addDays(today, -1);
       if (i % 4 === 0 && x.led.daysOverdue >= 8) { chase(x.c, { date: R.addDays(since, 3), reached: 'Talked', promiseDate: R.addDays(since, 5), promiseAmount: owe }); }
@@ -254,7 +263,7 @@ export function loadDemo(S, today) {
   }
   // v0.10 demo: late repairs (Jun 2026-09-29 — over 7 days from the report → a credit from the report day) · one ours not given · one not our fault · one still open · one already given
   { const act = [...S.D.customers.values()].filter((x) => x.status === 'Active' && R.isDate(x.installDate) && x.installDate < R.addDays(today, -90));
-    const late = (c, type, got, done, fault, desc) => put('requests', { customerId: c.id, type, priority: 'Normal', status: done === null ? 'In progress' : 'Done', receivedAt: R.addDays(today, -got) + 'T11:20', receivedAtMs: R.parseD(R.addDays(today, -got)).getTime() + 11 * 3600e3, receivedDate: R.addDays(today, -got), description: desc, agent: 'Ramesh', resolution: done === null ? '' : 'pump replaced (part waited)', doneDate: done === null ? '' : R.addDays(today, -done), ...(done === null ? {} : { ourFault: fault }) });
+    const late = (c, type, got, done, fault, desc) => put('requests', { customerId: c.id, type, priority: 'Normal', status: done === null ? 'In progress' : 'Done', receivedAt: R.addDays(today, -got) + 'T11:20', receivedAtMs: R.parseD(R.addDays(today, -got)).getTime() + 11 * 3600e3, receivedDate: R.addDays(today, -got), description: desc, agent: 'Laxmi', resolution: done === null ? '' : 'pump replaced (part waited)', doneDate: done === null ? '' : R.addDays(today, -done), ...(done === null ? {} : { ourFault: fault }) });
     const c1 = act[3], c2 = act[9], c3 = act[15], c4 = act[21];
     if (c1) late(c1, 'Breakdown', 20, 8, 'Our unit / our work', 'no water coming out — pump not running');
     if (c2) late(c2, 'Leak', 15, 6, 'No — power, water supply or the customer', 'leak under the sink — their own pipe');
@@ -265,7 +274,7 @@ export function loadDemo(S, today) {
   { const q = rng(9292029); const q2 = rng(9292031); const pick = (a2) => a2[Math.floor(q() * a2.length)];
     const one = (x, date, leadId) => { const s = { name: x.name, phone: x.phone || '', tole: x.tole || '', date, housing: q() < 0.7 ? 'Own house' : 'Renting', yearsHere: Math.round(q() * 12 * 2) / 2, stay36: q() < 0.8 ? 'Yes' : q() < 0.5 ? 'Not sure' : 'No', householdSize: 3 + Math.floor(q() * 4), prevWater: pick(['Jar (20L delivery)', 'Boiled tap', 'Bottled']), waterSpend: 300 + Math.floor(q() * 8) * 50, income: pick(R.SCREEN_INCOME), phone2: q() < 0.75 ? '+97798' + (10000000 + Math.floor(q() * 89999999)) : '', idSeen: q() < 0.9 ? 'Yes' : 'No', power: q() < 0.95 ? 'Yes' : 'No', tap: 'Yes', waterSource: q() < 0.85 ? 'Municipal tap' : 'Well / borehole', leadId: leadId || '', by: 'Tara' };
       if (s.housing === 'Renting') s.landlordOk = q() < 0.8 ? 'Yes' : 'No';
-      s.by = q2() < 0.7 ? 'Ramesh' : 'Tara'; s.cashDay1 = q2() < 0.93 ? 'Yes' : 'No'; s.consentSigned = q2() < 0.85 ? 'Yes' : 'No'; if (q2() < 0.8 && s.by !== 'Tara') { s.verifyBy = 'Tara'; s.verifyDate = R.addDays(date, 1); }
+      s.by = q2() < 0.7 ? 'Laxmi' : 'Tara'; s.cashDay1 = q2() < 0.93 ? 'Yes' : 'No'; s.consentSigned = q2() < 0.85 ? 'Yes' : 'No'; if (q2() < 0.8 && s.by !== 'Tara') { s.verifyBy = 'Tara'; s.verifyDate = R.addDays(date, 1); }
       if (s.housing === 'Renting') { s.mount = q2() < 0.35 ? 'Wall' : 'Stand'; if (s.mount !== 'Wall') delete s.landlordOk; if (q2() < 0.8) { s.landlordName = 'Landlord ' + x.name.split(' ').pop(); s.landlordPhone = '+97798' + (10000000 + Math.floor(q2() * 89999999)); } }
       if (!s.phone2 && q2() < 0.6) s.referee = 'Hari · neighbour · 98' + (10000000 + Math.floor(q2() * 89999999));
       if (s.income === 'Money from abroad') s.remitMonths = q2() < 0.5 ? 'Baisakh, Kartik' : 'every 2–3 months';
@@ -288,15 +297,15 @@ export function loadDemo(S, today) {
   // v0.9 #7 demo: parts in stock, morning issue / evening return (signed), parts used on visits, three tools
   { const q = rng(9292031); const P = R.PARTS_DEFAULT; const d0 = R.addDays(today, -40);
     [[0, 8], [1, 10], [2, 6], [3, 4], [4, 40], [5, 20], [6, 12], [7, 10], [8, 15], [9, 30]].forEach(([i, n]) => put('stockMoves', { item: 'Part: ' + P[i], type: 'In', qty: n, date: d0, ref: 'TQ-PI-20260808 spares', by: 'Tara' }));
-    for (let k = 1; k <= 3; k++) { const d = R.addDays(today, -k); put('stockMoves', { item: 'Part: ' + P[4], type: 'Issue', qty: 6, date: d, person: 'Ramesh', signed: true, signName: 'Ramesh', by: 'Tara' }); put('stockMoves', { item: 'Part: ' + P[4], type: 'Return', qty: 4, date: d, person: 'Ramesh', signed: true, signName: 'Ramesh', by: 'Tara' }); }
+    for (let k = 1; k <= 3; k++) { const d = R.addDays(today, -k); put('stockMoves', { item: 'Part: ' + P[4], type: 'Issue', qty: 6, date: d, person: 'Laxmi', signed: true, signName: 'Laxmi', by: 'Tara' }); put('stockMoves', { item: 'Part: ' + P[4], type: 'Return', qty: 4, date: d, person: 'Laxmi', signed: true, signName: 'Laxmi', by: 'Tara' }); }
     put('stockMoves', { item: 'Part: ' + P[8], type: 'Issue', qty: 3, date: today, person: 'Tara', signed: true, signName: 'Tara', by: 'Tara' });
-    for (const v of [...S.D.visits.values()].filter((x) => String(x.status || '').includes('Completed') && x.date >= R.addDays(today, -20)).slice(0, 12)) if (q() < 0.5) { v.parts = [P[q() < 0.6 ? 4 : 8]]; v.issuedFrom = v.technician === 'Ramesh' && v.parts[0] === P[4] ? 'my bag' : 'shelf'; }
+    for (const v of [...S.D.visits.values()].filter((x) => String(x.status || '').includes('Completed') && x.date >= R.addDays(today, -20)).slice(0, 12)) if (q() < 0.5) { v.parts = [P[q() < 0.6 ? 4 : 8]]; v.issuedFrom = v.technician === 'Laxmi' && v.parts[0] === P[4] ? 'my bag' : 'shelf'; }
     put('tools', { name: 'TDS meter', serial: 'TDS-01', holder: 'Tara', status: 'OK', calibrated: R.addDays(today, -12), cost: 1500, log: [{ date: d0, holder: 'Tara', status: 'OK', by: 'Jun' }], by: 'Jun' });
-    put('tools', { name: 'Cordless drill', serial: 'DR-1', holder: 'Ramesh', status: 'OK', cost: 9000, log: [{ date: d0, holder: 'Ramesh', status: 'OK', by: 'Jun' }], by: 'Jun' });
-    put('tools', { name: 'Pipe cutter', holder: 'Office', status: 'Broken', fault: R.TOOL_FAULT[1], repairCost: 800, staffShare: 400, log: [{ date: d0, holder: 'Ramesh', status: 'OK', by: 'Jun' }, { date: R.addDays(today, -5), holder: 'Office', status: 'Broken', by: 'Tara' }], by: 'Tara' });
+    put('tools', { name: 'Cordless drill', serial: 'DR-1', holder: 'Laxmi', status: 'OK', cost: 9000, log: [{ date: d0, holder: 'Laxmi', status: 'OK', by: 'Jun' }], by: 'Jun' });
+    put('tools', { name: 'Pipe cutter', holder: 'Office', status: 'Broken', fault: R.TOOL_FAULT[1], repairCost: 800, staffShare: 400, log: [{ date: d0, holder: 'Laxmi', status: 'OK', by: 'Jun' }, { date: R.addDays(today, -5), holder: 'Office', status: 'Broken', by: 'Tara' }], by: 'Tara' });
   }
   // v0.9 #9 demo: two fictional staff pay records (payroll stays off until Settings says Yes)
-  { put('payroll', { kind: 'person', name: 'Ramesh', job: 'Field technician', basic: 18000, allowance: 1000, ssf: 'Yes', startDate: R.addDays(today, -200), active: 'Yes', by: 'Jun' });
+  { put('payroll', { kind: 'person', name: 'Laxmi', job: 'Field technician', basic: 18000, allowance: 1000, ssf: 'Yes', startDate: R.addDays(today, -200), active: 'Yes', by: 'Jun' });
     put('payroll', { kind: 'person', name: 'Sita', job: 'Office', basic: 22000, allowance: 0, ssf: 'Yes', startDate: R.addDays(today, -400), active: 'Yes', by: 'Jun' });
   }
   // v0.15 demo: two milestone boards with generic names — the real items live in the company's own data (imported JSON), never in this public demo

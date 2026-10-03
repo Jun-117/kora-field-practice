@@ -107,7 +107,7 @@ export function addLocate(map, { position = 'topright', onFound, note } = {}) {
 // ---------- small map on the customer page: this house only ----------
 const minis = new Map(); // element → map
 const miniView = new Map(); // customer id → last view (kept across re-renders)
-export function dropMinis() { for (const [el, mp] of minis) { if (!el.isConnected) { try { mp.off(); mp.remove(); } catch (e) {} minis.delete(el); } } }
+export function dropMinis() { for (const [el, mp] of minis) { if (!el.isConnected) { try { if (el._ro) el._ro.disconnect(); mp.off(); mp.remove(); } catch (e) {} minis.delete(el); } } }
 export async function mountMini(box, { id, lat, lng, label, note }) {
   if (!box || box._mounting) return; box._mounting = true;
   try { await loadLeaflet(); } catch (e) { box.innerHTML = '<div class="empty">Map could not load (needs internet once).</div>'; return; }
@@ -116,6 +116,7 @@ export async function mountMini(box, { id, lat, lng, label, note }) {
   const house = [lat, lng];
   const mp = Lf.map(box, { ...MAP_OPTS, zoomControl: false, attributionControl: true, fadeAnimation: false, markerZoomAnimation: false });
   box._map = mp; minis.set(box, mp);
+  if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(() => { try { mp.invalidateSize(); } catch (e) {} }); ro.observe(box); box._ro = ro; } /* v0.17.0 (1) A3 */
   Lf.tileLayer(TILE, { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mp);
   Lf.control.zoom({ position: 'topright' }).addTo(mp);
   Lf.marker(house, { icon: Lf.divIcon({ className: '', html: `<div class="house-pin"><span>🏠</span></div><div class="house-lab">${String(label || '').replace(/[<>&"]/g, '')}</div>`, iconSize: [36, 44], iconAnchor: [18, 42] }), zIndexOffset: 1000 }).addTo(mp);

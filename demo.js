@@ -173,10 +173,18 @@ export function loadDemo(S, today) {
   ev({ lane: 'Customers', kind: 'Stock arrival', kindCu: 'Stock arrival', title: '100 devices arrive (demo)', date: R.addDays(today, 12) });
   ev({ lane: 'Customers', kind: 'Demo / event', kindCu: 'Demo / event', title: 'Lakeside pop-up booth', date: R.addDays(today, 9), endDate: R.addDays(today, 10) });
   ev({ lane: 'Company', kind: 'Campaign', kindCo: 'Campaign', title: 'Facebook campaign (demo)', date: R.addDays(today, -75), endDate: R.addDays(today, -45), status: 'Done' }); // v0.8 #11 chart notes
+  // v0.17.0 (8) demo visit notes: buttons tapped + a free line — translated (the server does it in the real app) · one still waiting · 🔴 Nepali drafts
+  const L1 = { en: 'No leak — checked', ne: 'चुहावट छैन — जाँच गरियो' }, L3 = { en: 'PP filter colour checked — still fine', ne: 'PP फिल्टरको रङ जाँचियो — अझै ठीक छ' }, L6 = { en: 'Weak flow — we check it at the next visit', ne: 'पानी कम आउँछ — अर्को भ्रमणमा जाँच्छौं' };
+  const DEMO_NOTES = [
+    { custPick: [L1.en, L3.en], custLines: [L1, L3], custNote: 'Tap was loose — tightened it', custNoteTr: { en: 'Tap was loose — tightened it', ne: 'धारा खुकुलो थियो — कसियो' } },
+    { custPick: [L6.en], custLines: [L6], custNote: 'पानी अलि ढिलो आउँछ, अर्को पटक हेर्छौं', custNoteTr: { en: 'The water comes a little slowly, we will look next time', ne: 'पानी अलि ढिलो आउँछ, अर्को पटक हेर्छौं' } },
+    { custPick: [L1.en], custLines: [L1], custNote: 'Customer asked about a second tap for the kitchen' },
+    null,
+  ];
   // v0.7 demo: today's work for the field-live board (records saved with a spot, times relative to now)
   const nowMs = Date.now(); const near = (c, k) => ({ lat: c.gps.lat + 0.0004 * k, lng: c.gps.lng - 0.0003 * k, acc: 12 });
   const mk = (who, list, minsAgo) => list.forEach((c, i) => { const ms = Math.max(nowMs - minsAgo[i] * 60000, R.parseD(today).getTime() + 300000); const at = { ...near(c, i), t: ms }; /* v0.11: never before today 00:05 — after midnight the board dropped 'yesterday' records (2 flaky desk tests) */
-    put('visits', { customerId: c.id, customerCode: c.code, customerName: c.name, date: today, visitType: 'Routine check', status: '✅ Completed', filters: [], technician: who, savedAt: at, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms } });
+    put('visits', { customerId: c.id, customerCode: c.code, customerName: c.name, date: today, visitType: 'Routine check', status: '✅ Completed', filters: [], technician: who, savedAt: at, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms }, ...(DEMO_NOTES[(i + (who === 'Tara' ? 0 : 1)) % 4] || {}) });
     if (i % 2 === 0) put('payments', { customerId: c.id, date: today, type: 'Monthly subscription', amount: 1400, method: who === 'Laxmi' && i === 0 ? 'Cash' : 'Fonepay QR', by: who, savedAt: { ...at, t: ms + 90000 }, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms + 90000 } }); });
   const withGps = (who) => custs.filter((c) => c.status === 'Active' && c.assignee === who && c.gps && Number.isFinite(c.gps.lat));
   mk('Tara', withGps('Tara').slice(0, 4), [230, 170, 95, 20]);

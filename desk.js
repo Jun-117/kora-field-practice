@@ -4,7 +4,7 @@ import * as R from './logic.js';
 import * as B from './bs.js';
 import { langSegHtml, fmtDate, fmtTime, getLang, setLang } from './i18n.js';
 import { loadLeaflet, MAP_OPTS, TILE, POKHARA, addLocate, hereIfAllowed, drawMe, hereNow } from './geo.js';
-import { MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem, cardsSent } from './app.js';
+import { MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem, cardsSent, fieldLabel } from './app.js';
 import * as CA from './capack.js';
 import * as CAL from './cal.js';
 import * as SIM from './sim.js';
@@ -12,7 +12,7 @@ export { loadLeaflet };
 
 const NPT = 'Asia/Kathmandu';
 const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN');
-const fmtK = (v) => (Math.abs(v) >= 100000 ? (v / 100000).toFixed(1) + 'L' : Math.abs(v) >= 1000 ? Math.round(v / 1000) + 'k' : fmtN(v)); /* L = lakh (v0.16: back from ' lakh' — the space broke the translated money lines) */
+const fmtK = (v) => { const a = Math.abs(v); if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M'; if (a >= 1000) return (a >= 1e4 ? String(Math.round(v / 1000)) : (v / 1000).toFixed(1).replace(/\.0$/, '')) + 'k'; return fmtN(v); }; /* v0.17.0 (2): one unit per axis — "1.0L" sat over "50k" (Jun 10/3 default: tables keep the lakh commas) */ /* L = lakh (v0.16: back from ' lakh' — the space broke the translated money lines) */
 const HEX = { g: '#2ee59d', y: '#ffcc4d', o: '#ff9a3d', r: '#ff5c5c', k: '#5d7085', b: '#6aa8ff' };
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monLabel = (mk) => `${MON[Number(mk.slice(5, 7)) - 1]} ${mk.slice(0, 4)}`;
@@ -60,13 +60,11 @@ export function renderDesk(root, fresh) {
   }
   // sidebar (only rewritten when it changes, so its animation does not restart on every data change)
   const badges = { money: m.collections.filter((x) => ['call', 'visit'].includes(x.dn.stage) && !(x.pr && x.pr.status === 'waiting')).length, field: m.visitsDue.length + m.openReq.filter((o) => Date.now() > o.sla.replyBy).length };
+  const qa = [['install', '🏠', 'Install', 'install'], ['payment', '💵', 'Payment', 'pay'], ['expense', '🧾', 'Expense', 'expense']].filter((q) => can(q[3])); /* v0.17.0 (1) A1·(5): quick add on top — at the bottom it fell off a 16" MacBook screen */
   const side = `<div class="brand"><div class="logo"></div><div><b>KORA</b><small>FIELD · COMMAND</small></div></div>
+      ${qa.length ? `<div class="side-qa">${qa.map(([f, ic, l]) => `<button data-go-form="${f}" title="＋ ${l}"><span class="qi">${ic}<b class="qp">＋</b></span><span class="ql">${l}</span></button>`).join('')}</div>` : ''}
       ${SIDE.filter(sideOk).map(([k, i, l, , g], n, arr) => `${n === 0 || arr[n - 1][4] !== g ? `<div class="side-grp">${esc(g)}</div>` : ''}<button data-side="${k}" class="${scr === k || (scr === 'report' && k === 'reports') ? 'on' : ''}"><span class="i">${i}</span>${l}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</button>`).join('')}
       <div class="grow"></div>
-      <div class="side-lang"><div class="lbl">🌐 Language</div>${langSegHtml()}</div>
-      ${can('install') ? '<button data-go-form="install"><span class="i">＋</span>New install</button>' : ''}
-      ${can('pay') ? '<button data-go-form="payment"><span class="i">＋</span>Payment</button>' : ''}
-      ${can('expense') ? '<button data-go-form="expense"><span class="i">＋</span>Expense</button>' : ''}
       <button data-act="deskOff"><span class="i">📱</span>Phone view</button>
       <div class="foot">${esc(APP_VERSION)}${DEMO ? '<br><span style="color:var(--warn)">DEMO DATA</span>' : ''}<br>${esc(S.user.email)}<br><span class="muted">⌘K · Esc · ‹ Back</span></div>`;
   if (side !== last.side) { root.querySelector('#deskSide').innerHTML = side; last.side = side; }
@@ -79,7 +77,7 @@ export function renderDesk(root, fresh) {
   if (tick !== last.tick) { root.querySelector('#deskTick').innerHTML = tick; last.tick = tick; }
   // page
   const pg = root.querySelector('#deskPage');
-  pg.className = `deskpage ${['status'].includes(scr) ? 'narrow' : ''} ${fresh ? 'page-in' : 'calm'}`;
+  pg.className = `deskpage ${fresh ? 'page-in' : 'calm'}`; /* v0.17.0 (3): Settings was held to 820 px (now two columns across the page) */
   if (fresh) { void pg.offsetWidth; }
   pg.innerHTML = page(scr, m);
   tickClock(); ensureClock();
@@ -110,18 +108,18 @@ function page(scr, m) {
   if (scr === 'backup') return reportPage(m, { r: 'backup' }, true);
   if (scr === 'leavers') return reportPage(m, { r: 'leavers' }, true);
   if (scr === 'capacity') return reportPage(m, { r: 'capacity' }, true);
-  if (scr === 'devices') return `<div class="panel" style="--i:0">${noBack(screenHtml({ screen: 'report', params: { ...S.route.params, r: 'devices' } }))}</div>`;
+  if (scr === 'devices') return `<div class="panel dev-desk" style="--i:0">${noBack(screenHtml({ screen: 'report', params: { ...S.route.params, r: 'devices' } }))}</div>`;
   if (scr === 'staff') return `<div class="panel" style="--i:0">${noBack(screenHtml({ screen: 'report', params: { r: 'users' } }))}</div>`;
   if (scr === 'customers') return pageCustomers(m);
   if (scr === 'money') return pageMoney(m);
   if (scr === 'field') return pageField(m);
   if (scr === 'map') { const m = model(); const todayList = [...new Map([...m.visitsDue.map((x) => [x.c.id, { x, k: x.filterOnly ? '🧪' : '🔧', t: x.filterOnly ? 'filter due' : 'visit due ' + x.due }]), ...m.collections.filter((x) => x.dn.stage === 'visit').map((x) => [x.c.id, { x, k: '💰', t: R.npr(x.dn.owed) + ' · ' + x.dn.days + ' d late' }]), ...m.openReq.filter((o) => o.c).map((o) => [o.c.c.id, { x: o.c, k: '🛠', t: o.r.type + ' · ' + o.r.status }])]).values()];
-    return `<div class="cc mapcc"><div class="panel s9" style="--i:0"><div class="ph"><span class="t"><b>Map</b> · every household</span><span class="sp"></span>${legend()}<button class="btn small" data-act="replay" style="margin:0 0 0 10px">▶ Replay growth</button></div><div id="mapBox" class="mapbox tall"></div><div class="muted" style="margin-top:6px"><span>pin colour = money</span> · <span>icon = the job: 🔧 visit · 🧪 filter · 💰 collect · 🛠 request</span> · <span>zoom out for tole totals</span> · <span>📍 = you</span></div></div>
+    return `<div class="cc mapcc"><div class="panel s9" style="--i:0"><div class="ph"><span class="t"><b>Map</b> · every household</span><span class="sp"></span>${legend()}<button class="btn small ghost tgl-w${wardsOn() ? ' on' : ''}" data-act="wardsToggle" style="margin:0 0 0 10px" title="Ward boundaries · OpenStreetMap">▦ Ward lines</button><button class="btn small" data-act="replay" style="margin:0 0 0 8px">▶ Replay growth</button></div><div id="mapBox" class="mapbox tall"></div><div class="muted" style="margin-top:6px"><span>pin colour = money</span> · <span>icon = the job: 🔧 visit · 🧪 filter · 💰 collect · 🛠 request</span> · <span>zoom out for tole totals</span> · <span>📍 = you</span></div></div>
     <div class="panel s3 mlist" style="--i:1"><div class="ph"><span class="t"><b>Today</b> · ${todayList.length} homes</span></div><div class="ml">${todayList.map(({ x, k, t }) => `<div class="ml-i" data-mfly="${esc(x.c.id)}"><span class="k">${k}</span><div class="main"><b>${esc(x.c.name)}</b><div class="muted">${esc(toleOf(x.c))} · ${esc(t)}</div></div>${R.assigneeOf(x.c, m.t) ? `<span class="pill">${esc(R.assigneeOf(x.c, m.t))}</span>` : ''}</div>`).join('') || '<div class="empty">Nothing due today 🏖️</div>'}</div></div></div>`; }
   if (scr === 'history') return pageHistory(m);
   if (scr === 'reports') return pageReports();
   if (scr === 'board') return pageBoard(m);
-  if (scr === 'status') return screenHtml({ screen: 'status', params: {} });
+  if (scr === 'status') return `<div class="status-desk">${screenHtml({ screen: 'status', params: {} })}</div>`; /* v0.17.0 (3) B2: two columns (one 772-px column, 4.5 screens long) */
   return pageCommand(m);
 }
 let clockT = 0;
@@ -207,15 +205,15 @@ function noteMarks(keys, x, top, bottom, iconY = top + 9) {
 }
 function bars(vals, labels, color = 'var(--brand)', w = 560, h = 180, fmt = fmtN, opts = {}) {
   const { top: max, ticks } = niceAxis(Math.max(0, ...vals), vals.every((v) => Number.isInteger(v))); const pad = 34; const bw = (w - pad) / Math.max(1, vals.length);
-  const grid = ticks.map((v) => { const y = (h - 20) * (1 - v / max) + 4; return `<line class="grid" x1="${pad}" x2="${w}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="ax" x="0" y="${(y + 3).toFixed(1)}">${fmt(v)}</text>`; }).join('');
-  const bs = vals.map((v, i) => { const bh = (v / max) * (h - 24); const x = pad + i * bw + bw * 0.18; const hi = opts.hi === i; return `<rect class="barr${hi ? ' hi' : ''}" x="${x.toFixed(1)}" y="${(h - 20 - bh).toFixed(1)}" width="${(bw * 0.64).toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="4" fill="${hi ? 'var(--warn)' : color}" style="animation-delay:${i * 40}ms" ${opts.data ? opts.data(i) : ''}><title>${esc(labels[i])}: ${fmt(v)}</title></rect>`; }).join('');
+  const showV = opts.vals !== false && vals.length <= 24; const T = showV ? 14 : 0; /* v0.17.0 (1) A5: room above the tallest bar for its number (it sat inside the bar) */
+  const grid = ticks.map((v) => { const y = (h - 20 - T) * (1 - v / max) + 4 + T; return `<line class="grid" x1="${pad}" x2="${w}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="ax" x="0" y="${(y + 3).toFixed(1)}">${fmt(v)}</text>`; }).join('');
+  const bs = vals.map((v, i) => { const bh = (v / max) * (h - 24 - T); const x = pad + i * bw + bw * 0.18; const hi = opts.hi === i; return `<rect class="barr${hi ? ' hi' : ''}" x="${x.toFixed(1)}" y="${(h - 20 - bh).toFixed(1)}" width="${(bw * 0.64).toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="4" fill="${hi ? 'var(--warn)' : color}" style="animation-delay:${i * 40}ms" ${opts.data ? opts.data(i) : ''}><title>${esc(labels[i])}: ${fmt(v)}</title></rect>`; }).join('');
   const every = Math.ceil(labels.length / 9);
   const ls = labels.map((l, i) => (i % every === 0 || opts.hi === i ? `<text class="ax${opts.hi === i ? ' hi' : ''}" x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${h - 4}" text-anchor="middle">${esc(l)}</text>` : '')).join('');
   const nm = opts.keys ? noteMarks(opts.keys, (i) => pad + i * bw + bw / 2, 2, h - 20) : { marks: '', legend: '', n: 0 };
   // v0.15 (Jun 10/3 "이게 무슨 의미인지 헷갈림"): the number sits on every bar, the highlighted bar is explained in words, and the
   // event marks (📣 💲 🏖️ + dashed lines) hide behind a 📌 toggle instead of floating over the bars
-  const showV = opts.vals !== false && vals.length <= 24;
-  const vl = showV ? vals.map((v, i) => { if (!v) return ''; const bh = (v / max) * (h - 24); const x = pad + i * bw + bw / 2; return `<text class="vl${opts.hi === i ? ' hi' : ''}" x="${x.toFixed(1)}" y="${Math.max(9, h - 20 - bh - 3).toFixed(1)}" text-anchor="middle">${fmt(v)}</text>`; }).join('') : '';
+  const vl = showV ? vals.map((v, i) => { if (!v) return ''; const bh = (v / max) * (h - 24 - T); const x = pad + i * bw + bw / 2; return `<text class="vl${opts.hi === i ? ' hi' : ''}" x="${x.toFixed(1)}" y="${Math.max(9, h - 20 - bh - 3).toFixed(1)}" text-anchor="middle">${fmt(v)}</text>`; }).join('') : '';
   const leg = (opts.hi !== undefined && opts.hi >= 0 ? `<span class="cl"><i class="sw" style="background:var(--warn)"></i>${esc(opts.hiLabel || 'the month you picked')}</span>` : '') + (opts.legend || '');
   const tgl = nm.n ? `<button type="button" class="cn-tgl" data-act="chartNotes">📌 ${nm.n} ${nm.n === 1 ? 'event' : 'events'} on this chart</button>` : '';
   return `<div class="chartw"><div class="chart"><svg viewBox="0 0 ${w} ${h}">${grid}${bs}${nm.marks}${vl}${ls}</svg></div>${leg || tgl ? `<div class="cfoot">${leg}${tgl}</div>` : ''}${nm.legend}</div>`;
@@ -275,7 +273,7 @@ function hbars(rows, color = 'var(--brand)', fmt = fmtN) {
   const max = Math.max(1, ...rows.map((r) => r.v));
   return `<div class="funnel hb">${rows.map((r, i) => `<div class="st" ${r.attr || ''}><span>${esc(r.l)}</span><div class="b"><i style="width:${(r.v / max) * 100}%;background:${r.color || color};animation-delay:${i * 70}ms"></i></div><span class="n">${fmt(r.v)}${r.sub ? `<small> ${esc(r.sub)}</small>` : ''}</span></div>`).join('')}</div>`;
 }
-const panel = (cls, i, title, body, action) => `<div class="panel ${cls}" style="--i:${i}"><div class="ph"><span class="t">${title}</span><span class="sp"></span>${action || ''}</div>${body}</div>`;
+const panel = (cls, i, title, body, action) => { const ph = `<div class="ph"><span class="t">${title}</span><span class="sp"></span>${action || ''}</div>`; return /\bfs\b/.test(cls) ? `<div class="panel ${cls}" style="--i:${i}"><div class="fs-in">${ph}<div class="fs-body">${body}</div></div></div>` : `<div class="panel ${cls}" style="--i:${i}">${ph}${body}</div>`; }; /* v0.17.0 (2) B1: .fs = a long list scrolls inside, so a short neighbour is not stretched into empty space */
 const legend = () => `<div class="legend" style="margin:0"><span><i class="dot g"></i>OK</span><span><i class="dot y"></i>overdue</span><span><i class="dot r"></i>7+ days</span><span><i class="dot b"></i>paused</span><span><i class="dot k"></i>left</span></div>`;
 
 // ---------- pages ----------
@@ -354,7 +352,6 @@ function pageCommand(m) {
   const dq = dataQuality(m);
   return `<div class="cc">
     ${anomalyChips(m)}
-    <div class="locbanner hidden s12" id="locBanner"><span>📍 Allow location once to see yourself on the map and to start directions from where you are.</span><button class="btn small" data-act="locAsk">📍 Allow location</button></div>
     ${panel('s3 kpi', 0, '<b>Households</b> · active', `<div class="v">${counter('act', M.active)}<small>/ ${M.installed} installed</small></div><div class="sub"><span>⏸ ${M.paused} paused</span><span>⚫ ${M.churned} left</span><span>${M.avg4w.toFixed(1)}/wk installs</span>${prev ? `<span>vs ${esc(monLabel(prevMk))} end ${delta(M.active, prev.M.active)}</span>` : ''}</div>${spark(weeks, 'var(--brand)')}`)}
     ${panel('s3 kpi', 1, '<b>Monthly recurring</b> · NPR', `<div class="v">${counter('mrr', M.mrr)}</div><div class="sub"><span>cash this month <b class="num">${fmtN(M.cashThisMonth)}</b></span>${prev ? `<span>last month ${fmtN(prev.A.cash)}</span>` : ''}<span>VAT ${vatNow ? fmtN(vatNow.vat) : 0}</span></div>${spark(cashVals, 'var(--ok)')}`)}
     ${panel('s3 kpi', 2, '<b>Collection</b> · bills paid', `<div class="v" style="color:${M.collection === null ? 'inherit' : M.collection < 0.5 ? 'var(--bad)' : M.collection < 0.8 ? 'var(--warn)' : 'var(--ok)'}">${M.collection === null ? '—' : counter('col', M.collection, 'pct')}</div><div class="sub"><span>${M.billsPaid}/${M.billsDue} bills</span><span>on time ${M.billsDue ? Math.round((M.onTime / M.billsDue) * 100) : 0}%</span><span style="color:var(--bad)">overdue ${fmtN(M.overdueAmt)}</span></div><div class="bar" style="margin-top:14px"><i style="width:${(M.collection || 0) * 100}%;background:var(--ok)"></i></div>`)}
@@ -378,7 +375,7 @@ function pageCommand(m) {
 
     ${panel('s4', 15, '<b>Filters</b> · E-2 booking status', `<div style="display:flex;align-items:center;gap:16px">${donut([{ l: 'overdue', v: fStat.overdue || 0, color: HEX.r }, { l: 'due in 14 days', v: fStat.soon || 0, color: HEX.y }, { l: 'ok', v: fStat.ok || 0, color: HEX.g }])}<div class="legend" style="flex-direction:column;gap:8px"><span><i class="dot r"></i>overdue <b class="num">${fStat.overdue || 0}</b></span><span><i class="dot y"></i>due ≤14 d <b class="num">${fStat.soon || 0}</b></span><span><i class="dot g"></i>ok <b class="num">${fStat.ok || 0}</b></span></div></div>`, `<button class="a" data-list="filters">list →</button>`)}
     ${panel('s4', 16, '<b>Leads</b> · pipeline', `<div class="funnel">${leadSt.map((s, i) => `<div class="st"><span>${esc(s.o)}</span><div class="b"><i style="width:${(s.n / maxL) * 100}%;background:${s.o === 'Signed' ? 'var(--ok)' : s.o === 'Rejected' ? 'var(--grey)' : 'var(--brand)'};animation-delay:${i * 80}ms"></i></div><span class="n">${s.n}</span></div>`).join('')}</div><div class="sub muted" style="margin-top:8px">${m.leadsDue.length} follow-ups due</div>`, `<button class="a" data-list="leads">list →</button>`)}
-    ${panel('s4', 17, '<b>Live</b> · latest records', `<div class="feed">${act.map((e, i) => `<div class="ev" ${e.id ? `data-cust="${esc(e.id)}" style="cursor:pointer;animation-delay:${i * 40}ms"` : `style="animation-delay:${i * 40}ms"`}><span>${e.ic}</span><span>${e.txt}</span><span class="when">${agoS(e.t)}</span></div>`).join('') || '<div class="empty">Nothing yet</div>'}</div>`)}
+    ${panel('s4 fs', 17, '<b>Live</b> · latest records', `<div class="feed">${act.map((e, i) => `<div class="ev" ${e.id ? `data-cust="${esc(e.id)}" style="cursor:pointer;animation-delay:${i * 40}ms"` : `style="animation-delay:${i * 40}ms"`}><span>${e.ic}</span><span>${e.txt}</span><span class="when">${agoS(e.t)}</span></div>`).join('') || '<div class="empty">Nothing yet</div>'}</div>`)}
 
     ${panel('s6', 18, '<b>Onboarding</b> · plan #7 (day 7 / 30 / 60 / 90)', `${obPct.map((o) => `<div class="funnel"><div class="st"><span>${o.k}</span><div class="b"><i style="width:${o.n ? (o.d / o.n) * 100 : 0}%;background:var(--ok)"></i></div><span class="n">${o.d}/${o.n}</span></div></div>`).join('')}<div class="sub muted" style="margin-top:8px">${m.calls.length} calls due now</div>`, `<button class="a" data-list="calls">calls →</button>`)}
     ${panel('s6', 19, '<b>Money book</b> · this month', `<div class="kv"><div class="k">Cash in</div><div class="v num">${fmtN(M.cashThisMonth)}</div><div class="k">Taxable (VAT incl.)</div><div class="v num">${vatNow ? fmtN(vatNow.taxable + vatNow.forfeits) : 0}</div><div class="k">VAT 13% to file</div><div class="v num">${vatNow ? vatNow.vat.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</div><div class="k">Deposit received</div><div class="v num">${vatNow ? fmtN(vatNow.deposit) : 0}</div><div class="k">Overdue now</div><div class="v num" style="color:var(--bad)">${fmtN(M.overdueAmt)}</div></div>`, `<button class="a" data-report="capack">🧾 CA pack →</button>`)}
@@ -413,10 +410,9 @@ function pageCustomers(m) {
   const th = (k, l, cls = '') => `<th class="${cls}" data-sort="${k}" style="cursor:pointer">${l}${sort === k ? ' ▾' : ''}</th>`;
   const tt = toleTable(m);
   return `<div class="cc">
-    ${panel('s12', 0, `<b>By tole</b> · ${tt.length} areas`, `<div class="scroll-x"><table class="tbl"><tr><th>Tole</th><th class="n">Homes</th><th class="n">Active</th><th class="n">Overdue homes</th><th class="n">Overdue NPR</th><th class="n">Collection</th><th class="n">Visits due</th><th class="n">Last TDS (avg)</th><th class="n">No GPS</th></tr>
-      ${tt.map((r) => `<tr data-tole="${esc(r.k)}" style="cursor:pointer" class="${p.tole === r.k ? 'sel' : ''}"><td><b>📍 ${esc(r.k)}</b></td><td class="n">${r.hh}</td><td class="n">${r.act}</td><td class="n" style="color:${r.od ? 'var(--bad)' : 'inherit'}">${r.od}</td><td class="n">${r.odAmt ? fmtN(r.odAmt) : '—'}</td><td class="n">${r.due ? `<span class="pill ${r.paid / r.due < 0.5 ? 'bad' : r.paid / r.due < 0.8 ? 'warn' : 'ok'}">${Math.round((r.paid / r.due) * 100)}%</span>` : '—'}</td><td class="n">${r.visits || '—'}</td><td class="n">${r.tds.length ? Math.round(r.tds.reduce((s, v) => s + v, 0) / r.tds.length) : '—'}</td><td class="n" style="color:${r.nogps ? 'var(--warn)' : 'inherit'}">${r.nogps || '—'}</td></tr>`).join('')}</table></div>`, p.tole ? `<button class="a" data-tole="">clear tole ✕</button>` : '<span class="muted">tap a tole to filter</span>')}
-    ${panel('s12', 1, `<b>Customers</b> · ${list.length}${p.tole ? ' · 📍 ' + esc(p.tole) : ''}`, `<div class="scroll-x"><table class="tbl"><tr><th></th>${th('name', 'Customer')}${th('tole', 'Tole')}<th>Phone</th>${th('installed', 'Installed')}<th class="n">Next bill</th>${th('overdue', 'Overdue', 'n')}<th>Stage</th>${th('next', 'Next visit')}<th>Filters</th></tr>
+    ${panel('s9 cust-main', 1, `<b>Customers</b> · ${list.length}${p.tole ? ' · 📍 ' + esc(p.tole) : ''}`, `<div class="scroll-x"><table class="tbl"><tr><th></th>${th('name', 'Customer')}${th('tole', 'Tole')}<th>Phone</th>${th('installed', 'Installed')}<th class="n">Next bill</th>${th('overdue', 'Overdue', 'n')}<th>Stage</th>${th('next', 'Next visit')}<th>Filters</th></tr>
     ${list.slice(0, 400).map((x) => { const fo = x.fd.filter((q) => q.status === 'overdue').map((q) => q.type); return `<tr data-cust="${esc(x.c.id)}" style="cursor:pointer"><td><span class="dot ${x.dot}"></span></td><td><b>${esc(x.c.name)}</b> <span class="muted mono">${esc(x.c.code)}</span></td><td>${esc(toleOf(x.c))}</td><td class="mono">${esc(x.c.phone || '')}</td><td>${esc(x.c.installDate || '')}</td><td class="n">${x.led.nextBill ? fmtN(x.led.nextBill.amount - x.led.nextBill.paid) + ' · ' + esc(x.led.nextBill.due.slice(5)) : ''}</td><td class="n" style="color:${x.led.overdue ? 'var(--bad)' : 'inherit'}">${x.led.overdue ? fmtN(x.led.overdue) : '—'}</td><td>${x.dn ? `<span class="pill ${{ reminder: 'blue', due: 'warn', late: 'warn', call: 'orange', visit: 'bad' }[x.dn.stage]}">${esc(x.dn.short)}</span>` : ''}</td><td>${x.nv ? esc(x.nv.date) : ''}</td><td>${fo.length ? `<span class="pill bad">${esc(fo.join(', '))}</span>` : ''}</td></tr>`; }).join('')}</table></div>${list.length > 400 ? `<div class="empty">+${list.length - 400} more — use the search</div>` : ''}`, `<div class="seg" style="padding:0">${segs.map(([k, l]) => `<button data-dseg="${k}" class="${f === k ? 'on' : ''}">${l}</button>`).join('')}</div>`)}
+    ${panel('s3 fs fs-480 tole-side', 0, `<b>Areas</b> · ${tt.length}`, `<div class="mini-list tole-list">${tt.map((r) => `<div class="item${p.tole === r.k ? ' sel' : ''}" data-tole="${esc(r.k)}"><span class="dot ${r.od ? 'r' : 'g'}"></span><div class="main"><div class="t">📍 ${esc(r.k)} <span class="muted">· ${r.act}/${r.hh}</span></div><div class="s">${r.od ? `<span style="color:var(--bad)">${r.od} overdue · ${fmtN(r.odAmt)}</span>` : 'no overdue'}${r.due ? ` · ${Math.round((r.paid / r.due) * 100)}% paid` : ''}${r.visits ? ` · 🔧 ${r.visits}` : ''}${r.nogps ? ` · <span style="color:var(--warn)">no GPS ${r.nogps}</span>` : ''}</div></div></div>`).join('')}</div>`, p.tole ? `<button class="a" data-tole="">clear ✕</button>` : '<span class="muted">tap to filter</span>')}${/* v0.17.0 (5) B6: areas beside the list — the 11-row tole table came first and left 5 customers on the first screen */ ''}
   </div>`;
 }
 function caMonths(m, n = 6) {
@@ -439,21 +435,23 @@ function pageMoney(m) {
     ${panel('s3 kpi', 3, '<b>Deposit held</b>', `<div class="v">${counter('m_dep', m.deposits.total.held)}</div><div class="sub"><span>refundable — a liability</span></div>`)}
     ${panel('s7', 4, '<b>🧾 CA pack</b> · IRD sales book by Nepali month', `<div class="scroll-x"><table class="tbl"><tr><th>Nepali month</th><th>AD dates</th><th class="n">Bills</th><th class="n">Taxable value</th><th class="n">VAT 13%</th><th class="n">Deposit in</th><th>Ready?</th><th></th></tr>
       ${cam.map(({ a, X, current }) => `<tr data-capack-open="${a.y}|${a.m}" style="cursor:pointer"><td><b>${esc(B.bsLabel(a.y, a.m))}</b>${current ? ' <span class="pill blue">now</span>' : ''}</td><td class="mono muted">${esc(X.P.from.slice(5))} → ${esc(X.P.to.slice(5))}</td><td class="n">${X.book.rows.length}</td><td class="n">${fmtN(X.book.totals.taxable)}</td><td class="n"><b>${X.book.totals.vat.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></td><td class="n">${fmtN(X.dep.received)}</td><td>${X.warn.length ? `<span class="pill warn" title="${esc(X.warn.join(' · '))}">${X.book.missingBill ? X.book.missingBill + ' no bill no.' : 'check'}</span>` : '<span class="pill ok">ready</span>'}</td><td>›</td></tr>`).join('')}</table></div>
-      <div class="muted" style="margin-top:8px">Nepal files VAT by Nepali month. Tap a month → Excel in the IRD layout (बिक्री खाता) + summary + deposits.</div>`, `<button class="a" data-report="capack">details →</button>`)}
+      <div class="muted" style="margin-top:8px">Nepal files VAT by Nepali month. Tap a month → Excel in the IRD layout (बिक्री खाता) + summary + deposits.</div><div class="row-end"><button class="btn small ghost" data-report="deposits">🏦 Deposit book</button><button class="btn small ghost" data-report="vat">🧾 VAT by AD month</button><button class="btn small ghost" data-csv="payments">⬇️ Payments CSV</button></div>`, `<button class="a" data-report="capack">details →</button>`)}
     ${panel('s5', 5, '<b>Overdue age</b>', hbars(ag.map((b) => ({ l: b.label, v: b.amount, sub: b.homes ? b.homes + ' homes' : '', color: b.from > 30 ? 'var(--bad)' : b.from > 7 ? 'var(--orange)' : 'var(--warn)' })), 'var(--warn)', fmtK) + `<div class="sub muted" style="margin-top:8px">older than 30 days: <b class="num">${fmtN(ag.filter((b) => b.from > 30).reduce((s, b) => s + b.amount, 0))}</b> NPR — hardest to collect</div>`)}
     ${panel('s7', 6, '<b>Cash in</b> · 12 months (NPR)', bars(mk.map((k) => cashBy[k]), mk.map((k) => k.slice(2)), 'var(--ok)', 640, 200, fmtK, { keys: mk, data: (i) => `data-hist="${mk[i]}" style="cursor:pointer"` }), `<button class="a" data-side="history">history →</button>`)}
     ${panel('s5', 7, '<b>Next 4 weeks</b> · bills falling due', hbars(out.map((w) => ({ l: `${w.from.slice(5)} – ${w.to.slice(5)}`, v: w.amount, sub: w.bills + ' bills' })), 'var(--ok)', fmtK) + `<div class="kv" style="margin-top:10px"><div class="k">Billed</div><div class="v num">${fmtN(out.reduce((s, w) => s + w.amount, 0))}</div><div class="k">Expected at ${M.collection === null ? '—' : R.pct(M.collection)}</div><div class="v num">${fmtN(out.reduce((s, w) => s + w.amount, 0) * (M.collection ?? 1))}</div><div class="k">Plus overdue now</div><div class="v num" style="color:var(--bad)">${fmtN(M.overdueAmt)}</div></div>`)}
-    ${panel('s7', 8, '<b>Chase list</b> · G-1 §1-3', (groups.map((g) => `<h3>${esc(g.label)} <span class="pill">${g.xs.length}</span></h3><div class="mini-list">${g.xs.slice(0, 30).map((x) => dunItem(x)).join('')}</div>`).join('') || '<div class="empty">Nobody to chase 🏖️</div>') + chaseStatsLine(cs))}
-    ${can('expense') || can('money') ? panel('s5', 10, '<b>Expenses</b> · this month', expPanel(m), '<button class="a" data-report="expenses">all →</button>') : ''}
+    ${panel('s7 fs fs-420', 8, '<b>Chase list</b> · G-1 §1-3', (groups.map((g) => `<h3>${esc(g.label)} <span class="pill">${g.xs.length}</span></h3><div class="mini-list">${g.xs.slice(0, 30).map((x) => dunItem(x)).join('')}</div>`).join('') || '<div class="empty">Nobody to chase 🏖️</div>') + chaseStatsLine(cs))}
+    <div class="stack s5">
+      ${can('expense') || can('money') ? panel('', 10, '<b>Expenses</b> · this month', expPanel(m), `${can('expense') ? '<button class="btn small ok ph-btn" data-go-form="expense">＋ New expense</button>' : ''}<button class="a" data-report="expenses">all →</button>`) : ''}
+      ${(() => { const A = m.approvals; if (!A.pending.length && !A.done.length) return ''; return panel('', 12, `<b>Money approvals</b> · ${A.pending.length} waiting`, `<div class="mini-list">${A.pending.slice(0, 6).map((r) => `<div class="item" data-list="approvals"><span class="dot y"></span><div class="main"><div class="t">${r.kind === 'discount' ? '🏷️ Discount' : '🏦 Deposit refund'} ${fmtN(r.amount)} · ${esc((S.D.customers.get(r.x.customerId) || {}).name || '?')}</div><div class="s">${esc(String(r.x.date || r.x.closedDate || r.x.startedDate || '').slice(0, 10))}</div></div></div>`).join('') || '<div class="empty">Nothing waiting 🏖️</div>'}</div>`, '<button class="a" data-list="approvals">open ›</button>'); })()}
+    </div>
     ${panel('s7', 11, '<b>Profit & loss</b> · cash basis, before tax', pnlTable(m, mk))}
-    ${(() => { const A = m.approvals; if (!A.pending.length && !A.done.length) return ''; return panel('s5', 12, `<b>Money approvals</b> · ${A.pending.length} waiting`, `<div class="mini-list">${A.pending.slice(0, 6).map((r) => `<div class="item" data-list="approvals"><span class="dot y"></span><div class="main"><div class="t">${r.kind === 'discount' ? '🏷️ Discount' : '🏦 Deposit refund'} ${fmtN(r.amount)} · ${esc((S.D.customers.get(r.x.customerId) || {}).name || '?')}</div><div class="s">${esc(String(r.x.date || r.x.closedDate || r.x.startedDate || '').slice(0, 10))}</div></div></div>`).join('') || '<div class="empty">Nothing waiting 🏖️</div>'}</div>`, '<button class="a" data-list="approvals">open ›</button>'); })()}
-    ${panel('s5', 9, '<b>Deposit received</b> · 12 months', bars(mk.map((k) => depBy[k]), mk.map((k) => k.slice(2)), 'var(--info)', 460, 200, fmtK) + `<div class="row wrap"><button class="btn ghost" data-report="deposits">🏦 Deposit book</button><button class="btn ghost" data-report="vat">🧾 VAT by AD month</button><button class="btn ghost" data-csv="payments">⬇️ Payments CSV</button></div>`)}
+    ${panel('s5', 9, '<b>Deposit received</b> · 12 months', bars(mk.map((k) => depBy[k]), mk.map((k) => k.slice(2)), 'var(--info)', 460, 270, fmtK) )}
   </div>`;
 }
 function expPanel(m) {
   const mk = R.monthKey(m.t); const cur = m.expMonths[mk] || { paid: 0, vat: 0, net: 0, byCat: {} };
   const rows = Object.entries(cur.byCat).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([c, v]) => ({ l: c, v }));
-  return `<div class="kv"><div class="k">Paid</div><div class="v num">${fmtN(cur.paid)}</div><div class="k">Input VAT</div><div class="v num">${cur.vat.toFixed(2)}</div><div class="k">Cost without VAT</div><div class="v num">${fmtN(cur.net)}</div></div>${rows.length ? hbars(rows, 'var(--orange)', fmtK) : '<div class="empty">No expenses this month</div>'}${can('expense') ? '<button class="btn ghost small" data-go-form="expense">🧾 New expense</button>' : ''}`;
+  return `<div class="kv"><div class="k">Paid</div><div class="v num">${fmtN(cur.paid)}</div><div class="k">Input VAT</div><div class="v num">${cur.vat.toFixed(2)}</div><div class="k">Cost without VAT</div><div class="v num">${fmtN(cur.net)}</div></div>${rows.length ? hbars(rows, 'var(--orange)', fmtK) : '<div class="empty">No expenses this month</div>'}`;
 }
 function pnlTable(m, mk) {
   const vat = Object.fromEntries(m.vat.map((r) => [r.month, r]));
@@ -467,18 +465,24 @@ function pageField(m) {
   const dem = R.filterDemand(m.filtersAll, t, 90); const st = m.metrics.stock;
   const dmonths = Object.keys(dem.months).sort((a, b) => (a === 'overdue' ? -1 : b === 'overdue' ? 1 : a.localeCompare(b)));
   return `<div class="cc">
-    ${panel('s6', 0, `<b>Visits due</b> · ${m.visitsDue.length} by tole`, Object.entries(byTole).sort((a, b) => b[1].length - a[1].length).map(([k, xs]) => `<h3 style="display:flex;align-items:center;gap:8px">📍 ${esc(k)} <span class="pill">${xs.length}</span>${routeLink(xs)}</h3><div class="mini-list">${xs.map((x) => cItem(x, `<span class="pill ${x.due < t ? 'bad' : 'warn'}">${esc(x.filterOnly ? 'filter' : x.due)}</span>`)).join('')}</div>`).join('') || '<div class="empty">No visits due</div>', '<span class="muted">🧭 Route starts from your location</span>')}
-    ${panel('s6', 1, `<b>Requests</b> · ${m.openReq.length} open`, `<div class="mini-list">${m.openReq.map(reqItem).join('') || '<div class="empty">No open requests</div>'}</div>`)}
-    ${panel('s7', 2, `<b>Team</b> · this month (${esc(monLabel(mk))})`, `<div class="scroll-x"><table class="tbl"><tr><th>Who</th><th class="n">Installs</th><th class="n">Visits</th><th class="n">Filters</th><th class="n">Repairs</th><th class="n">Requests done</th><th class="n">Nobody home</th><th class="n">Days out</th><th class="n">Jobs / day</th><th class="n">Min / visit</th><th class="n">Last month</th></tr>
-      ${tb.map((r) => { const pv = tbPrev.find((q) => q.name === r.name); return `<tr><td><b>${esc(r.name)}</b></td><td class="n">${r.installs}</td><td class="n">${r.visits}</td><td class="n">${r.filters}</td><td class="n">${r.repairs}</td><td class="n">${r.requests}</td><td class="n">${r.noShows || '·'}</td><td class="n">${r.days}</td><td class="n">${r.perDay.toFixed(1)}</td><td class="n">${r.avgMin ? Math.round(r.avgMin) : '—'}</td><td class="n muted">${pv ? pv.visits + pv.installs + ' jobs' : '—'}</td></tr>`; }).join('') || '<tr><td colspan="11" class="muted">No completed work this month yet</td></tr>'}</table></div><div class="muted" style="margin-top:6px">Jobs = installs + completed visits. Plan: 4–8 homes a day, 6 days a week.</div>`)}
+    ${panel('s6 fs fs-480', 0, `<b>Visits due</b> · ${m.visitsDue.length} by tole`, Object.entries(byTole).sort((a, b) => b[1].length - a[1].length).map(([k, xs]) => `<h3 style="display:flex;align-items:center;gap:8px">📍 ${esc(k)} <span class="pill">${xs.length}</span>${routeLink(xs)}</h3><div class="mini-list">${xs.map((x) => cItem(x, `<span class="pill ${x.due < t ? 'bad' : 'warn'}">${esc(x.filterOnly ? 'filter' : x.due)}</span>`)).join('')}</div>`).join('') || '<div class="empty">No visits due</div>', '<span class="muted">🧭 Route starts from your location</span>')}
+    <div class="stack s6">
+      ${panel('', 1, `<b>Requests</b> · ${m.openReq.length} open`, `<div class="mini-list">${m.openReq.map(reqItem).join('') || '<div class="empty">No open requests</div>'}</div>`)}
+      ${panel('', 4, `<b>Calls</b> · ${m.calls.length} due`, `<div class="mini-list">${m.calls.slice(0, 12).map((x) => `<div class="item" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(x.o.k === 'Q' ? 'Quarterly call' : x.o.k)}"><span class="dot ${x.o.status === 'overdue' ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(x.c.name)}</div><div class="s">${esc(x.o.label)} · ${esc(x.o.due)}</div></div></div>`).join('') || '<div class="empty">No calls due</div>'}</div>`, `<button class="a" data-list="calls">random pick →</button>`)}
+    </div>
+    <div class="stack s7">
+      ${panel('', 2, `<b>Team</b> · this month (${esc(monLabel(mk))})`, `<div class="scroll-x"><table class="tbl"><tr><th>Who</th><th class="n">Installs</th><th class="n">Visits</th><th class="n">Filters</th><th class="n">Repairs</th><th class="n">Requests done</th><th class="n">Nobody home</th><th class="n">Days out</th><th class="n">Jobs / day</th><th class="n">Min / visit</th><th class="n">Last month</th></tr>
+        ${tb.map((r) => { const pv = tbPrev.find((q) => q.name === r.name); return `<tr><td><b>${esc(r.name)}</b></td><td class="n">${r.installs}</td><td class="n">${r.visits}</td><td class="n">${r.filters}</td><td class="n">${r.repairs}</td><td class="n">${r.requests}</td><td class="n">${r.noShows || '·'}</td><td class="n">${r.days}</td><td class="n">${r.perDay.toFixed(1)}</td><td class="n">${r.avgMin ? Math.round(r.avgMin) : '—'}</td><td class="n muted">${pv ? pv.visits + pv.installs + ' jobs' : '—'}</td></tr>`; }).join('') || '<tr><td colspan="11" class="muted">No completed work this month yet</td></tr>'}</table></div><div class="muted" style="margin-top:6px">Jobs = installs + completed visits. Plan: 4–8 homes a day, 6 days a week.</div>`)}
+      ${(() => { const C = R.callbackStats(m.D, R.addDays(t, -90), t, Number(S.settings.callbackDays) || R.CALLBACK.days); return panel('', 8, `<b>Callbacks</b> · 90 days · ${C.rate === null ? '—' : R.pct(C.rate, 1)}`, `<div class="mini-list">${C.people.filter((p) => p.jobs).map((p) => `<div class="item"><span class="dot ${(p.rate || 0) > 0.1 ? 'r' : (p.rate || 0) > 0.05 ? 'y' : 'g'}"></span><div class="main"><div class="t">${esc(p.name)} · ${p.rate === null ? '—' : R.pct(p.rate, 1)}</div><div class="s">${p.callbacks} of ${p.jobs} jobs</div></div></div>`).join('') || '<div class="empty">No jobs yet</div>'}</div>`, '<button class="a" data-report="callbacks">all →</button>'); })()}
+    </div>
     ${panel('s5', 3, '<b>Filters needed</b> · next 90 days vs stock', `<div class="scroll-x"><table class="tbl"><tr><th>Filter</th><th class="n">Needed</th><th class="n">In stock</th><th>Order by</th><th></th></tr>${R.FILTER_TYPES.filter((f) => f !== 'Spin-down').map((f) => { const need = dem.types[f] || 0, have = st[f] ?? 0; const op = m.filterPlan && m.filterPlan.rows.find((r) => r.type === f); return `<tr><td><b>${esc(f)}</b></td><td class="n">${need}</td><td class="n">${have}</td><td class="mono">${op && op.orderBy ? `<span class="pill ${op.status === 'late' ? 'bad' : op.status === 'soon' ? 'warn' : 'grey'}">${esc(op.orderBy)}</span>` : '—'}</td><td>${need > have ? `<span class="pill bad">short ${need - have}</span>` : '<span class="pill ok">ok</span>'}</td></tr>`; }).join('')}</table></div>
       <div class="scroll-x" style="margin-top:8px"><table class="tbl"><tr><th>When</th>${R.FILTER_TYPES.filter((f) => f !== 'Spin-down').map((f) => `<th class="n">${esc(f)}</th>`).join('')}</tr>${dmonths.map((k) => `<tr><td>${k === 'overdue' ? '<span class="pill bad">overdue</span>' : esc(monLabel(k))}</td>${R.FILTER_TYPES.filter((f) => f !== 'Spin-down').map((f) => `<td class="n">${dem.months[k][f] || '·'}</td>`).join('')}</tr>`).join('') || '<tr><td colspan="5" class="muted">Nothing due in 90 days</td></tr>'}</table></div>`, `<button class="a" data-report="stock">stock →</button>`)}
-    ${(() => { const C = R.callbackStats(m.D, R.addDays(t, -90), t, Number(S.settings.callbackDays) || R.CALLBACK.days); return panel('s4', 8, `<b>Callbacks</b> · 90 days · ${C.rate === null ? '—' : R.pct(C.rate, 1)}`, `<div class="mini-list">${C.people.filter((p) => p.jobs).map((p) => `<div class="item"><span class="dot ${(p.rate || 0) > 0.1 ? 'r' : (p.rate || 0) > 0.05 ? 'y' : 'g'}"></span><div class="main"><div class="t">${esc(p.name)} · ${p.rate === null ? '—' : R.pct(p.rate, 1)}</div><div class="s">${p.callbacks} of ${p.jobs} jobs</div></div></div>`).join('') || '<div class="empty">No jobs yet</div>'}</div>`, '<button class="a" data-report="callbacks">all →</button>'); })()}
+    ${panel('s4 fs fs-300', 5, '<b>Filters</b> · overdue & soon', `<div class="mini-list">${m.filtersAll.filter((f) => f.status !== 'ok').sort((a, b) => String(a.due).localeCompare(String(b.due))).slice(0, 12).map((f) => `<div class="item" data-cust="${esc(f.x.c.id)}"><span class="dot ${f.status === 'overdue' ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(f.type)} · ${esc(f.x.c.name)}</div><div class="s">${esc(f.due)}</div></div></div>`).join('') || '<div class="empty">All on schedule</div>'}</div>`, `<button class="a" data-list="filters">all →</button>`)}
     ${(() => { const N = R.noShowStats(m.D, R.addDays(t, -90), t); const pc = (x) => (x === null ? '—' : R.pct(x, 1)); return panel('s4', 9, `<b>Wasted trips</b> · nobody home · 90 days · ${pc(N.rate)}`, `<div class="kv"><div class="k">Nobody home</div><div class="v num">${N.noShows} of ${N.trips} trips</div><div class="k">🛵 message sent</div><div class="v num">${pc(N.withMsg.rate)} <span class="muted">(${N.withMsg.trips})</span></div><div class="k">no message</div><div class="v num">${pc(N.noMsg.rate)} <span class="muted">(${N.noMsg.trips})</span></div></div><div class="mini-list" style="margin-top:8px">${N.repeat.slice(0, 5).map((r) => r.c ? `<div class="item" data-cust="${esc(r.id)}"><span class="dot r"></span><div class="main"><div class="t">${esc(r.c.name)} · ${r.n}×</div><div class="s">last ${esc(r.last)}</div></div></div>` : '').join('')}</div>`, '<button class="a" data-report="noshows">open ›</button>'); })()}
-    ${panel('s4', 4, `<b>Calls</b> · ${m.calls.length} due`, `<div class="mini-list">${m.calls.slice(0, 12).map((x) => `<div class="item" data-go-form="checkin" data-cid="${esc(x.c.id)}" data-kind="${esc(x.o.k === 'Q' ? 'Quarterly call' : x.o.k)}"><span class="dot ${x.o.status === 'overdue' ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(x.c.name)}</div><div class="s">${esc(x.o.label)} · ${esc(x.o.due)}</div></div></div>`).join('') || '<div class="empty">No calls due</div>'}</div>`, `<button class="a" data-list="calls">random pick →</button>`)}
-    ${panel('s4', 5, '<b>Filters</b> · overdue & soon', `<div class="mini-list">${m.filtersAll.filter((f) => f.status !== 'ok').sort((a, b) => String(a.due).localeCompare(String(b.due))).slice(0, 12).map((f) => `<div class="item" data-cust="${esc(f.x.c.id)}"><span class="dot ${f.status === 'overdue' ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(f.type)} · ${esc(f.x.c.name)}</div><div class="s">${esc(f.due)}</div></div></div>`).join('') || '<div class="empty">All on schedule</div>'}</div>`, `<button class="a" data-list="filters">all →</button>`)}
-    ${panel('s4', 7, `<b>Relocations</b> · ${m.relOpen.length} to do`, `<div class="mini-list">${m.D.relocations.slice().sort((a, b) => String(b.moveDate).localeCompare(String(a.moveDate))).slice(0, 8).map((r) => { const c = S.D.customers.get(r.customerId); return `<div class="item" data-edit="relocation" data-id="${esc(r.id)}"><span class="dot ${r.status === 'Done' ? 'g' : r.status === 'Cancelled' ? 'k' : 'y'}"></span><div class="main"><div class="t">${esc(c ? c.name : '?')}</div><div class="s">${esc(r.status)} · ${esc(r.moveDate || '')}</div></div></div>`; }).join('') || '<div class="empty">No relocations</div>'}</div>`, '<button class="a" data-list="relocations">all →</button>')}
-    ${panel('s4', 6, `<b>Recoveries</b> · ${recs.length}`, `<div class="mini-list">${recs.map((r) => { const c = S.D.customers.get(r.customerId); return `<div class="item" data-edit="recovery" data-id="${esc(r.id)}"><span class="dot ${r.outcome === 'Recovered' ? 'g' : String(r.outcome).startsWith('Failed') ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(c ? c.name : '?')}</div><div class="s">${esc(r.outcome)}${r.daysToClose !== null && r.daysToClose !== undefined ? ' · ' + r.daysToClose + ' d' : ''}</div></div></div>`; }).join('') || '<div class="empty">No recovery cases</div>'}</div>`, `<button class="a" data-list="recoveries">all →</button>`)}
+    <div class="stack s4">
+      ${panel('', 7, `<b>Relocations</b> · ${m.relOpen.length} to do`, `<div class="mini-list">${m.D.relocations.slice().sort((a, b) => String(b.moveDate).localeCompare(String(a.moveDate))).slice(0, 8).map((r) => { const c = S.D.customers.get(r.customerId); return `<div class="item" data-edit="relocation" data-id="${esc(r.id)}"><span class="dot ${r.status === 'Done' ? 'g' : r.status === 'Cancelled' ? 'k' : 'y'}"></span><div class="main"><div class="t">${esc(c ? c.name : '?')}</div><div class="s">${esc(r.status)} · ${esc(r.moveDate || '')}</div></div></div>`; }).join('') || '<div class="empty">No relocations</div>'}</div>`, '<button class="a" data-list="relocations">all →</button>')}
+      ${panel('', 6, `<b>Recoveries</b> · ${recs.length}`, `<div class="mini-list">${recs.map((r) => { const c = S.D.customers.get(r.customerId); return `<div class="item" data-edit="recovery" data-id="${esc(r.id)}"><span class="dot ${r.outcome === 'Recovered' ? 'g' : String(r.outcome).startsWith('Failed') ? 'r' : 'y'}"></span><div class="main"><div class="t">${esc(c ? c.name : '?')}</div><div class="s">${esc(r.outcome)}${r.daysToClose !== null && r.daysToClose !== undefined ? ' · ' + r.daysToClose + ' d' : ''}</div></div></div>`; }).join('') || '<div class="empty">No recovery cases</div>'}</div>`, `<button class="a" data-list="recoveries">all →</button>`)}
+    </div>
   </div>`;
 }
 
@@ -579,10 +583,16 @@ function repVisual(k, m, p) {
     const monthOf = (i) => R.addMonths(t.slice(0, 7) + '-01', i);
     const hireBy = b0 < 0 ? null : R.addDays(monthOf(b0), -7 * o.hireLeadWeeks); const hireLate = !!hireBy && hireBy <= t;
     const cols = { carry: 'var(--grey)', visits: 'var(--brand)', repairs: 'var(--orange)', installs: 'var(--ok)' };
-    const W = 900, H = 230, pad = 36; const maxV = Math.max(1, ...C.weeks.map((w) => Math.max(w.demand, w.cap))); const bw = (W - pad - 10) / C.weeks.length;
-    const y = (v) => H - 24 - (v / maxV) * (H - 40);
-    const stacks = C.weeks.map((w, i) => { let acc = 0; const x0 = pad + i * bw + bw * 0.18, ww = bw * 0.64; return [['carry', w.carryIn], ['visits', w.visits + w.newVisits], ['repairs', w.repairs], ['installs', w.installs * o.installSlots]].map(([k2, v]) => { const y1 = y(acc), y2 = y(acc + v); acc += v; return `<rect x="${x0.toFixed(1)}" y="${y2.toFixed(1)}" width="${ww.toFixed(1)}" height="${Math.max(0, y1 - y2).toFixed(1)}" fill="${cols[k2]}" opacity=".85" data-tip="${esc(`${w.from.slice(5)}: ${k2} ${v.toFixed(1)}`)}"/>`; }).join('') + `<line x1="${(x0 - 6).toFixed(1)}" x2="${(x0 + ww + 6).toFixed(1)}" y1="${y(w.cap).toFixed(1)}" y2="${y(w.cap).toFixed(1)}" stroke="${w.load > 1 ? 'var(--bad)' : 'var(--ink)'}" stroke-width="2.5"/><text class="ax" x="${(x0 + ww / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(w.from.slice(5))}</text>${w.closed ? `<text class="ax" x="${(x0 + ww / 2).toFixed(1)}" y="${(y(0) - 8).toFixed(1)}" text-anchor="middle" style="fill:var(--warn)">🏖️ closed</text>` : w.off > 1 ? `<text class="ax" x="${(x0 + ww / 2).toFixed(1)}" y="${(y(w.cap) - 6).toFixed(1)}" text-anchor="middle" style="fill:var(--warn)">🏖️ ${w.off - 1}</text>` : ''}`; }).join('');
-    const chart = `<div class="chart"><svg viewBox="0 0 ${W} ${H}"><text class="ax" x="0" y="${(y(maxV) + 8).toFixed(1)}">${Math.round(maxV)}</text><text class="ax" x="0" y="${(y(0) + 3).toFixed(1)}">0</text>${stacks}</svg></div><div class="legend"><span><i class="sw" style="background:var(--grey)"></i>left from before</span><span><i class="sw" style="background:var(--brand)"></i>homes to visit</span><span><i class="sw" style="background:var(--orange)"></i>repairs</span><span><i class="sw" style="background:var(--ok)"></i>installs (× ${o.installSlots} slots)</span><span>▬ slots (red = over)</span><span>🏖️ = holidays that week</span></div>`;
+    const W = 900, H = 170, pad = 40; const bw = (W - pad - 10) / C.weeks.length; /* v0.17.0 (2) B10: load % per week — on a 0–108 slot axis the bars sat in the bottom 10 % */
+    const peak = Math.max(0, ...C.weeks.map((w) => (w.cap ? w.demand / w.cap : 0))); const topF = Math.max(0.5, Math.ceil(peak * 1.2 * 10) / 10);
+    const y = (f) => H - 24 - (Math.min(f, topF) / topF) * (H - 44);
+    const gl = (f, color, lab) => `<line class="grid" x1="${pad}" x2="${W}" y1="${y(f).toFixed(1)}" y2="${y(f).toFixed(1)}"${color ? ` style="stroke:${color};stroke-dasharray:5 4;opacity:.9"` : ''}/><text class="ax" x="0" y="${(y(f) + 3).toFixed(1)}"${color ? ` style="fill:${color}"` : ''}>${lab || Math.round(f * 100) + '%'}</text>`;
+    const grid = gl(0) + gl(topF / 2) + gl(topF) + (topF > o.busy ? gl(o.busy, 'var(--warn)', 'busy') : '') + (topF > 1 ? gl(1, 'var(--bad)', 'full') : '');
+    const stacks = C.weeks.map((w, i) => { const x0 = pad + i * bw + bw * 0.18, ww = bw * 0.64, cx = x0 + ww / 2; const lab = `<text class="ax" x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(w.from.slice(5))}</text>`;
+      if (w.closed || !w.cap) return lab + `<text class="ax" x="${cx.toFixed(1)}" y="${(y(0) - 8).toFixed(1)}" text-anchor="middle" style="fill:var(--warn)">🏖️ closed</text>`;
+      let acc = 0; const segs = [['carry', w.carryIn], ['visits', w.visits + w.newVisits], ['repairs', w.repairs], ['installs', w.installs * o.installSlots]].map(([k2, v]) => { const y1 = y(acc / w.cap), y2 = y((acc + v) / w.cap); acc += v; return `<rect x="${x0.toFixed(1)}" y="${y2.toFixed(1)}" width="${ww.toFixed(1)}" height="${Math.max(0, y1 - y2).toFixed(1)}" fill="${cols[k2]}" opacity=".85" data-tip="${esc(`${w.from.slice(5)}: ${k2} ${v.toFixed(1)}`)}"/>`; }).join('');
+      const ld = w.demand / w.cap; return segs + `<text class="vl${ld > 1 ? ' hi' : ''}" x="${cx.toFixed(1)}" y="${Math.max(10, y(ld) - 5).toFixed(1)}" text-anchor="middle">${Math.round(ld * 100)}%${w.off > 1 ? ` · 🏖️ ${w.off - 1}` : ''}</text>` + lab; }).join('');
+    const chart = `<div class="chart"><svg viewBox="0 0 ${W} ${H}">${grid}${stacks}</svg></div><div class="legend"><span><i class="sw" style="background:var(--grey)"></i>left from before</span><span><i class="sw" style="background:var(--brand)"></i>homes to visit</span><span><i class="sw" style="background:var(--orange)"></i>repairs</span><span><i class="sw" style="background:var(--ok)"></i>installs (× ${o.installSlots} slots)</span><span>% = jobs ÷ the week's slots</span><span>🏖️ = holidays that week</span></div>`;
     return kpi(1, '<b>This week</b> · load', Math.min(9.99, w0.load || 0), `${Math.round(w0.demand)} jobs · ${w0.cap} slots`, 'pct', w0.load > 1 ? 'var(--bad)' : w0.load > o.busy ? 'var(--warn)' : 'var(--ok)')
       + kpi(2, '<b>Busiest week</b> · next 8', Math.min(9.99, C.peak.load || 0), `from ${C.peak.from}`, 'pct', C.peak.load > 1 ? 'var(--bad)' : '')
       + kpi(3, '<b>People in the field</b>', C.people, `${o.jobsPerDay} homes a day each`)
@@ -825,10 +835,10 @@ function pageCalendar(m) {
     </div>
     <div class="panel s8 cal-grid-p" style="--i:1"><div class="cal-grid">${wk.map((w, i) => `<div class="cal-wd${i === 6 ? ' sat' : ''}">${w}</div>`).join('')}${K.days.map((d) => cellHtml(d, K, p, sel)).join('')}</div>
       <div class="legend cal-leg"><span><i class="sw off"></i>office closed</span><span><i class="sw sat"></i>Saturday</span><span>💵 bills</span><span>🔧 visits</span><span>🧪 filters</span><span>📞 calls</span><span>🧲 leads</span><span>🚚 moves</span><span>📦 devices</span><span>💰 cash in</span></div></div>
-    <div class="panel s4 cal-ag" style="--i:2" id="calAgenda">${agendaHtml(sel, K, m)}</div>
+    <div class="panel s4 cal-ag fs" style="--i:2" id="calAgenda"><div class="fs-in"><div class="fs-body">${agendaHtml(sel, K, m)}</div></div></div>
     <div class="panel s8" style="--i:3"><div class="ph"><span class="t"><b>Next 14 days</b></span></div><div class="n14">${next.map(({ d, o, hol }) => { const cu = cm[d] || []; const cnt = {}; for (const x of cu) cnt[x.kind] = (cnt[x.kind] || 0) + 1; const wd = new Date(d + 'T00:00:00').getDay(); const co = (o ? o.co : []).filter((x) => lane !== 'customers'); return `<div class="n14-r${wd === 6 || hol.length ? ' off' : ''}${d === t ? ' today' : ''}" data-calday="${d}"><span class="n14-d"><b>${esc(wk[wd])} ${Number(d.slice(8))}</b><small>${esc(B.fmtBs(B.adToBs(d), '.'))}</small></span><span class="n14-h">${hol.map((h) => `<span class="pill bad">${esc(h.day || h.n)}</span>`).join('')}${wd === 6 && !hol.length ? '<span class="pill grey">Saturday</span>' : ''}${co.map((x) => `<span class="pill ${['tax', 'reg', 'order'].includes(x.kind) ? 'warn' : 'blue'}">${x.ic} ${esc(x.t)}</span>`).join('')}</span><span class="n14-c">${lane !== 'company' ? KIND_ORDER.filter(([k]) => cnt[k] && k !== 'paid' && k !== 'done').map(([k, ic]) => `<span>${ic} ${cnt[k]}</span>`).join('') : ''}</span></div>`; }).join('')}</div></div>
-    <div class="panel s4" style="--i:4"><div class="ph"><span class="t"><b>Public holidays</b> · 2083, Pokhara</span></div><div class="mini-list">${upcoming.slice(0, 14).map(({ h, d, z }) => `<div class="item" data-calday="${d}"><span class="dot ${h.kind === 'all' ? 'r' : 'k'}"></span><div class="main"><div class="t">${esc(h.n)} <span class="muted">${esc(h.ne)}</span></div><div class="s">${esc(d.slice(5))}${z ? ' → ' + esc(z.slice(5)) : ''} · ${h.kind === 'all' ? 'office closed' : esc(h.who)}${h.region ? ' · ' + esc(h.region) + ' only' : ''}</div></div></div>`).join('')}</div>
-      <div class="muted" style="margin-top:8px">🟢 ${esc(CAL.HOLIDAY_SRC.G)} · ${esc(CAL.HOLIDAY_SRC.GK)}<br>🔴 ${CAL.HOLIDAY_GAPS.map(esc).join(' · ')}</div></div>
+    <div class="panel s4 fs" style="--i:4"><div class="fs-in"><div class="ph"><span class="t"><b>Public holidays</b> · 2083, Pokhara</span></div><div class="fs-body"><div class="mini-list">${upcoming.slice(0, 14).map(({ h, d, z }) => `<div class="item" data-calday="${d}"><span class="dot ${h.kind === 'all' ? 'r' : 'k'}"></span><div class="main"><div class="t">${esc(h.n)} <span class="muted">${esc(h.ne)}</span></div><div class="s">${esc(d.slice(5))}${z ? ' → ' + esc(z.slice(5)) : ''} · ${h.kind === 'all' ? 'office closed' : esc(h.who)}${h.region ? ' · ' + esc(h.region) + ' only' : ''}</div></div></div>`).join('')}</div>
+      <div class="muted" style="margin-top:8px">🟢 ${esc(CAL.HOLIDAY_SRC.G)} · ${esc(CAL.HOLIDAY_SRC.GK)}<br>🔴 ${CAL.HOLIDAY_GAPS.map(esc).join(' · ')}</div></div></div></div>
     ${dl.length ? `<div class="panel s12" style="--i:5"><div class="ph"><span class="t"><b>Deadlines</b> · next 4 months</span><span class="sp"></span><button class="a" data-report="settings">payday · payroll →</button></div><div class="scroll-x"><table class="tbl"><tr><th>By</th><th>Nepali date</th><th>What</th><th>Note</th><th></th></tr>${dl.map((x) => `<tr data-calday="${x.d}" style="cursor:pointer"><td class="mono">${esc(x.d)}</td><td class="mono">${esc(B.fmtBs(B.adToBs(x.d), '.'))}</td><td>${x.ic} <b>${esc(x.t)}</b></td><td class="muted">${esc(x.sub || '')}${CAL.isOff(m.hm, x.d) ? ' · ⚠️ falls on a day off' : ''}</td><td>${x.g || ''}</td></tr>`).join('')}</table></div></div>` : ''}
   </div>`;
 }
@@ -853,7 +863,7 @@ function pageDispatch(m) {
     return `<div class="dp-col" data-dcol="${esc(n)}"><div class="dp-h"><span class="avatar">${esc(n ? n.slice(0, 1).toUpperCase() : '?')}</span><div class="main"><b>${esc(n || 'Nobody yet')}</b><div class="muted">${xs.length} homes · <span class="pill ${lc}">${load} today</span></div></div>
       ${n && today.length ? `<select data-handover="${esc(n)}" title="Give today's jobs to someone else"><option value="">↪ today's jobs to…</option>${names.filter((q) => q !== n).map((q) => `<option value="${esc(q)}">${esc(q)}</option>`).join('')}</select>` : ''}</div>
       <div class="dp-load"><i style="width:${Math.min(100, (load / 8) * 100)}%" class="${lc}"></i></div>
-      <div class="dp-sub">Homes by tole · ${load} with a job today</div>${Object.entries(byT).sort((a, b) => b[1].length - a[1].length).map(([tl, ys]) => { const hot = dlast && dlast.to === n && ys.some((x) => dlast.cids.has(x.c.id)); const jobs = ys.filter((x) => work.has(x.c.id)).length; return `<details${ys.length <= 4 || hot || jobs ? ' open' : ''}><summary>📍 ${esc(tl)} <span class="pill">${ys.length}</span>${jobs ? `<span class="pill warn">${jobs} today</span>` : ''}<button class="btn small ghost" data-dtole="${esc(tl)}" data-dfrom="${esc(n)}">tick all</button></summary>${ys.map(row).join('')}</details>`; }).join('') || '<div class="empty">—</div>'}</div>`;
+      <div class="dp-sub">Homes by tole · ${load} with a job today</div><div class="dp-scroll">${Object.entries(byT).sort((a, b) => b[1].length - a[1].length).map(([tl, ys]) => { const hot = dlast && dlast.to === n && ys.some((x) => dlast.cids.has(x.c.id)); const jobs = ys.filter((x) => work.has(x.c.id)).length; return `<details${ys.length <= 4 || hot || jobs ? ' open' : ''}><summary><span class="tl" title="${esc(tl)}">📍 ${esc(tl)}</span> <span class="pill">${ys.length}</span>${jobs ? `<span class="pill warn">${jobs} today</span>` : ''}<button class="btn small ghost" data-dtole="${esc(tl)}" data-dfrom="${esc(n)}">tick all</button></summary>${ys.map(row).join('')}</details>`; }).join('') || '<div class="empty">—</div>'}</div></div>`;
   };
   return `<div class="cc dispatch">
     <div class="panel s12 dp-bar" style="--i:0"><b>${dsel.size}</b>&nbsp;selected
@@ -861,7 +871,7 @@ function pageDispatch(m) {
       ${dmode === 'until' ? `<input type="date" id="dUntil" value="${esc(duntil)}" min="${esc(t)}">` : ''}
       <span class="muted">send to</span>${names.map((n) => `<button class="btn small" data-dsend="${esc(n)}" ${dsel.size ? '' : 'disabled'}>${esc(n)}</button>`).join('')}<button class="btn small ghost" data-dsend="" ${dsel.size ? '' : 'disabled'}>Nobody</button>
       <span class="sp"></span>${dsel.size ? '<button class="btn small ghost" data-dclear="1">Clear</button>' : ''}${dundo ? `<button class="btn small ghost" data-dundo="1">↩ Undo (${dundo.length})</button>` : ''}</div>
-    <div class="panel s12 dp-tip muted" style="--i:1">Drag a home onto a person, or tick several and press a name. <b>Just today</b> = a cover that ends tonight (sick day) · <b>Until</b> = a cover to a date · <b>From now on</b> = their regular person. Staff phones then show their own homes + the unassigned ones (Jun sees everything).
+    <div class="panel s12 dp-tip muted" style="--i:1"><span class="dp-tiptext">Drag a home onto a person, or tick several and press a name. <b>Just today</b> = a cover that ends tonight (sick day) · <b>Until</b> = a cover to a date · <b>From now on</b> = their regular person. Staff phones then show their own homes + the unassigned ones (Jun sees everything).</span>
       <span class="sp"></span><span class="dp-tole">Whole area: <select id="dTole"><option value="">tole…</option>${OPT.tole.filter((x) => x !== 'Other').map((x) => `<option>${esc(x)}</option>`).join('')}</select> → <select id="dToleTo"><option value="">person…</option>${names.map((n) => `<option>${esc(n)}</option>`).join('')}</select><button class="btn small" data-dtolemove="1">Move (from now on)</button></span></div>
     <div class="dp-board" style="--i:2">${[...cols, ...extra].map(col).join('')}</div>
   </div>`;
@@ -1078,9 +1088,9 @@ function pageLive(m) {
     ${panel('s3 kpi', 0, '<b>Done today</b>', `<div class="v">${counter('lvd', allDone)}</div><div class="sub"><span>${allPlan} still to go</span></div>`)}
     ${panel('s3 kpi', 1, '<b>Cash today</b>', `<div class="v">${counter('lvc', cash)}</div><div class="sub"><span>NPR · all methods</span></div>`)}
     ${panel('s3 kpi', 2, '<b>Out working</b>', `<div class="v">${L.filter((p) => p.state === 'working').length}</div><div class="sub"><span>saved something in the last 45 min</span></div>`)}
-    ${panel('s3 kpi', 3, '<b>Today</b>', `<div class="v" style="font-size:22px" data-noi18n>${esc(dualDate(t, new Date(t + 'T00:00:00').getDay()))}</div>`)}
+    ${(() => { const [d1, d2] = dualDate(t, new Date(t + 'T00:00:00').getDay()).split(' · '); return panel('s3 kpi', 3, '<b>Today</b>', `<div class="v" style="font-size:22px" data-noi18n>${esc(d1)}</div>${d2 ? `<div class="sub" data-noi18n><span>${esc(d2)}</span></div>` : ''}`); })()}
     ${panel('s7 r2', 4, '<b>Map</b> · last saved spot of each person · green = done today · grey = still to go', `<div id="mapBox" class="mapbox" style="height:560px"></div><div class="muted" style="margin-top:6px">📍 A spot is saved only when someone saves a record with location allowed — not tracked in between.</div>`)}
-    <div class="s5 lv-cards" style="--i:5">${L.map(card).join('') || '<div class="panel empty">No staff yet</div>'}</div>
+    <div class="s5 lv-cards fs-col" style="--i:5"><div class="fs-colin">${L.map(card).join('') || '<div class="panel empty">No staff yet</div>'}</div></div>
   </div>`;
 }
 function drawLive() {
@@ -1129,6 +1139,7 @@ const AUDIT_COL = { customers: '👤 Customer', payments: '💵 Payment', visits
 const MONEY_FIELDS = new Set(['amount', 'discount', 'depositRefunded', 'depositForfeited', 'approval', 'status', 'churnDate', 'type', 'customerId', 'perms', 'apprDiscountOver', 'apprRefundOver', 'apprWho']);
 const auditAt = (a) => (a.createdAt && a.createdAt.toMillis ? new Date(a.createdAt.toMillis()).toISOString() : String(a.at || '')); // server time; own unsent entries: the phone's
 const auditBy = (a) => userName(a.createdBy, a.createdBy ? '' : a.by); // the account that wrote it — the "by" text inside is not trusted
+const chgV = (f, v) => { const s = String(v ?? ''); if (!s) return '—'; const n = s.replace(/,/g, ''); return MONEY_FIELDS.has(f) && /^-?\d+(\.\d+)?$/.test(n) ? fmtN(Number(n)) : s; }; /* v0.17.0 (1) A6: "1,400 → 1100" read as two styles */
 function pageChanges(m) {
   ensureUsers(() => reDesk());
   const p = S.route.params || {}; const all = (m.D.audit || []).map((a) => ({ ...a, by: auditBy(a), at: auditAt(a) })).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
@@ -1146,7 +1157,7 @@ function pageChanges(m) {
       <div class="seg">${seg('aw', '', 'Everyone')}${who.map((w) => seg('aw', w, w)).join('')}</div>
       <div class="scroll-x"><table class="tbl chg"><tr><th>When</th><th>Who</th><th>What</th><th>Changed</th></tr>
       ${xs.slice(0, 300).map((a) => `<tr${a.customerId ? ` data-cust="${esc(a.customerId)}" style="cursor:pointer"` : ''}><td class="mono">${esc(String(a.at || '').slice(0, 16).replace('T', ' '))}</td><td>${esc(a.by || '—')}</td><td>${esc(AUDIT_COL[a.col] || a.col)}${a.customerId ? `<div class="muted">${esc(cn(a.customerId))}</div>` : ''}</td>
-        <td>${(a.fields || []).map((f) => `<div class="${MONEY_FIELDS.has(f) ? 'chg-money' : ''}" data-noi18n><b>${esc(f)}</b>: <span class="muted">${esc((a.before || {})[f] || '—')}</span> → ${esc((a.after || {})[f] || '—')}</div>`).join('')}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No edits yet — new records are not listed, only changes to saved ones.</td></tr>'}</table></div>`)}
+        <td>${(a.fields || []).map((f) => `<div class="${MONEY_FIELDS.has(f) ? 'chg-money' : ''}"><b>${esc(fieldLabel(a.col, f))}</b>: <span data-noi18n><span class="muted">${esc(chgV(f, (a.before || {})[f]))}</span> → ${esc(chgV(f, (a.after || {})[f]))}</span></div>`).join('')}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No edits yet — new records are not listed, only changes to saved ones.</td></tr>'}</table></div>`)}
     <div class="panel s12 muted" style="--i:5">Every edit of a saved record (and of Settings) writes one entry: who, when, and each field before → after. Entries cannot be changed or deleted (rules v0.8), and only you can read them. New records are not listed — they carry who made them.</div>
   </div>`;
 }
@@ -1199,8 +1210,8 @@ function pageWatch(m) {
       ${panel('', 6, '<b>Map</b> · red = first · orange = eye · faint = small signs', '<div id="mapBox" class="mapbox" style="height:320px"></div>')}
       ${panel('', 7, '<b>Most common signs</b>', Object.keys(reasonN).length ? hbars(Object.entries(reasonN).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([l, v]) => ({ l, v })), 'var(--warn)') : '<div class="empty">No signs</div>')}
       ${panel('', 8, '<b>Whose homes</b> · first + eye', Object.keys(who).length ? hbars(Object.entries(who).sort((a, b) => b[1] - a[1]).map(([l, v]) => ({ l, v })), 'var(--brand)') : '<div class="empty">Nobody here 🏖️</div>', isBoss() ? '<button class="a" data-side="dispatch">dispatch →</button>' : '')}
-      ${panel('', 9, '<b>How points are given</b>', `<div class="kv wt-rules">${Object.values(R.WATCH_SIGNS).map(([w, l]) => `<div class="k">${esc(l)}</div><div class="v">${w}</div>`).join('')}</div>
-        <div class="muted" style="margin-top:6px">🔴 Weights are a first guess. One late bill counts little: skipping a payment early is common in pay-as-you-go businesses. New homes get a point: the first 90 days carry most of the leaving.</div>`)}
+      ${panel('', 9, '<b>How points are given</b>', `<details class="wt-fold"><summary>${Object.keys(R.WATCH_SIGNS).length} signs · tap to see the points</summary><div class="kv wt-rules">${Object.values(R.WATCH_SIGNS).map(([w, l]) => `<div class="k">${esc(l)}</div><div class="v">${w}</div>`).join('')}</div>
+        <div class="muted" style="margin-top:6px">🔴 Weights are a first guess. One late bill counts little: skipping a payment early is common in pay-as-you-go businesses. New homes get a point: the first 90 days carry most of the leaving.</div></details>`)} ${/* v0.17.0 (5) B8: 16 rows always open → folded */ ''}
     </div>
   </div>`;
 }
@@ -1220,6 +1231,41 @@ function drawWatch() {
 
 // ---------- v0.15 milestone boards (Jun 10/3 "선적 트래커·게이트 보드 = 관제실 카테고리 · 등급 칸") ----------
 // Waiting made visible: who holds the ball and for how many days, what is due, how sure each date is. Finished boards sink to the bottom.
+// v0.17.0 (7) Jun 10/3 "기존거랑 비교해서 ㅈㄴ 불친절하고 뭔말하는지 모르겠음" → tracks × weeks like the 「네팔 착지 행정 지도」 artifact:
+// one row per board · weeks from Monday · a red line = today · colour = state · hatched = the office is closed most of that week · the list stays one click away
+const msView = () => { try { return localStorage.getItem('kfp_msview') === 'list' ? 'list' : 'tl'; } catch (e) { return 'tl'; } };
+function msTimeline(m, all, boards) {
+  const t = m.t; const off = Number((S.route.params || {}).wk) || 0; const N = 12; /* 12 weeks: 16 made one-week bars 77 px ("Com…") */
+  const mon = (d) => R.addDays(d, -((new Date(d + 'T00:00:00').getDay() + 6) % 7));
+  const w0 = R.addDays(mon(t), 7 * (off - 4)); const weeks = Array.from({ length: N }, (_, i) => R.addDays(w0, 7 * i));
+  const wi = (d) => Math.floor(R.daysBetween(w0, d) / 7); const nowI = wi(t);
+  const dead = weeks.map((w) => { let n = 0; for (let k = 0; k < 7; k++) { const d = R.addDays(w, k); if (new Date(d + 'T00:00:00').getDay() !== 6 && ((m.hm || {})[d] || []).some((h) => h.kind === 'all')) n++; } return n >= 4; });
+  const months = []; for (const w of weeks) { const k = w.slice(0, 7); if (months.length && months[months.length - 1].k === k) months[months.length - 1].n++; else months.push({ k, n: 1 }); }
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const gd = (g) => (String(g || '').startsWith('🟢') ? 'g' : String(g || '').startsWith('🟡') ? 'y' : 'r');
+  const md = (d) => (R.isDate(d) ? d.slice(5) : '');
+  const st = (x) => (x.state === 'Done' ? 'ok' : x.state === 'Blocked' || (R.isDate(x.due) && x.due < t) ? 'risk' : x.state === 'Waiting' ? 'wait' : 'acc');
+  const span = (x) => {
+    if (x.state === 'Done') { const d = [x.doneDate, x.since, x.due].find(R.isDate) || t; return [wi(d), wi(d)]; }
+    if (x.state === 'Waiting' || x.state === 'Blocked') { const a = R.isDate(x.since) ? wi(x.since) : nowI; return [a, Math.max(a, R.isDate(x.due) ? wi(x.due) : nowI)]; }
+    const d = R.isDate(x.due) ? x.due : t; return [wi(d), wi(d)];
+  };
+  const bar = (x) => { let [a, b] = span(x); const cutL = a < 0, cutR = b > N - 1; if (b < 0 || a > N - 1) { a = b = a > N - 1 ? N - 1 : 0; } a = Math.max(0, Math.min(N - 1, a)); b = Math.max(a, Math.min(N - 1, b)); if (b === a) { if (a < N - 1) b = a + 1; else a = a - 1; } /* at least two weeks wide so the name can be read */
+    const dd = R.isDate(x.since) ? R.daysBetween(x.since, t) : null;
+    const meta = x.state === 'Done' ? `✅ ${md(x.doneDate || x.since)}` : `${esc(x.who || '')}${(x.state === 'Waiting' || x.state === 'Blocked') && dd !== null ? ` · ${dd} d` : ''}${R.isDate(x.due) ? ` · ${x.due < t ? 'was due' : 'due'} ${md(x.due)}` : ''}`;
+    return `<button type="button" class="tl-bar s-${st(x)}" style="grid-column:${a + 1} / ${b + 2}" data-go-form="milestone" data-id="${esc(x.id)}"><span class="tl-t"><i class="dot ${gd(x.grade)}"></i>${cutL ? '‹ ' : ''}<span data-noi18n>${esc(x.title || '')}</span>${cutR ? ' ›' : ''}</span><em>${meta}</em></button>`; };
+  const frac = (nowI + (R.daysBetween(weeks[Math.max(0, Math.min(N - 1, nowI))], t) + 0.5) / 7) / N;
+  const rows = boards.map((bd) => { const xs = all.filter((x) => (x.board || 'Board') === bd).sort((p1, q1) => span(p1)[0] - span(q1)[0] || (Number(p1.order) || 0) - (Number(q1.order) || 0)); const open = xs.filter((x) => x.state !== 'Done').length;
+    return `<div class="tl-row"><div class="tl-lbl"><b data-noi18n>${esc(bd)}</b><span>${open} open · ${xs.length - open} done</span></div><div class="tl-lane">${xs.map(bar).join('') || '<span class="muted tl-none">—</span>'}</div></div>`; }).join('');
+  return `<div class="tl" style="--n:${N}">
+    <div class="tl-bg">${weeks.map((w, i) => `<i class="${i === nowI ? 'now' : ''}${dead[i] ? ' dead' : ''}"></i>`).join('')}</div>
+    <div class="tl-row tl-head"><div class="tl-lbl">Board</div><div class="tl-lane tl-months">${months.map((x) => `<b style="grid-column:span ${x.n}">${MON[Number(x.k.slice(5)) - 1]} ${x.k.slice(0, 4)}</b>`).join('')}</div></div>
+    <div class="tl-row tl-head tl-wk"><div class="tl-lbl"> </div><div class="tl-lane">${weeks.map((w, i) => `<span class="${i === nowI ? 'now' : ''}">${w.slice(5)}</span>`).join('')}</div></div>
+    ${rows || '<div class="empty">No boards yet — ＋ Board</div>'}
+    ${nowI >= 0 && nowI < N ? `<div class="tl-now" style="--f:${frac.toFixed(4)}"><span>today</span></div>` : ''}
+  </div>
+  <div class="glegend"><span><i class="lg s-ok"></i>done</span><span><i class="lg s-acc"></i>to do</span><span><i class="lg s-wait"></i>with them — from the day they got it</span><span><i class="lg s-risk"></i>blocked or past due</span><span><i class="lg dead"></i>office closed most of the week</span><span><i class="dot g"></i><i class="dot y"></i><i class="dot r"></i> how sure the date is</span></div>`;
+}
 function pageBoard(m) {
   const t = m.t; const all = arr('milestones'); const boards = msBoards();
   const p = S.route.params || {}; const sel = p.b && boards.includes(p.b) ? p.b : boards[0] || '';
@@ -1243,8 +1289,28 @@ function pageBoard(m) {
       ${x.state !== 'Done' ? `<button class="btn small ghost" data-msdone="${esc(x.id)}" title="Done">✓</button>` : `<button class="btn small ghost" data-msreopen="${esc(x.id)}" title="Open again">↩</button>`}
     </div>`; };
   const tabs = boards.map((b) => { const n = all.filter((x) => (x.board || 'Board') === b && x.state !== 'Done').length; return `<button data-msboard="${esc(b)}" class="${b === sel ? 'on' : ''}" data-noi18n>${esc(b)} <b>${n}</b></button>`; }).join('');
+  const view = p.v === 'list' || p.v === 'tl' ? p.v : msView(); const vseg = `<div class="seg ms-view"><button data-msview="tl" class="${view === 'tl' ? 'on' : ''}">📅 Timeline</button><button data-msview="list" class="${view === 'list' ? 'on' : ''}">☰ List</button></div>`;
+  if (view === 'tl') { /* v0.17.0 (7): every board at once, KPIs over all of them */
+    const openA = all.filter((x) => x.state !== 'Done'); const waitA = openA.filter((x) => x.state === 'Waiting' || x.state === 'Blocked'); const longA = waitA.slice().sort((a1, b1) => (days(b1) || 0) - (days(a1) || 0))[0];
+    const soonA = openA.filter((x) => R.isDate(x.due) && x.due <= R.addDays(t, 14)); const lateA = openA.filter((x) => R.isDate(x.due) && x.due < t); const doneA = all.length - openA.length;
+    const whoA = {}; for (const x of openA) { const k = x.who || 'Other'; whoA[k] = (whoA[k] || 0) + 1; }
+    const next = openA.filter((x) => R.isDate(x.due) && x.due <= R.addDays(t, 30)).sort((a1, b1) => a1.due.localeCompare(b1.due));
+    return `<div class="cc board">
+    <div class="panel s12 wt-bar" style="--i:0">${vseg}<span class="muted" style="margin-left:6px">all boards · weeks from Monday</span><span class="sp"></span>
+      <button class="btn small ghost" data-mswk="${(Number(p.wk) || 0) - 4}">‹ 4 weeks</button><button class="btn small ghost" data-mswk="0">Today</button><button class="btn small ghost" data-mswk="${(Number(p.wk) || 0) + 4}">4 weeks ›</button>
+      <button class="btn small" data-go-form="milestone" data-board="${esc(boards[0] || '')}">＋ Item</button><button class="btn small ghost" data-go-form="milestone" data-board="__new__">＋ Board</button></div>
+    ${panel('s3 kpi', 1, '<b>Waiting on others</b>', `<div class="v" style="color:${waitA.length ? 'var(--warn)' : 'inherit'}">${waitA.length}</div><div class="sub">${Object.entries(whoA).sort((a1, b1) => b1[1] - a1[1]).map(([k, n]) => `<span><span>${esc(k)}</span> ${n}</span>`).join('') || '<span>nobody</span>'}</div>`)}
+    ${panel('s3 kpi', 2, '<b>Longest wait</b>', `<div class="v" style="color:${longA && days(longA) > 14 ? 'var(--bad)' : 'inherit'}">${longA ? days(longA) + ' d' : '—'}</div><div class="sub">${longA ? `<span data-noi18n>${esc(longA.title)}</span>` : '<span>nothing waiting</span>'}</div>`)}
+    ${panel('s3 kpi', 3, '<b>Due in 14 days</b>', `<div class="v" style="color:${lateA.length ? 'var(--bad)' : soonA.length ? 'var(--warn)' : 'inherit'}">${soonA.length}</div><div class="sub">${lateA.length ? `<span style="color:var(--bad)">${lateA.length} past due</span>` : '<span>none past due</span>'}</div>`)}
+    ${panel('s3 kpi', 4, '<b>Done</b>', `<div class="v">${doneA} <span class="muted" style="font-size:16px">/ ${all.length}</span></div><div class="sub"><span>${all.length ? Math.round((doneA / all.length) * 100) : 0}% of all boards</span></div>`)}
+    ${panel('s12 tl-panel', 5, `<b>Timeline</b> · ${boards.length} boards · ${openA.length} open`, msTimeline(m, all, boards))}
+    ${panel('s4', 6, '<b>Who holds the ball</b> · open items', Object.keys(whoA).length ? hbars(Object.entries(whoA).sort((a1, b1) => b1[1] - a1[1]).map(([l, v]) => ({ l, v, color: l === 'Us' ? 'var(--brand)' : 'var(--warn)' })), 'var(--warn)') : '<div class="empty">—</div>')}
+    ${panel('s4', 7, '<b>Dates</b> · next 30 days', `<div class="mini-list">${next.map((x) => `<div class="item" data-go-form="milestone" data-id="${esc(x.id)}"><span class="dot ${String(x.grade || '').startsWith('🟢') ? 'g' : String(x.grade || '').startsWith('🟡') ? 'y' : 'r'}"></span><div class="main"><div class="t">${esc(x.due)} · <span data-noi18n>${esc(x.title)}</span></div><div class="s"><span data-noi18n>${esc(x.board || '')}</span> · ${esc(x.who || '')}</div></div></div>`).join('') || '<div class="empty">Nothing dated in the next 30 days</div>'}</div>`)}
+    ${panel('s4', 8, '<b>How to read it</b>', '<div class="muted">One row per board. A bar sits in the week of its date: done = the day it closed · with them = from the day they got it to the date they gave (or today) · to do = its due date. Red = blocked or past due. Click a bar to edit it. ☰ List = the old view with ✓ / ↩.</div>')}
+  </div>`;
+  }
   return `<div class="cc board">
-    <div class="panel s12 wt-bar" style="--i:0"><div class="seg">${tabs}</div><span class="sp"></span>
+    <div class="panel s12 wt-bar" style="--i:0">${vseg}<div class="seg">${tabs}</div><span class="sp"></span>
       <button class="btn small" data-go-form="milestone" data-board="${esc(sel)}">＋ Item</button><button class="btn small ghost" data-go-form="milestone" data-board="__new__">＋ Board</button>
       <label class="btn small ghost" style="margin:0">📥 Import JSON<input type="file" id="msImport" accept=".json,application/json" hidden></label>${sel ? `<button class="btn small ghost" data-msexport="${esc(sel)}">⬇️ JSON</button>` : ''}</div>
     ${panel('s3 kpi', 1, '<b>Waiting on others</b>', `<div class="v" style="color:${waiting.length ? 'var(--warn)' : 'inherit'}">${waiting.length}</div><div class="sub">${Object.entries(who).sort((a1, b1) => b1[1] - a1[1]).map(([k, n]) => `<span><span>${esc(k)}</span> ${n}</span>`).join('') || '<span>nobody</span>'}</div>`)}
@@ -1274,6 +1340,9 @@ document.addEventListener('click', (ev) => {
   if (!S.desk) return;
   const box = document.getElementById('deskSearchRes'); if (box && !ev.target.closest('#deskSearchRes') && ev.target.id !== 'deskSearch') box.classList.add('hidden');
   const mb = ev.target.closest('[data-msboard]'); if (mb) { S.route.params.b = mb.dataset.msboard; reDesk(); return; } /* v0.15 board tabs */
+  const mv = ev.target.closest('[data-msview]'); if (mv) { S.route.params.v = mv.dataset.msview; try { localStorage.setItem('kfp_msview', mv.dataset.msview); } catch (e) {} reDesk(); return; } /* v0.17.0 (7) */
+  const mw = ev.target.closest('[data-mswk]'); if (mw) { S.route.params.wk = Number(mw.dataset.mswk) || 0; reDesk(); return; }
+  const wt = ev.target.closest('[data-act="wardsToggle"]'); if (wt) { ev.preventDefault(); wardsToggle(); return; } /* v0.17.0 (6) */
   const cn = ev.target.closest('[data-act="chartNotes"]'); if (cn) { ev.preventDefault(); const wq = cn.closest('.chartw'); if (wq) wq.classList.toggle('notes-on'); return; } /* v0.15 */
   const s = ev.target.closest('[data-dseg]'); if (s) { S.route.params.f = s.dataset.dseg; reDesk(); return; }
   const so = ev.target.closest('th[data-sort]'); if (so) { S.route.params.sort = so.dataset.sort; reDesk(); return; }
@@ -1295,7 +1364,42 @@ document.addEventListener('keydown', (ev) => {
 // ---------- map (Leaflet, loaded on demand; kept alive across data refreshes) ----------
 let Lf = null, map = null, layer = null, view = null, mapEl = null, meLayer = null;
 export function showMe() { const h = hereNow(); if (map && meLayer && h) { drawMe(map, meLayer, h); map.setView([h.lat, h.lng], Math.max(map.getZoom(), 14)); } }
-export function dropMap() { if (!map) return; replayStop(true); watchFitKey = null; try { view = { c: map.getCenter(), z: map.getZoom() }; map.off(); map.remove(); } catch (e) {} map = null; layer = null; mapEl = null; meLayer = null; }
+// v0.17.0 (6) ward lines — OpenStreetMap admin_level 9 (Pokhara-01…33, ODbL, simplified ≈10 m · vendor/osm-pokhara-wards.json) 🟡 community data, not the government map
+let wardsGJ = null, wardLayer = null, wardLab = null, wardLabZoom = null;
+const wardsOn = () => { try { return localStorage.getItem('kfp_wards') !== '0'; } catch (e) { return true; } };
+function wardPoint(f) { /* label spot = centroid of the largest ring */
+  let best = null, ba = -1;
+  for (const poly of f.geometry.coordinates) { const r = poly[0]; let a = 0, cx = 0, cy = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const k = r[j][0] * r[i][1] - r[i][0] * r[j][1]; a += k; cx += (r[j][0] + r[i][0]) * k; cy += (r[j][1] + r[i][1]) * k; } if (Math.abs(a) > ba) { ba = Math.abs(a); best = a ? [cy / (3 * a), cx / (3 * a)] : [r[0][1], r[0][0]]; } }
+  return best;
+}
+async function drawWards() {
+  if (!map || !Lf) return;
+  const want = ['map', 'command'].includes(S.route.screen) && wardsOn() && !replay;
+  if (!want) { if (wardLayer) { map.removeLayer(wardLayer); wardLayer = null; } if (wardLab) { map.removeLayer(wardLab); wardLab = null; } return; }
+  if (!wardsGJ) { try { const r = await fetch('./vendor/osm-pokhara-wards.json'); wardsGJ = await r.json(); } catch (e) { return; } if (!map) return; }
+  if (!map.getPane('kfWards')) { const pn = map.createPane('kfWards'); pn.style.zIndex = 350; pn.style.pointerEvents = 'none'; }
+  if (!wardLayer) wardLayer = Lf.geoJSON(wardsGJ, { pane: 'kfWards', interactive: false, style: () => ({ color: '#9cc9ec', weight: 1.6, opacity: 0.75, dashArray: '6 5', fill: false }) }).addTo(map);
+  const z = map.getZoom(); const showLab = z >= 14;
+  if (wardLab && (!showLab || wardLabZoom !== z)) { map.removeLayer(wardLab); wardLab = null; }
+  if (showLab && !wardLab) { wardLab = Lf.layerGroup(wardsGJ.features.map((f) => Lf.marker(wardPoint(f), { pane: 'kfWards', interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', html: `<div class="wlab">Ward ${f.properties.ward}</div>`, iconSize: [70, 18], iconAnchor: [35, 9] }) }))).addTo(map); wardLabZoom = z; setTimeout(declutter, 0); }
+}
+function declutter() { /* labels that overlap step up / down / sideways; ward names give way to the tole badges */
+  if (!mapEl) return; /* layout sizes + Leaflet positions — getBoundingClientRect read the page-in animation (scaled) and missed overlaps */
+  const box = (el) => { const p = el.parentElement && el.parentElement._leaflet_pos; if (!p) return null; const w = el.offsetWidth, h = el.offsetHeight; return { left: p.x - w / 2, right: p.x + w / 2, top: p.y - h / 2, bottom: p.y + h / 2, width: w, height: h }; };
+  const placed = []; const hit = (r) => placed.some((p) => r.left < p.right + 2 && r.right > p.left - 2 && r.top < p.bottom + 2 && r.bottom > p.top - 2);
+  const els = [...mapEl.querySelectorAll('.mclu')].sort((a, b) => (Number(b.dataset.n) || 0) - (Number(a.dataset.n) || 0));
+  for (const el of els) {
+    el.style.transform = ''; const r0 = box(el); if (!r0) continue; const h = r0.height + 3, w = r0.width * 0.55;
+    const tries = [[0, 0]]; for (let k = 1; k <= 4; k++) tries.push([0, -k * h], [0, k * h], [k * w, 0], [-k * w, 0], [k * w, -k * h], [-k * w, -k * h], [k * w, k * h], [-k * w, k * h]); /* a widening ring: crowded centres (Newroad · Chipledhunga · Mahendrapul) ran out of the first 11 spots */
+    const over = (r) => placed.reduce((s, p) => s + Math.max(0, Math.min(r.right, p.right + 2) - Math.max(r.left, p.left - 2)) * Math.max(0, Math.min(r.bottom, p.bottom + 2) - Math.max(r.top, p.top - 2)), 0);
+    let pick = null, best = null; for (const [dx, dy] of tries) { const r = { left: r0.left + dx, right: r0.right + dx, top: r0.top + dy, bottom: r0.bottom + dy }; if (!hit(r)) { pick = [dx, dy, r]; break; } const o = over(r); if (!best || o < best[3]) best = [dx, dy, r, o]; }
+    const [dx, dy, r] = pick || best || [0, 0, r0]; if (dx || dy) el.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px)`; el.classList.toggle('moved', !!(dx || dy)); placed.push(r);
+  }
+  for (const el of mapEl.querySelectorAll('.wlab')) { el.style.visibility = ''; const r = box(el); if (!r) continue; if (hit(r)) el.style.visibility = 'hidden'; else placed.push(r); }
+}
+export const _map = () => map; /* selftest */
+export function wardsToggle() { const on = !wardsOn(); try { localStorage.setItem('kfp_wards', on ? '1' : '0'); } catch (e) {} drawWards(); for (const b of document.querySelectorAll('[data-act="wardsToggle"]')) b.classList.toggle('on', on); }
+export function dropMap() { if (!map) return; replayStop(true); watchFitKey = null; wardLayer = null; wardLab = null; try { view = { c: map.getCenter(), z: map.getZoom() }; map.off(); map.remove(); } catch (e) {} map = null; layer = null; mapEl = null; meLayer = null; }
 export async function mountMap(box) {
   if (!box) return;
   try { Lf = await loadLeaflet(); } catch (e) { box.innerHTML = '<div class="empty">Map library could not load.</div>'; return; }
@@ -1314,7 +1418,7 @@ export async function mountMap(box) {
 }
 function drawMarkers() {
   if (!map || replay) return [];
-  if (!map._kfZoomHook) { map._kfZoomHook = true; map.on('zoomend', () => { if (S.route.screen === 'map' && !replay) drawMarkers(); }); }
+  if (!map._kfZoomHook) { map._kfZoomHook = true; map.on('zoomend', () => { if (['map', 'command'].includes(S.route.screen) && !replay) drawMarkers(); }); }
   if (S.route.screen === 'live') { layer.clearLayers(); return drawLive(); }
   if (S.route.screen === 'watch') { layer.clearLayers(); return drawWatch(); }
   const m = model(); layer.clearLayers(); const pts = []; const clusters = {};
@@ -1337,7 +1441,8 @@ function drawMarkers() {
     const cl = clusters[toleOf(x.c)]; if (cl) { cl.lat += g.lat; cl.lng += g.lng; if (x.led.overdue) cl.late++; if (today) cl.due++; }
   }
   // zoomed out → one badge per tole (homes · late · today)
-  if (map.getZoom() <= 13) for (const [tl, cl] of Object.entries(clusters)) { if (!cl.n) continue; const mk = Lf.marker([cl.lat / cl.n, cl.lng / cl.n], { icon: Lf.divIcon({ className: '', html: `<div class="mclu"><b>${esc(tl)}</b><span>${cl.n}</span>${cl.late ? `<i class="r">${cl.late} late</i>` : ''}${cl.due ? `<i class="y">${cl.due} today</i>` : ''}</div>`, iconSize: [120, 34], iconAnchor: [60, 17] }), zIndexOffset: 800, interactive: false }); layer.addLayer(mk); }
+  if (map.getZoom() <= 15) for (const [tl, cl] of Object.entries(clusters)) { if (!cl.n) continue; const mk = Lf.marker([cl.lat / cl.n, cl.lng / cl.n], { icon: Lf.divIcon({ className: '', html: `<div class="mclu" data-n="${cl.n}"><b>${esc(tl)}</b><span>${cl.n}</span>${cl.late ? `<i class="r">${cl.late} late</i>` : ''}${cl.due ? `<i class="y">${cl.due} today</i>` : ''}</div>`, iconSize: [120, 34], iconAnchor: [60, 17] }), zIndexOffset: 800, interactive: false }); layer.addLayer(mk); }
+  drawWards(); setTimeout(declutter, 0); /* v0.17.0 (6) (3) Jun "조금만 확대해도 그거 바 다 사라져 · 지역 구분선" — badges up to zoom 15 (was 13), they step aside, ward lines */
   return pts;
 }
 

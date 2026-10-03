@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.16.0 (2026-10-03)';
+export const APP_VERSION = 'kf-v0.17.0 (2026-10-03)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -156,11 +156,14 @@ export function normPhone(raw) {
 }
 export const custLabel = (c) => c ? `${c.name || '(no name)'} (${c.code || '?'})` : '(unknown customer)';
 export const toleOf = (c) => (c && (c.tole === 'Other' ? c.toleOther : c.tole)) || '—';
-export const waLink = (phone, text) => `https://wa.me/${String(phone || '').replace(/\D/g, '')}${text ? '?text=' + encodeURIComponent(text) : ''}`;
+export const waLink = (phone, text, demo = DEMO) => `https://wa.me/${demo ? '' : String(phone || '').replace(/\D/g, '')}${text ? '?text=' + encodeURIComponent(text) : ''}`; /* v0.17.0 (9) E2: practice opens WhatsApp without a number — the demo numbers look like real people's */
 // ---- 🛵 "On my way" (v0.8 #7): a WhatsApp before leaving; stamped on the visit when it is saved (omwAt) so the desk can compare wasted trips with and without it
 const OMW = 'kfp_omw';
 export const OMW_ETAS = [10, 20, 30, 45, 60];
 // English + Nepali in one message (no language field on customers). 🔴 Nepali lines need Tara's check — editable in Settings → WhatsApp messages.
+// v0.17.0 (8) visit-note buttons — "English | नेपाली", one per line (Settings → 📝 Visit note) · 🔴 the Nepali is a draft — Tara to check
+export const VISIT_LINES_DEFAULT = ['No leak — checked | चुहावट छैन — जाँच गरियो', 'Leak fixed (O-ring) | चुहावट मर्मत गरियो (ओ-रिङ)', 'PP filter colour checked — still fine | PP फिल्टरको रङ जाँचियो — अझै ठीक छ', 'UF backwashed | UF ब्याकवास गरियो', 'A part is needed — we will come back | पार्टपुर्जा चाहिन्छ — हामी फेरि आउँछौं', 'Weak flow — we check it at the next visit | पानी कम आउँछ — अर्को भ्रमणमा जाँच्छौं'];
+export function visitLines() { const raw = String(S.settings.visitLines || '').trim(); const ls = (raw ? raw.split('\n') : VISIT_LINES_DEFAULT).map((l) => { const [en, ...ne] = l.split('|'); return { en: String(en || '').trim().slice(0, 80), ne: ne.join('|').trim().slice(0, 90) }; }).filter((x) => x.en); return ls.slice(0, 12); }
 export const MSG_DEFAULTS = {
   omwEn: 'Namaste {name} ji 🙏 This is {tech} from KORA CARE. I am on my way for your water purifier visit — about {eta} minutes. If now is not a good time, reply here.',
   omwNe: 'नमस्ते {name} जी 🙏 म KORA CARE बाट {tech}। तपाईंको पानी प्युरिफायर भ्रमणका लागि आउँदैछु — करिब {eta} मिनेटमा। अहिले मिल्दैन भने यहीँ जवाफ दिनुहोस्।',
@@ -312,6 +315,12 @@ function stampPlace(col, data) {
   if (!PLACE_COLS.has(col)) return data;
   const h = G.hereNow(10 * 60e3);
   return h ? { ...data, savedAt: { lat: Number(h.lat.toFixed(5)), lng: Number(h.lng.toFixed(5)), acc: h.acc ? Math.round(h.acc) : null, t: Date.now() } } : { ...data, savedAtT: Date.now() };
+}
+let FIELD_L = null;
+export function fieldLabel(col, k) { /* v0.17.0 (1) A6 */
+  if (!FIELD_L) { FIELD_L = {}; for (const f of Object.values(FORMS)) { let sp = []; try { sp = (typeof f.spec === 'function' ? f.spec() : f.spec) || []; } catch (e) { sp = []; } for (const q of sp) if (q && q.k && q.l) { if (!FIELD_L[(f.col || '') + '|' + q.k]) FIELD_L[(f.col || '') + '|' + q.k] = q.l; if (!FIELD_L['|' + q.k]) FIELD_L['|' + q.k] = q.l; } } }
+  const own = { techNames: 'Technician names', perms: 'Rights', toles: 'Areas', role: 'Account status', fullName: 'Full name' };
+  return FIELD_L[(col || '') + '|' + k] || own[k] || FIELD_L['|' + k] || String(k).replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().replace(/\b(tds|gps|vat|pan|pp|uf|cto|uv|id|qr)\b/g, (x) => x.toUpperCase()).replace(/^./, (c) => c.toUpperCase());
 }
 // ---- change log (v0.8 security): every edit of a saved record leaves one append-only entry (who · when · field: before → after) — the admin reads it
 const AUDIT_SKIP = new Set(['updatedAt', 'updatedBy', 'createdAt', 'createdBy', '_pending', '_localT', 'savedAt', 'savedAtT', 'id']);
@@ -568,7 +577,7 @@ function field(f, v) {
   switch (f.t) {
     case 'chips': {
       const sel = f.multi ? (Array.isArray(val) ? val : []) : [val];
-      input = `<div class="chips" data-group="${f.k}" data-multi="${f.multi ? 1 : 0}">` + opts.map((o) => `<button type="button" class="chip${sel.includes(o) ? ' on' : ''}" data-v="${esc(o)}">${esc((f.lbl && f.lbl[o]) || o)}</button>`).join('') + '</div>'; break; /* lbl = what is shown; the saved value stays o */
+      input = `<div class="chips" data-group="${f.k}" data-multi="${f.multi ? 1 : 0}"${f.noi18n ? ' data-noi18n' : ''}>` + opts.map((o) => `<button type="button" class="chip${sel.includes(o) ? ' on' : ''}" data-v="${esc(o)}">${esc((f.lbl && f.lbl[o]) || o)}</button>`).join('') + '</div>'; break; /* lbl = what is shown; the saved value stays o */
     }
     case 'checks': {
       const sel = Array.isArray(val) ? val : [];
@@ -601,7 +610,8 @@ function field(f, v) {
     default:
       input = `<input id="f_${f.k}" name="${f.k}" type="${f.t}" value="${esc(val)}" placeholder="${esc(f.ph || '')}" ${f.t === 'tel' ? 'inputmode="tel"' : ''} autocomplete="off">`;
   }
-  return `<div class="fld" data-k="${f.k}">${lab}${input}${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}<div class="err hidden"></div><div class="warn hidden"></div></div>`;
+  const w1 = ['text', 'tel', 'number', 'date', 'time', 'email', 'select', 'month', 'url'].includes(f.t) || (f.t === 'chips' && !f.multi && (opts || []).length <= 3 && (opts || []).every((o) => String((f.lbl && f.lbl[o]) || o).length <= 16)); /* v0.17.0 (4) B3 */
+  return `<div class="fld${w1 ? ' w1' : ''}" data-k="${f.k}">${lab}${input}${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}<div class="err hidden"></div><div class="warn hidden"></div></div>`;
 }
 function readForm(form, spec) {
   const v = {};
@@ -856,6 +866,9 @@ FORMS.visit = {
     { k: 'issuedFrom', l: 'Parts came from', t: 'chips', o: ['my bag', 'shelf'], def: 'my bag', show: (v) => !R.isNoShow(v) && (v.parts || []).length > 0, hint: 'My bag = issued to me this morning. Shelf = taken straight from stock.' },
     { k: 'partsUsed', l: 'Other parts / extra quantity', t: 'text', ph: 'e.g. O-ring ×2, fitting ×1', show: (v) => !R.isNoShow(v) },
     { k: 'sanitised', l: 'Pipes sanitised on this visit?', t: 'chips', o: OPT.yesNo, hint: 'Full pipe sanitisation every 3 months.', show: (v) => !R.isNoShow(v) },
+    { t: 'section', k: 'secCust', l: 'For the customer (visit note)', hint: 'Tap what you did — it goes on the visit note in English and Nepali. Anything else: one line in English or Nepali; the other language is added once the visit reaches the server.', show: (v) => !R.isNoShow(v) }, /* v0.17.0 (8) */
+    { k: 'custPick', l: 'What we did', t: 'chips', multi: 1, noi18n: 1, o: () => visitLines().map((x) => x.en), show: (v) => !R.isNoShow(v) }, /* the button words are data (Settings) — not run through the UI dictionary */
+    { k: 'custNote', l: 'Anything else for the customer', t: 'text', ph: 'English or नेपाली — one short line', show: (v) => !R.isNoShow(v) },
     { t: 'section', l: 'Next & who' },
     { k: 'nextVisitDate', l: 'Next visit date', t: 'date', hint: 'Required to complete. Suggested: monthly for 6 months after install, then every 3 months.', show: (v) => !R.isNoShow(v) },
     { k: 'technician', l: 'Technician', t: 'chips', o: techNames, req: 1, def: myName },
@@ -907,6 +920,9 @@ FORMS.visit = {
     const c = S.D.customers.get(v.customerId);
     const sig = v.sign; const data = { ...v, customerCode: c.code || '', customerName: c.name || '', oldCollected: v.oldCollected === 'Yes' ? true : v.oldCollected === 'No' ? false : null };
     delete data.sign; if (sig) { data.signed = true; data.noSign = ''; } else if (isNew || !(S.D.visits.get(id) || {}).signed) data.signed = false; /* an edit without a new signature keeps the old one */
+    { const VL = visitLines(); const prev = S.D.visits.get(id) || {}; data.custPick = (v.custPick || []).filter((en) => typeof en === 'string').slice(0, 6); /* v0.17.0 (8): both languages saved with the visit — a later edit of the buttons does not change old notes */
+      data.custLines = data.custPick.map((en) => { const q = VL.find((x) => x.en === en) || (Array.isArray(prev.custLines) ? prev.custLines.find((x) => x && x.en === en) : null); return { en, ne: q ? q.ne || '' : '' }; });
+      data.custNote = String(v.custNote || '').trim().slice(0, 200); if (!isNew && String(prev.custNote || '') !== data.custNote) data.custNoteTr = null; } /* a changed line waits for its new translation */
     if (isNew) { const e = omwFor(v.customerId, v.date); if (e) { data.omwAt = new Date(e.at).toISOString(); data.omwEta = e.eta; } } // "on my way" sent that day → stamped for the wasted-trip page
     const ok = save(`visits/${id}`, data, isNew);
     if (isNew && ok) omwClear(v.customerId);
@@ -1796,11 +1812,11 @@ function paintDrawer(dir, scroll) {
   let dr = $('#drawer');
   if (!dr) { const bg = document.createElement('div'); bg.id = 'drawerBg'; bg.className = 'drawer-bg'; document.body.appendChild(bg); dr = document.createElement('div'); dr.id = 'drawer'; dr.className = 'drawer'; document.body.appendChild(dr); }
   dr.classList.toggle('wide', ['list', 'report'].includes(S.drawer.screen) && !dr.classList.contains('full')); /* v0.15: centred modal — lists and reports get the wide one */
-  dr.innerHTML = drawerHead() + `<div class="dpage ${dir}">${screenHtml(S.drawer)}</div>`;
+  dr.innerHTML = drawerHead() + `<div class="dpage ${dir} scr-${esc(S.drawer.screen || '')}">${screenHtml(S.drawer)}</div>`;
   dr.scrollTop = scroll || 0;
   afterRender(dr, S.drawer);
 }
-function refreshDrawer() { const dr = $('#drawer'); if (!dr || !S.drawer) return; const st = dr.scrollTop; dr.innerHTML = drawerHead() + `<div class="dpage">${screenHtml(S.drawer)}</div>`; dr.scrollTop = st; afterRender(dr, S.drawer); }
+function refreshDrawer() { const dr = $('#drawer'); if (!dr || !S.drawer) return; const st = dr.scrollTop; dr.innerHTML = drawerHead() + `<div class="dpage scr-${esc(S.drawer.screen || '')}">${screenHtml(S.drawer)}</div>`; dr.scrollTop = st; afterRender(dr, S.drawer); }
 export function closeDrawer(silent) {
   if (!S.drawer) return; S.drawer = null; S.drawerStack = []; S.formPhotos = [];
   const bg = $('#drawerBg'), dr = $('#drawer'); if (bg) bg.remove(); if (dr) dr.remove();
@@ -1966,11 +1982,14 @@ export function watchItem(w, opts = {}) {
     <div class="wacts">${form && canForm(form) ? `<button class="btn small" data-go-form="${form}" data-cid="${esc(c.id)}"${form === 'checkin' ? ` data-kind="${esc(w.callKind || 'Follow-up call')}"` : ''}>${lab}</button>` : `<button class="btn small ghost" data-cust="${esc(c.id)}">${form ? '👤 Open' : lab}</button>`}<a class="btn small ghost" href="tel:${esc(c.phone)}" data-stop>📞</a><a class="btn small ghost" href="${esc(waLink(c.phone))}" target="_blank" rel="noopener" data-stop>💬</a><button class="btn small ghost" data-watchok="${esc(c.id)}|${w.score}" title="Checked — hide for 7 days unless it gets worse">✓ Checked</button></div></div></div>`;
 }
 // Message wording follows G-1 §1-3 (3 days before) with the actual amount of this bill.
-export function dunText(x) {
-  const d = x.dn; const n = (x.c.name || '').split(' ')[0]; const ref = x.c.code ? ` Please write ${x.c.code} in the Khalti / eSewa remark.` : ''; /* v0.11.1 (#9): the bank CSV match looks for the KC code first */
-  if (d.stage === 'reminder') return `Namaste ${n}! This is KORA CARE. Your water purifier bill of NPR ${Math.round(d.owed).toLocaleString('en-IN')} is due on ${d.bill.due}. You can pay by Khalti / eSewa QR.${ref} Thank you 🙏`;
-  if (d.stage === 'due') return `Namaste ${n}! Friendly reminder from KORA CARE: today's bill of NPR ${Math.round(d.owed).toLocaleString('en-IN')} is due. Khalti / eSewa QR works.${ref} Thank you 🙏`;
-  return `Namaste ${n}, this is KORA CARE. We have not received NPR ${Math.round(d.owed).toLocaleString('en-IN')} (due ${x.led.overdueSince}). Please pay by Khalti / eSewa QR, or call us if something is wrong with the purifier.${ref} Thank you 🙏`;
+export function dunText(x) { /* v0.17.0 (9) E3: the company bank QR (Jun 10/3 — no personal wallets) · English + Nepali · dates like the cards (AD + BS) · 🔴 Nepali drafts — Tara to check */
+  const d = x.dn; const n = (x.c.name || '').split(' ')[0]; const amt = Math.round(d.owed).toLocaleString('en-IN');
+  const ref = x.c.code ? ` Please write ${x.c.code} in the payment remark.` : '', refNe = x.c.code ? ` भुक्तानीको रिमार्कमा ${x.c.code} लेख्नुहोस्।` : ''; /* v0.11.1 (#9): the bank CSV match looks for the KC code first */
+  const when = (iso) => (R.isDate(iso) ? `${RC.niceDate(iso)} · ${RC.bsText(iso)}` : String(iso || '')); const whenNe = (iso) => (R.isDate(iso) ? RC.bsText(iso) : String(iso || ''));
+  const qr = 'scan the KORA CARE QR on your bill picture with any bank app', qrNe = 'बिलको तस्बिरमा भएको KORA CARE को QR जुनसुकै बैंकको एपबाट स्क्यान गर्नुहोस्';
+  if (d.stage === 'reminder') return `Namaste ${n} ji 🙏 This is KORA CARE. Your water purifier bill of NPR ${amt} is due on ${when(d.bill.due)}. To pay, ${qr}.${ref} Thank you 🙏\n\nनमस्ते ${n} जी 🙏 KORA CARE बाट। तपाईंको पानी प्युरिफायरको NPR ${amt} को बिल ${whenNe(d.bill.due)} मा तिर्नुपर्छ। तिर्न ${qrNe}।${refNe} धन्यवाद 🙏`;
+  if (d.stage === 'due') return `Namaste ${n} ji 🙏 A friendly reminder from KORA CARE: today's bill of NPR ${amt} is due. To pay, ${qr}.${ref} Thank you 🙏\n\nनमस्ते ${n} जी 🙏 KORA CARE बाट सम्झना: आज NPR ${amt} को बिल तिर्ने दिन हो। तिर्न ${qrNe}।${refNe} धन्यवाद 🙏`;
+  return `Namaste ${n} ji, this is KORA CARE. We have not received NPR ${amt} (due ${when(x.led.overdueSince)}). Please ${qr}, or call us if something is wrong with the purifier.${ref} Thank you 🙏\n\nनमस्ते ${n} जी, KORA CARE बाट। हामीले NPR ${amt} (${whenNe(x.led.overdueSince)} मा तिर्नुपर्ने) अझै पाएका छैनौं। कृपया ${qrNe}, वा प्युरिफायरमा केही समस्या छ भने हामीलाई फोन गर्नुहोस्।${refNe} धन्यवाद 🙏`;
 }
 export function reqItem(o) {
   const late = Date.now() > o.sla.replyBy, visitLate = Date.now() > o.sla.visitBy, old = Date.now() - (o.r.receivedAtMs || 0) > 3 * 864e5;
@@ -2233,8 +2252,9 @@ function csLayout() { /* v0.16.0 (7): 8 rows on screen, the rest behind "+N more
   const n = document.querySelector('[data-cards-todo]'); if (n) { n.textContent = `${rows.length} to send`; n.classList.toggle('warn', rows.length > 0); n.classList.toggle('ok', !rows.length); }
   if (!rows.length && !L.querySelector('.empty')) L.insertAdjacentHTML('beforeend', '<div class="empty">Nothing to send</div>');
 }
+const sentLabel = (on) => (on ? '✓ Sent · ↩ undo' : '✓ Sent — take it off the list'); /* v0.17.0 (1) (2): Jun "mark as sent가 뭐야" — say what the button does */
 function syncSentUi(key, on) { /* in place — re-rendering the modal would drop the picture */
-  for (const b of document.querySelectorAll('#rcBox [data-act="cardSent"]')) if (b.dataset.key === key) b.textContent = on ? '✓ Sent' : 'Mark as sent';
+  for (const b of document.querySelectorAll('#rcBox [data-act="cardSent"]')) if (b.dataset.key === key) { b.textContent = sentLabel(on); b.classList.toggle('on', !!on); }
   if (on) {
     let gone = 0; for (const r of document.querySelectorAll('[data-cardrow]')) if (r.dataset.cardrow === key) { r.remove(); gone++; }
     const sp = document.querySelector('[data-cards-sent]'); if (gone && sp) { const k = (Number(sp.dataset.cardsSent) || 0) + 1; sp.dataset.cardsSent = String(k); sp.textContent = `${k} sent`; }
@@ -2243,14 +2263,14 @@ function syncSentUi(key, on) { /* in place — re-rendering the modal would drop
 }
 async function cardSpec(kind, id) {
   const co = { name: S.settings.coName || 'Kora Care Private Limited', nameNe: S.settings.coNameNe || '', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '', bankLine: S.settings.coBankLine || '' };
-  let x, d, draw, name, alt;
+  let x, d, draw, name, alt, noteWait = false;
   if (kind === 'receipt') { const pay = S.D.payments.get(id); if (!pay) return null; x = model().cust.get(pay.customerId); if (!x) return { err: 'Customer not found' }; d = RC.receiptData(x, pay, co, [...S.D.payments.values()].filter((q) => q.customerId === pay.customerId), today()); draw = () => RC.drawReceipt(d); name = `${d.no}.png`; alt = 'receipt'; }
   else if (kind === 'referral') { x = model().cust.get(id); if (!x) return null; d = RC.referralData(x, co); draw = () => RC.drawReferralCard(d); name = `KORA-referral-${d.code || 'card'}.png`; alt = 'referral card'; }
-  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return null; x = model().cust.get(v.customerId); if (!x) return null; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; d = RC.visitData(x, v, co, ph, await staffWho(v.technician)); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; }
+  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return null; x = model().cust.get(v.customerId); if (!x) return null; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; d = RC.visitData(x, v, co, ph, await staffWho(v.technician)); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; noteWait = !!(d.note && d.note.waiting); }
   else if (kind === 'bill') { x = model().cust.get(id); if (!x) return null; d = RC.billData(x, co, await qrImage(), today()); if (!d) return { err: 'No bill to show for this home' }; draw = () => RC.drawBillCard(d); name = `KORA-bill-${d.code || ''}-${today()}.png`; alt = 'bill with QR'; } /* v0.16 #7 */
   else if (kind === 'install') { x = model().cust.get(id); if (!x) return null; const ph = await visitPhotos(`customers/${id}`); d = RC.installData(x, co, ph.before || ph.after || null, await staffWho(x.c.agent || myName())); draw = () => RC.drawInstallCard(d); name = `KORA-installed-${d.code || ''}.png`; alt = 'installed card'; }
   else return null;
-  return { kind, d, draw, name, alt, key: kind + '|' + id + '|' + JSON.stringify(d, imgKey), phone: (x && x.c && x.c.phone) || '', sentKey: ['receipt', 'visit', 'install'].includes(kind) ? kind + ':' + id : '' }; /* v0.16.0 (5): phone + sent key for the desk */
+  return { kind, d, draw, name, alt, key: kind + '|' + id + '|' + JSON.stringify(d, imgKey), phone: (x && x.c && x.c.phone) || '', sentKey: ['receipt', 'visit', 'install'].includes(kind) ? kind + ':' + id : '', noteWait }; /* v0.16.0 (5): phone + sent key for the desk */
 }
 async function cardImage(sp) {
   const hit = RC_CACHE.get(sp.key); if (hit) { RC_CACHE.delete(sp.key); RC_CACHE.set(sp.key, hit); return { ...hit, cached: true }; }
@@ -2275,12 +2295,21 @@ async function imageCard(kind, id) {
     const can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([r.blob], S.rcName, { type: 'image/png' })] }));
     const web = !!S.desk && /^\d{8,15}$/.test(String(S.rcPhone || '').replace(/\D/g, '')); /* v0.16.0 (5) ④ the desk sends through WhatsApp Web (the company account in Chrome) */
     const sk = S.desk ? S.rcSentKey : ''; /* ⑥ sent mark — desk only */
+    const hint = web ? 'Saves the picture and opens the customer chat in WhatsApp Web → drag the picture in' : can && !S.desk ? 'Share → choose WA Business → the customer' : 'Save, then send it from WhatsApp';
+    if (S.desk) { /* v0.17.0 (1) A2: picture left · buttons right — stacked under the picture they sat below a 990-px screen (y 1103 · 1225) */
+      box.innerHTML = `<div class="rc-desk"><img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(r.alt)}"><div class="rc-side">
+        ${web ? '<button type="button" class="btn ok" data-act="rcWaWeb">💬 WhatsApp Web</button>' : ''}
+        <a class="btn ghost rc-save" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
+        ${sk ? `<button type="button" class="btn ghost rc-sent${cardsSent()[sk] ? ' on' : ''}" data-act="cardSent" data-key="${esc(sk)}">${sentLabel(!!cardsSent()[sk])}</button>` : ''}
+        <div class="muted rc-hint">${hint}</div>${sk ? '<div class="muted rc-hint">✓ = it leaves 📨 Cards to send (this computer only)</div>' : ''}${sp.noteWait ? '<div class="warn rc-hint">📝 The note is not translated yet — it is added once the visit reaches the server. Open the card again in a minute.</div>' : ''}</div></div>`;
+      box.scrollIntoView({ block: 'start', behavior: 'smooth' }); return;
+    }
     box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(r.alt)}">
       ${web ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcWaWeb">💬 WhatsApp Web</button>` : ''}
       ${can && !S.desk ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcShare">📤 Share → WhatsApp</button>` : ''}${/* desk: no 📤 — the Mac share menu's WhatsApp may not be the company account */ ''}
       <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;width:100%;text-decoration:none;margin-top:8px" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
-      ${sk ? `<button type="button" class="btn ghost" style="display:block;width:100%;margin-top:8px" data-act="cardSent" data-key="${esc(sk)}">${cardsSent()[sk] ? '✓ Sent' : 'Mark as sent'}</button>` : ''}
-      <div class="muted" style="margin-top:6px;font-size:12px">${web ? 'Saves the picture and opens the customer chat in WhatsApp Web → drag the picture in' : can && !S.desk ? 'Share → choose WA Business → the customer' : 'Save, then send it from WhatsApp'}</div>`;
+      ${sk ? `<button type="button" class="btn ghost" style="display:block;width:100%;margin-top:8px" data-act="cardSent" data-key="${esc(sk)}">${sentLabel(!!cardsSent()[sk])}</button>` : ''}
+      <div class="muted" style="margin-top:6px;font-size:12px">${hint}</div>`;
     box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   } catch (e) { clearTimeout(slow); box.innerHTML = `<div class="muted">Could not make the image · ${esc(e && e.message || e)}</div>`; }
 }
@@ -2352,7 +2381,7 @@ function backupHtml() {
   const last = S.settings.lastBackupAt; const age = last ? R.daysBetween(last, today()) : null;
   return `<div class="sumgrid"><div><span>Last backup</span><b class="num">${last ? esc(last) : '—'}</b></div><div><span>Days ago</span><b class="num" style="color:${age === null || age > 7 ? 'var(--bad)' : 'var(--ok)'}">${age === null ? 'never' : age}</b></div><div><span>Records now</span><b class="num">${COLS.reduce((n, c) => n + S.D[c].size, 0)}</b></div><div><span>Done by</span><b>${esc(S.settings.lastBackupBy || '—')}</b></div></div>
     <div class="card"><div class="status" style="font-size:15px">💾 Back up everything now</div><div class="muted" style="margin:6px 0 10px">One Excel file (a sheet per table, easy to read) + one JSON file (the complete copy). Both go to the Downloads folder of this computer — keep them in the vault / Google Drive. The bell reminds you after 7 days.</div>
-      <label class="ck-line"><input type="checkbox" id="bkPhotos"> include photos (bigger file)</label><button class="btn" data-act="backupNow">💾 Back up now</button></div>
+      <label class="chk-line"><input type="checkbox" id="bkPhotos"> <span>include photos (bigger file)</span></label><button class="btn" data-act="backupNow">💾 Back up now</button></div>
     <div class="card"><div class="status" style="font-size:15px">📂 Check a backup file</div><div class="muted" style="margin:6px 0 10px">Opens a JSON backup and compares its record counts with today — nothing is written back.</div><input type="file" accept=".json,application/json" id="bkCheck"><div id="bkCheckBox"></div></div>
     <div class="card"><div class="status" style="font-size:15px">🛡️ Server-side backup (recommended too)</div><div class="muted" style="margin-top:6px">Firestore can take its own scheduled backups (daily or weekly, kept up to 14 weeks) and point-in-time recovery for 7 days — this needs the Blaze plan and is switched on in the Firebase console (Firestore → Disaster recovery / Backups). The file backup above works on any plan.</div></div>`;
 }
@@ -2531,7 +2560,7 @@ function viewStatus() {
   const lst = (r, ic, l, s, ok = true) => (ok ? [{ attr: `data-list="${r}"`, ic, l, s }] : []);
   const money = can('money');
   return `<h1>Status</h1>${statusCard()}
-  <div class="card"><div class="status" style="font-size:15px;justify-content:space-between"><span data-noi18n>🌐 Language · 언어 · भाषा</span> ${langSeg()}</div>${!S.desk && window.innerWidth >= 600 ? '<div class="muted" style="margin-top:6px">🖥️ The command centre opens when this window is at least 960 px wide — make the browser window wider (or full screen).</div>' : ''}</div>
+  <div class="card lang-card"><div class="status" style="font-size:15px;justify-content:space-between"><span data-noi18n>🌐 Language · 언어 · भाषा</span> ${langSeg()}</div>${!S.desk && window.innerWidth >= 600 ? '<div class="muted" style="margin-top:6px">🖥️ The command centre opens when this window is at least 960 px wide — make the browser window wider (or full screen).</div>' : ''}</div>
   <h2>🔔 Alerts <span class="pill ${m.alerts.length ? 'bad' : 'ok'}">${m.alerts.length}</span></h2><div class="card flush">${alertsHtml(m)}</div>
   ${S.swWaiting ? '<button class="btn" data-act="swReload">⬆️ New version ready — tap to update</button>' : ''}
   <div class="card"><div class="grid2">
@@ -2743,6 +2772,8 @@ export function viewReport(p) {
       <label>Discount needs an OK above (NPR)</label><input name="apprDiscountOver" type="number" min="0" value="${esc(S.settings.apprDiscountOver ?? '')}" placeholder="${R.APPROVAL.discountOver} (every discount)">
       <label>Deposit refund needs an OK above (NPR)</label><input name="apprRefundOver" type="number" min="0" value="${esc(S.settings.apprRefundOver ?? '')}" placeholder="${R.APPROVAL.refundOver} (every refund)">
       <label>Who can give the OK</label><select name="apprWho">${['Admin only', 'Admin or money right'].map((o) => `<option value="${o}"${(S.settings.apprWho || R.APPROVAL.who) === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
+      <h3>📝 Visit note</h3>
+      <label>Buttons on the visit form (one per line: English | नेपाली)</label><textarea name="visitLines" rows="7" data-noi18n placeholder="${esc(VISIT_LINES_DEFAULT.join('\n'))}">${esc(S.settings.visitLines || '')}</textarea><div class="hint">Empty = the six default lines. 🔴 The Nepali needs Tara's check. A visit keeps the words it was saved with.</div>
       <h3>💬 WhatsApp messages</h3>
       <div class="hint">Words in {braces} are filled in: {name} first name · {tech} who is going · {eta} minutes · {time} when you were there · {retry} next try. Empty = the default text. 🔴 The Nepali default needs Tara's check.</div>
       ${[['omwEn', '🛵 On my way — English'], ['omwNe', '🛵 On my way — Nepali'], ['missEn', '🚪 Sorry we missed you — English'], ['missNe', '🚪 Sorry we missed you — Nepali']].map(([k2, l]) => `<label>${esc(l)}</label><textarea name="${k2}" rows="3" data-noi18n placeholder="${esc(MSG_DEFAULTS[k2])}">${esc(S.settings[k2] || '')}</textarea>`).join('')}
@@ -2809,7 +2840,7 @@ export function devicesHtml(m, p) {
   const cname = (id) => { const c = S.D.customers.get(id); return c ? c.name : ''; };
   const checks = m.devices.filter((d) => d.checkDue); const doa = m.devices.filter((d) => d.doaUntil && d.doaUntil >= m.t && d.status === 'At a customer');
   return `<div class="bs-chips"><button data-devf="all" class="${f === 'all' ? 'on' : ''}">All ${m.devices.length}</button>${R.DEVICE_STATES.map((st) => `<button data-devf="${esc(st)}" class="${f === st ? 'on' : ''}">${esc(st)} ${counts[st]}</button>`).join('')}</div>
-    ${checks.length ? `<div class="card" style="border-color:var(--warn)"><div class="warn">📦 ${checks.length} device(s) not checked yet — PI terms: inspect within 14 days of arrival (${esc(checks.map((d) => d.checkDue).sort()[0])} is the first deadline).</div></div>` : ''}
+    ${checks.length ? `<div class="warn">📦 ${checks.length} device(s) not checked yet — PI terms: inspect within 14 days of arrival (${esc(checks.map((d) => d.checkDue).sort()[0])} is the first deadline).</div>` : ''}
     ${doa.length ? `<div class="muted">🛡️ ${doa.length} installed device(s) still inside the 30-day dead-on-arrival claim window.</div>` : ''}
     <div class="muted"><span>Stock by count (stock movements):</span> <b>${m.metrics.stock.Device ?? 0}</b> · <span>In stock by serial:</span> <b>${counts['In stock']}</b>${(m.metrics.stock.Device ?? 0) !== counts['In stock'] ? ' <span>— different: register the serials of the shipment (Device event → Received).</span>' : ''}</div>
     ${can('stock') ? '<button class="btn" data-go-form="device">📦 Device event (arrival · check · refurbish)</button>' : ''}
@@ -2880,12 +2911,13 @@ function staffCard(u, mk) {
     ${own ? '<div class="hint">Your own account — Jun changes it.</div>' : ''}<div class="row wrap"${own ? ' hidden' : ''}>${u.role === 'staff' ? `<button class="btn" data-staffsave="${esc(u.uid)}">Save rights</button>${u.email ? `<button class="btn ghost" data-staffreset="${esc(u.email)}">📧 Password link</button>` : ''}<button class="btn ghost" data-staffrole="blocked" data-uid="${esc(u.uid)}">Block</button>` : u.role === 'blocked' ? `<button class="btn ghost" data-staffrole="staff" data-uid="${esc(u.uid)}">Unblock</button>` : `<button class="btn ok" data-staffsave="${esc(u.uid)}" data-approve="1">Approve with these rights</button><button class="btn ghost" data-staffrole="blocked" data-uid="${esc(u.uid)}">Block</button>`}</div>
   </div>`;
 }
-export function staffMatrix(users, admins = []) {
+export function staffMatrix(users, admins = [], sel = '') {
   const act = users.filter((u) => u.role === 'staff'); const me = String((S.user && S.user.email) || '').toLowerCase();
-  const adminRow = (nm) => `<tr><td><b>${esc(nm)}</b> <span class="pill blue">admin</span></td>${PERMS.map(() => '<td class="y">✓</td>').join('')}<td>all</td></tr>`;
+  const pick = (id) => (sel ? ` data-staffpick="${esc(id)}"${id === sel ? ' class="sel"' : ''}` : ''); /* v0.17.0 (3) B2: a row picks that person's card (desk) */
+  const adminRow = (nm, mine) => `<tr${mine ? pick('me') : ''}><td><b>${esc(nm)}</b> <span class="pill blue">admin</span></td>${PERMS.map(() => '<td class="y">✓</td>').join('')}<td>all</td></tr>`;
   return `<div class="scroll-x"><table class="tbl matrix"><tr><th>Who</th>${PERMS.map(([k, l]) => `<th title="${esc(l)}">${esc(PERM_SHORT[k])}</th>`).join('')}<th>Areas</th></tr>
-    ${adminRow(myName())}${admins.filter((u) => String(u.email || '').toLowerCase() !== me).map((u) => adminRow(u.name || u.email)).join('')}
-    ${act.map((u) => { const pr = u.perms || PRESETS.office.perms; return `<tr><td><b>${esc(u.name || u.email)}</b></td>${PERMS.map(([k]) => `<td class="${pr[k] ? 'y' : 'n'}">${pr[k] ? '✓' : '·'}</td>`).join('')}<td>${pr.seeAll ? 'all' : esc((u.toles || []).join(', ') || '—')}</td></tr>`; }).join('')}</table></div>`;
+    ${adminRow(myName(), true)}${admins.filter((u) => String(u.email || '').toLowerCase() !== me).map((u) => adminRow(u.name || u.email)).join('')}
+    ${act.map((u) => { const pr = u.perms || PRESETS.office.perms; return `<tr${pick(u.uid)}><td><b>${esc(u.name || u.email)}</b></td>${PERMS.map(([k]) => `<td class="${pr[k] ? 'y' : 'n'}">${pr[k] ? '✓' : '·'}</td>`).join('')}<td>${pr.seeAll ? 'all' : esc((u.toles || []).join(', ') || '—')}</td></tr>`; }).join('')}</table></div>`;
 }
 async function loadUsers() {
   const box = $('#drawer #usersBox') || $('#usersBox'); if (!box) return;
@@ -2896,10 +2928,21 @@ async function loadUsers() {
     const rows = all.filter((u, i) => !adm[i]).sort((a, b) => ({ pending: 0, staff: 1, blocked: 2 }[a.role] ?? 3) - ({ pending: 0, staff: 1, blocked: 2 }[b.role] ?? 3));
     S.usersCache = rows; const mk = R.monthKey(today());
     const box2 = $('#drawer #usersBox') || $('#usersBox'); if (!box2) return;
+    if (S.desk) { box2.innerHTML = staffDeskHtml(rows, admins, mk); return; }
     box2.innerHTML = newStaffHtml() + myCardHtml() + `<div class="card"><div class="status" style="font-size:15px">Who can do what</div>${staffMatrix(rows, admins)}</div>`
       + (rows.map((u) => staffCard(u, mk)).join('') || '<div class="card empty">No staff yet. Someone signs in with their email → they appear here as pending.</div>');
   } catch (e) { box.textContent = 'Could not load users: ' + (e.code || e.message); }
 }
+function staffDeskHtml(rows, admins, mk) { /* v0.17.0 (3) B2 · (6): one long phone column with 1,354-px buttons → new account on one line · pick a person on the left · their card on the right */
+  const others = rows.filter((u) => u.role !== 'staff'); /* pending · blocked: not in the rights table, picked from their own list */
+  const ids = ['me', ...rows.map((u) => u.uid)]; const first = (rows.find((u) => u.role === 'pending') || rows.find((u) => u.role === 'staff') || { uid: 'me' }).uid;
+  const sel = ids.includes(S.staffSel) ? S.staffSel : first; S.staffSel = sel;
+  const cards = myCardHtml().replace('class="card staff my"', `class="card staff my${sel === 'me' ? ' sel' : ''}"`) + rows.map((u) => staffCard(u, mk).replace('<div class="card staff"', `<div class="card staff${u.uid === sel ? ' sel' : ''}"`)).join('');
+  return `<div class="staff-desk"><div class="sd-top">${newStaffHtml()}</div>
+    <div class="sd-left"><div class="card"><div class="status" style="font-size:15px">Who can do what <span class="muted" style="font-weight:500;font-size:13px">· pick a person</span></div>${staffMatrix(rows, admins, sel)}</div>${others.length ? `<div class="card"><div class="status" style="font-size:15px">Waiting · blocked</div><div class="mini-list">${others.map((u) => `<div class="item${u.uid === sel ? ' sel' : ''}" data-staffpick="${esc(u.uid)}"><span class="dot ${u.role === 'pending' ? 'y' : 'k'}"></span><div class="main"><div class="t">${esc(u.name || '(no name yet)')}</div><div class="s">${esc(u.email || u.uid)} · ${esc(u.role)}</div></div></div>`).join('')}</div></div>` : ''}${rows.length ? '' : '<div class="card empty">No staff yet. Someone signs in with their email → they appear here as pending.</div>'}</div>
+    <div class="sd-right">${cards}</div></div>`;
+}
+export function staffPick(id) { S.staffSel = id; for (const c of document.querySelectorAll('.staff-desk .card.staff')) c.classList.toggle('sel', c.dataset.staff === id); for (const r of document.querySelectorAll('.staff-desk [data-staffpick]')) r.classList.toggle('sel', r.dataset.staffpick === id); }
 function readStaffCard(card) {
   const perms = {}; card.querySelectorAll('[data-perm]').forEach((b) => { perms[b.dataset.perm] = b.classList.contains('on') ? 1 : 0; });
   const toles = [...card.querySelectorAll('[data-area].on')].map((b) => b.dataset.area);
@@ -3068,6 +3111,7 @@ document.addEventListener('click', async (ev) => {
   const sz = t.closest('[data-snooze]'); if (sz) { ev.preventDefault(); snoozeAlert(sz.dataset.snooze, Number(sz.dataset.days) || 1); bump(); scheduleRender(); const bb = $('#bellBox'); if (bb && deskMod) setTimeout(() => { const b2 = $('#bellBox'); if (b2) b2.classList.remove('hidden'); }, 60); return; }
   const cl = t.closest('[data-cal]'); if (cl && S.desk) { ev.preventDefault(); const bb = $('#bellBox'); if (bb) bb.classList.add('hidden'); go('calendar', 'calendar', { d: cl.dataset.cal, mo: cl.dataset.cal.slice(0, 7) }); return; }
   const wo = t.closest('[data-watchok]'); if (wo) { ev.preventDefault(); const [cid, sc] = wo.dataset.watchok.split('|'); watchCheck(cid, Number(sc)); toast('✓ Checked — hidden for 7 days unless it gets worse'); scheduleRender(); return; }
+  const spk = t.closest('[data-staffpick]'); if (spk) { ev.preventDefault(); staffPick(spk.dataset.staffpick); return; } /* v0.17.0 (3) B2 */
   const om = t.closest('[data-omw]'); if (om) { ev.preventDefault(); const box = document.getElementById('omw_' + om.dataset.omw); if (box) { box.classList.toggle('hidden'); if (!box.classList.contains('hidden')) box.scrollIntoView({ block: 'nearest' }); } return; }
   const rms = t.closest('[data-rem-sent]'); if (rms) { remMark(rms.dataset.remSent); setTimeout(() => scheduleRender(), 400); } /* the link still opens WhatsApp */
   const oms = t.closest('[data-omw-sent]'); if (oms) { omwMark(oms.dataset.omwSent, oms.dataset.eta); setTimeout(() => { const b = document.getElementById('omw_' + oms.dataset.omwSent); if (b) b.classList.add('hidden'); toast('🛵 Marked "on my way" — it is saved with the visit'); }, 50); return; }
@@ -3307,7 +3351,7 @@ document.addEventListener('submit', async (ev) => {
     const e = f.elements; const pan = e.coPan.value.replace(/\s/g, '');
     if (pan && !/^\d{9}$/.test(pan)) { toast('Company PAN has 9 digits'); return; }
     const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), coNameNe: e.coNameNe.value.trim().slice(0, 80), coBankLine: e.coBankLine.value.trim().slice(0, 120), referralCampaign: e.referralCampaign.value, filterMode: e.filterMode.value, bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
-      apprDiscountOver: e.apprDiscountOver.value.trim() === '' ? null : Math.max(0, Number(e.apprDiscountOver.value) || 0), apprRefundOver: e.apprRefundOver.value.trim() === '' ? null : Math.max(0, Number(e.apprRefundOver.value) || 0), apprWho: e.apprWho.value }; // numbers: the rules compare them
+      apprDiscountOver: e.apprDiscountOver.value.trim() === '' ? null : Math.max(0, Number(e.apprDiscountOver.value) || 0), apprRefundOver: e.apprRefundOver.value.trim() === '' ? null : Math.max(0, Number(e.apprRefundOver.value) || 0), apprWho: e.apprWho.value, visitLines: e.visitLines.value.trim().slice(0, 2000) }; // numbers: the rules compare them
     auditLog('settings', 'app', S.settings, data); save('settings/app', data, false); S.settings = { ...S.settings, ...data }; B.setOverrides(data.bsOverride); bump(); toast('Settings saved'); goBack();
   }
 });
@@ -3393,7 +3437,7 @@ if (DEMO) {
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
     S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, waWebUrl};
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, waWebUrl, msBoards };
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */

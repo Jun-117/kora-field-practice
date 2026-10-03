@@ -40,7 +40,7 @@ const money = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN');
 // receipt number: date + the tail of the payment id (unique per payment, stable across phones)
 export const receiptNo = (pay) => `R-${String(pay.date || '').replace(/-/g, '').slice(2)}-${String(pay.id || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase() || '0000'}`;
 const NE = { // 🔴 Nepali drafts — Tara to check
-  refer: 'छिमेकी ल्याउनुहोस्', half: 'तपाईंको अर्को बिल आधा मूल्य', code: 'तपाईंको कोड', report: 'भ्रमण नोट', next: 'अर्को भ्रमण', thanks: 'धन्यवाद', nextBill: 'अर्को बिल', person: 'तपाईंको KORA व्यक्ति', firstVisit: 'पहिलो भ्रमण',
+  refer: 'छिमेकी ल्याउनुहोस्', half: 'तपाईंको अर्को बिल आधा मूल्य', code: 'तपाईंको कोड', report: 'भ्रमण नोट', next: 'अर्को भ्रमण', thanks: 'धन्यवाद', nextBill: 'अर्को बिल', left: 'बाँकी', person: 'तपाईंको KORA व्यक्ति', firstVisit: 'पहिलो भ्रमण',
   installed: 'जडान भयो', isIn: 'तपाईंको KORA जडान भयो', came: 'आज हामी आयौं', receipt: 'भुक्तानी रसिद', creditNote: 'क्रेडिट नोट', total: 'जम्मा', customer: 'ग्राहक', codeK: 'कोड', bill: 'बिल', payBy: 'माध्यम', deposit: 'धरौटी',
   billDue: 'बिल तिर्ने', thisMonth: 'यो महिना', bankApp: 'बैंकको एप → ग्यालरीबाट QR स्क्यान', scan: 'स्क्यान गरी तिर्नुहोस्', paidQ: 'तिर्नुभयो? स्क्रिनसट पठाउनुहोस्',
 };
@@ -88,17 +88,26 @@ export function receiptData(x, pay, co = {}, pays = null, today = '') {
   const held = Math.round(paidBill ? led.bills.filter((b) => b.k <= paidBill.k).reduce((t, b) => t + (b.parts ? b.parts.deposit : 0), 0) : (led.depositCollected || 0)), segs = Math.max(0, Math.min(p.depositMonths, Math.round(held / p.depositMonthly)));
   const nb = nextOpen || (paidBill && after(paidBill)) || led.nextBill;
   const nbLeft = !nb ? 0 : nb === nextOpen ? Math.max(0, (Number(nb.amount) || 0) - (Number(nb.paid) || 0)) : Number(nb.amount) || 0; /* newest payment: what is left now · older receipt: the bill as it was */
+  const nbOver = !!(nb && nb === nextOpen && nbLeft > 0.5 && R.isDate(nb.due) && nb.due <= pay.date); /* v0.17.0 (9) E1: what is left on a bill already due when this was paid → "Still to pay", not "Next bill" (an older receipt keeps its old reading) */
   return {
     name: x.c.name || '', code: x.c.code || '', no: receiptNo(pay), date: niceDate(pay.date), bs: bsText(pay.date),
     method: credit ? String(pay.type || 'Credit') : (pay.method || ''), ref: credit ? '' : (pay.ref || ''), total: Number(pay.amount) || 0, lines, discount, discountNote, credit,
     bill: paidBill ? `${kLabel(paidBill)} · ${period(paidBill)}` : (sp.extra !== undefined ? String(pay.type || '') : '—'), billBs: paidBill ? periodBs(paidBill) : '',
     held, segs, depMonths: p.depositMonths, depTotal: p.depositTotal,
-    next: nb ? `${niceDate(nb.due)} · NPR ${money(nbLeft)}` : 'Paid up · सबै तिरिएको', nextBs: nb ? bsText(nb.due) : '',
+    next: nb ? (nbOver ? `NPR ${money(nbLeft)} · ${nb.due < pay.date ? 'was due' : 'due'} ${niceDate(nb.due)}` : `${niceDate(nb.due)} · NPR ${money(nbLeft)}`) : 'Paid up · सबै तिरिएको', nextBs: nb ? bsText(nb.due) : '', nextOver: nbOver, /* v0.17.0 (9) E1 */
     ...coOf(co),
   };
 }
 export function referralData(x, co = {}) {
   return { name: x.c.name || '', code: x.c.code || '', price: money(R.PRICES.monthly), half: money(Math.round(R.PRICES.monthly * REFERRAL_SHARE)), ...coOf(co) };
+}
+// v0.17.0 (8) the technician's own line — written in English or Nepali; the server adds the other language (Firebase extension "Translate Text in Firestore": visits.custNote → visits.custNoteTr {en, ne})
+const NE_VT = { 'Routine check': 'नियमित जाँच', 'Filter change': 'फिल्टर परिवर्तन', Repair: 'मर्मत', Sanitisation: 'सफाइ' }; /* 🔴 Nepali drafts — Tara to check */
+export function noteOf(v) {
+  const o = String((v && v.custNote) || '').trim(); if (!o) return null;
+  const tr = v.custNoteTr && typeof v.custNoteTr === 'object' ? v.custNoteTr : {}; const dev = /[ऀ-ॿ]/.test(o);
+  const en = String(tr.en || (dev ? '' : o)).trim().slice(0, 240), ne = String(tr.ne || (dev ? o : '')).trim().slice(0, 240);
+  return { en, ne, waiting: !(tr.en || tr.ne) };
 }
 export function visitData(x, v, co = {}, photos = {}, who = {}) {
   // v0.14 (Jun 10/3 #7): the visit NOTE — a record, not a proof. No TDS, no stamp. Rows = what we did; PP changed → the two photos slide in.
@@ -106,9 +115,10 @@ export function visitData(x, v, co = {}, photos = {}, who = {}) {
   const filters = v.filters || [];
   const rows = [];
   if (filters.length) rows.push({ ic: 'swap', bg: C.navy, tb: `${filters.join(', ')} filter${filters.length > 1 ? 's' : ''}`, t: ` — new ${filters.length > 1 ? 'ones' : 'one'} in`, s: `the old ${filters.length > 1 ? 'ones' : 'one'} taken away` });
-  else rows.push({ ic: 'drop', bg: C.navy, tb: `${v.visitType || 'Purifier'}`, t: ' — checked', s: 'flow and tap fine' });
-  if (v.sanitised === 'Yes') rows.push({ ic: 'clean', bg: C.blue, t: 'Housing and tube cleaned', s: '' });
-  if (f(v.flow) !== null || f(v.tdsAfter) !== null) rows.push({ ic: 'tap', bg: C.blue, t: 'Tap checked', s: '' });
+  else rows.push({ ic: 'drop', bg: C.navy, tb: `${v.visitType || 'Routine check'}`, t: ' — done', s: `${NE_VT[v.visitType] || NE_VT['Routine check']} — सकियो` }); /* v0.17.0 (8) Jun 10/3: the fixed "flow and tap fine" said what nobody had written down */
+  if (v.sanitised === 'Yes') rows.push({ ic: 'clean', bg: C.blue, t: 'Housing and tube cleaned', s: 'हाउसिङ र पाइप सफा गरियो' });
+  if (f(v.flow) !== null || f(v.tdsAfter) !== null) rows.push({ ic: 'tap', bg: C.blue, t: 'Tap checked', s: 'धारा जाँच गरियो' });
+  for (const q of (Array.isArray(v.custLines) ? v.custLines : []).slice(0, 6)) if (q && q.en) rows.push({ ic: 'check', bg: C.blue, t: String(q.en).slice(0, 80), s: String(q.ne || '').slice(0, 90) }); /* the buttons the technician tapped — both languages saved with the visit */
   const nextFilter = (x.fd || []).filter((q) => q.due && q.type !== 'Sanitise' && !filters.includes(q.type)).sort((p, q) => String(p.due).localeCompare(String(q.due)))[0]; /* a filter changed today is not the next one due */
   const nv = R.isDate(v.nextVisitDate) ? v.nextVisitDate : '';
   const pp = (x.fd || []).find((q) => q.type === 'PP');
@@ -116,7 +126,7 @@ export function visitData(x, v, co = {}, photos = {}, who = {}) {
   const fb = x.fb && x.fb.types && x.fb.types.some((q) => !filters.includes(q)) ? x.fb : null;
   const nextF = nv ? (fb && fb.date <= R.addDays(nv, 14) ? ' · filters' : !fb && nextFilter && nextFilter.due <= R.addDays(nv, 14) ? ' · ' + nextFilter.type + ' filter' : '') : '';
   return {
-    name: x.c.name || '', code: x.c.code || '', date: niceDate(v.date), bs: bsText(v.date), tech: who.name || v.technician || '', techPhoto: who.photo || null, rows,
+    name: x.c.name || '', code: x.c.code || '', date: niceDate(v.date), bs: bsText(v.date), tech: who.name || v.technician || '', techPhoto: who.photo || null, rows, note: noteOf(v),
     ppChanged: filters.includes('PP'), ppBefore: photos.before || null, ppAfter: photos.after || null,
     ppMonths: pp && R.isDate(pp.last) && R.isDate(v.date) && pp.last < v.date ? Math.max(1, Math.round(R.daysBetween(pp.last, v.date) / 30.44)) : null,
     next: nv ? `${niceDate(nv)}${nextF}` : '', nextBs: nv ? bsText(nv) : '', ...coOf(co),
@@ -197,6 +207,14 @@ function row(ctx, L, Rt, y, it) {
   if (!it.noLine) { ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, y + h); ctx.lineTo(Rt, y + h); ctx.stroke(); }
   return y + h;
 }
+function wrapLines(ctx, s, maxW, f, maxLines) { ctx.font = f; const out = []; let cur = ''; for (const w of String(s).split(/\s+/).filter(Boolean)) { const t2 = cur ? cur + ' ' + w : w; if (!cur || ctx.measureText(t2).width <= maxW) cur = t2; else { out.push(cur); cur = w; } } if (cur) out.push(cur); if (out.length > maxLines) { out.length = maxLines; out[maxLines - 1] = out[maxLines - 1].replace(/\s*\S*$/, '') + '…'; } return out; }
+function noteRow(ctx, L, Rt, y, n, last) { /* v0.17.0 (8): the free line, wrapped — English, the Nepali under it */
+  const tx = L + 41, mw = Rt - tx; const fe = font(500, 12), fn = font(400, 10.5);
+  const le = n.en ? wrapLines(ctx, n.en, mw, fe, 3) : [], ln = n.ne ? wrapLines(ctx, n.ne, mw, fn, 3) : [];
+  const h = 16 + le.length * 16 + ln.length * 14 + 6; dotIcon(ctx, L + 15, y + 22, 15, C.navy, 'chat', 14);
+  let yy = y + 21; for (const s of le) { text(ctx, s, tx, yy, { f: fe, color: C.ink }); yy += 16; } for (const s of ln) { text(ctx, s, tx, yy, { f: fn, color: C.mute }); yy += 14; }
+  if (!last) hline(ctx, L, Rt, y + h); return y + h;
+}
 function hline(ctx, L, Rt, y) { ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rt, y); ctx.stroke(); }
 // sky box with a date on the right — a second small line carries the Nepali date
 function nextBox(ctx, L, Rt, IW, y, label, value, valueBs) {
@@ -269,7 +287,7 @@ function paintReceipt(ctx, d, im, H) {
   const bx = L + 12, bw = IW - 24, by = y + 28, sw = bw / d.depMonths; for (let i = 0; i < d.depMonths; i++) { ctx.fillStyle = i < d.segs ? C.blue : '#fff'; rr(ctx, bx + i * sw, by, sw - 2, 7, 3); ctx.fill(); }
   dl.forEach((ln, i) => text(ctx, ln, L + 12, y + 50 + i * 12, { f: font(400, 9), color: C.skyInk }));
   y += dh + 10;
-  y += nextBox(ctx, L, Rt, IW, y, `Next bill · ${NE.nextBill}`, d.next, d.nextBs) + 16;
+  y += nextBox(ctx, L, Rt, IW, y, d.nextOver ? `Still to pay · ${NE.left}` : `Next bill · ${NE.nextBill}`, d.next, d.nextBs) + 16;
   return foot(ctx, d, L, Rt, IW, y, `Thank you · ${NE.thanks}`, 'Generated by KORA Field · The VAT bill number is on the tax invoice given at the door.');
 }
 export const drawReceipt = twoPass(paintReceipt);
@@ -300,7 +318,8 @@ function paintVisit(ctx, d, im, H) {
   y += 16 + 19; y = h1(ctx, L, y, 'We came by today.', '', NE.came, IW);
   y += 14; avatar(ctx, L, y, 19, d.techPhoto); text(ctx, d.tech || 'KORA CARE', L + 48, y + 16, { f: font(700, 12), color: C.navy, max: IW - 52 }); text(ctx, `your KORA person · ${NE.person}`, L + 48, y + 31, { f: font(400, 9.5), color: C.mute, max: IW - 52 });
   y += 38 + 12; hline(ctx, L, Rt, y);
-  d.rows.forEach((it, i) => { y = row(ctx, L, Rt, y, { ...it, noLine: i === d.rows.length - 1 && !d.ppChanged && !d.next }); }); /* no double rule above the footer */
+  d.rows.forEach((it, i) => { y = row(ctx, L, Rt, y, { ...it, noLine: i === d.rows.length - 1 && !d.ppChanged && !d.next && !d.note }); }); /* no double rule above the footer */
+  if (d.note) y = noteRow(ctx, L, Rt, y, d.note, !d.ppChanged && !d.next);
   if (d.ppChanged) { y += 12; const gw = (IW - 10) / 2, ph = 88; photoBox(ctx, L, y, gw, ph, d.ppBefore, d.ppMonths ? `used PP · ${d.ppMonths} months` : 'used PP', 26); photoBox(ctx, L + gw + 10, y, gw, ph, d.ppAfter, 'new PP', 26); y += ph + 26; }
   if (d.next) { y += 12; y += nextBox(ctx, L, Rt, IW, y, `Next visit · ${NE.next}`, d.next, d.nextBs); }
   y += 18; return foot(ctx, d, L, Rt, IW, y, `Thank you · ${NE.thanks}`, 'Anything wrong with the water or the purifier? WhatsApp us.');

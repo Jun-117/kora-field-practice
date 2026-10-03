@@ -583,8 +583,8 @@ export function requestSla(receivedMs, isHoliday = (d) => d.getDay() === 6) {
 }
 
 // ---------- referrals: G-1 §4 ----------
-// Referee: first month free (at sign-up). Referrer: one month free 3 months after the referee signed up,
-// only once the referee is installed and the install fee is paid (§4-2).
+// v0.15 (Jun 10/3): only during a campaign, only the referrer — half a month off a bill, 3 months after the new home signed up,
+// and only once that home is installed and its install fee is paid (§4-2). The new home gets nothing (G-1 §4 to update).
 export const REFERRAL_SHARE = 0.5; /* v0.15: the referrer gets half a month off (Tara 10/3 "한 달 무료는 너무 퍼주는거" → Jun "50% 추천인 쿠폰") */
 export const referralAmount = () => Math.round(PRICES.monthly * REFERRAL_SHARE);
 // on = Settings "Referral campaign" — off (the default) means no rewards, no card, no page: the campaign is switched on only when installs slow down (Jun 10/3)
@@ -1053,6 +1053,12 @@ export const LEAVE_REASONS = ['Moved away (outside our area)', 'Money — cannot
 export const medianOf = (list) => { const a = list.filter(Number.isFinite).slice().sort((x, y) => x - y); const n = a.length; return n ? (n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2) : null; };
 export const LATE_REASONS = ['Money not come in yet', 'No money this month', 'Forgot', 'Unhappy — held back', 'Other'];
 export const TENURE_BUCKETS = [[0, 2, '0–3 months'], [3, 5, '3–6 months'], [6, 11, '6–12 months'], [12, 23, '12–24 months'], [24, 1e9, '24+ months']];
+// v0.16 (outside-view #20 → Jun 10/3 ㄱㄱ): what getting the devices back costs — the cost field on the recovery case was asked and never shown
+export function recoveryCost(recoveries) {
+  const rs = (recoveries || []).filter((r) => Number(r.costNpr) > 0); const total = rs.reduce((s, r) => s + Number(r.costNpr), 0);
+  const back = (recoveries || []).filter((r) => r.outcome === 'Recovered' || r.outcome === 'Partial').length;
+  return { cases: (recoveries || []).length, withCost: rs.length, total: Math.round(total), perCase: rs.length ? Math.round(total / rs.length) : null, back };
+}
 export function leaverStats(customers, recoveries, today, p = PRICES) {
   const rec = new Map(); for (const r of recoveries || []) { const o = rec.get(r.customerId); if (!o || String(r.startedDate || '') > String(o.startedDate || '')) rec.set(r.customerId, r); }
   const rows = customers.filter((c) => c.status === 'Churned' && isDate(c.installDate)).map((c) => {

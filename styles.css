@@ -843,3 +843,9 @@ a.btn { display:inline-flex; align-items:center; justify-content:center; text-de
 @media (max-height: 1200px) { .side { gap:2px; padding:12px 10px; } .side button { padding:6px 12px; font-size:13.5px; } .side-grp { padding:7px 12px 2px; font-size:9px; } .side .side-lang { margin:6px 0; } .side .side-lang .lbl { display:none; } }
 @media (max-height: 1000px) { .side-grp { display:none; } .side button { padding:4px 12px; font-size:13px; } }
 .qr-prev img { width:72px; height:72px; border:1px solid var(--line); border-radius:8px; background:#fff; display:block; } .card.staff.my { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }
+/* v0.16.0 (5) desk: cards to send (Jun 10/3) */
+.cs-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); column-gap:22px; max-height:360px; overflow:auto; }
+.cs-list .item.cs-i { gap:8px; cursor:default; }
+.cs-i .btn.small { flex:none; }
+.cs-i.sent { opacity:.5; }
+.cs-list .empty { grid-column:1 / -1; }

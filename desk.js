@@ -4,7 +4,7 @@ import * as R from './logic.js';
 import * as B from './bs.js';
 import { langSegHtml, fmtDate, fmtTime, getLang, setLang } from './i18n.js';
 import { loadLeaflet, MAP_OPTS, TILE, POKHARA, addLocate, hereIfAllowed, drawMe, hereNow } from './geo.js';
-import { MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem } from './app.js';
+import { MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem, cardsSent } from './app.js';
 import * as CA from './capack.js';
 import * as CAL from './cal.js';
 import * as SIM from './sim.js';
@@ -314,6 +314,22 @@ function anomalyChips(m) {
   const xs = anomalies(m); if (!xs.length) return '';
   return `<div class="s12 anom">${xs.map((x) => `<button class="anom-c lv-${x.lvl}" ${x.go ? `data-side="${x.go}"` : x.list ? `data-list="${x.list}"` : x.cal ? `data-cal="${x.cal}"` : ''}><span>${x.ic}</span>${esc(x.t)}</button>`).join('')}</div>`;
 }
+// ---- v0.16.0 (5) · Jun 10/3 "요원은 밖에서 할거 ㅈㄴ많을탠데 … 일단 내가 하는거로. 맥으로": cards to send from the desk —
+// receipts (credit notes too), visit notes and installed cards of the last 14 days, not-yet-sent first. "Sent" lives on this computer (app.js cardsSent).
+export function cardsToSend(m, days = 14) {
+  const from = R.addDays(m.t, -days), sent = cardsSent(), out = [];
+  const inWin = (d) => R.isDate(d) && d >= from && d <= m.t;
+  for (const p of m.D.payments) { if (!(Number(p.amount) > 0) || !inWin(p.date)) continue; const x = m.cust.get(p.customerId); if (!x) continue; out.push({ key: 'receipt:' + p.id, kind: 'receipt', id: p.id, c: x.c, date: p.date, what: `${R.isNonCash(p) ? '🎁 Credit note' : '🧾 Receipt'} · ${R.npr(p.amount)}` }); }
+  for (const v of m.D.visits) { if (!String(v.status || '').includes('Completed') || !inWin(v.date)) continue; const x = m.cust.get(v.customerId); if (!x) continue; out.push({ key: 'visit:' + v.id, kind: 'visit', id: v.id, c: x.c, date: v.date, what: '📨 Visit note' + (v.visitType ? ' · ' + v.visitType : '') }); }
+  for (const x of m.cust.values()) { if (x.status === 'Churned' || !inWin(x.c.installDate)) continue; out.push({ key: 'install:' + x.c.id, kind: 'install', id: x.c.id, c: x.c, date: x.c.installDate, what: '🏠 Installed card' }); }
+  for (const e of out) e.sent = !!sent[e.key];
+  return out.sort((a, b) => (a.sent - b.sent) || String(b.date).localeCompare(String(a.date)));
+}
+function cardsPanel(m) {
+  const xs = cardsToSend(m, 14), todo = xs.filter((e) => !e.sent).length;
+  const row = (e) => `<div class="item cs-i${e.sent ? ' sent' : ''}" data-cardrow="${esc(e.key)}"><span class="dot ${e.sent ? 'g' : 'y'}"></span><div class="main"><div class="t">${esc(e.what)}</div><div class="s" data-noi18n>${esc(e.date)} · ${esc(e.c.name || '')} (${esc(e.c.code || '')})</div></div><button class="btn small" data-act="cardOpen" data-kind="${e.kind}" data-id="${esc(e.id)}" data-cid="${esc(e.c.id)}">🖼 Card</button><button class="btn small ghost" data-act="cardSent" data-key="${esc(e.key)}">${e.sent ? '↩ Not sent' : '✓ Sent'}</button></div>`;
+  return panel('s12', 6, '<b>📨 Cards to send</b> · last 14 days', `<div class="mini-list cs-list">${xs.slice(0, 48).map(row).join('') || '<div class="empty">Nothing to send</div>'}</div><div class="sub muted" style="margin-top:6px">Sent marks are kept on this computer only</div>`, `<span class="pill ${todo ? 'warn' : 'ok'}" data-cards-todo>${todo} to send</span>`);
+}
 function pageCommand(m) {
   const M = m.metrics, t = m.t;
   const weeks = M.weeks.map((w) => w.n);
@@ -347,6 +363,7 @@ function pageCommand(m) {
     ${panel('s8 r2', 4, '<b>Pokhara</b> · every household', `<div id="mapBox" class="mapbox" style="height:500px"></div><div class="legend">${legend()}<span class="muted">📍 your location</span></div>`, `<button class="a" data-side="map">full map →</button>`)}
     ${panel('s4', 5, '<b>Direction gate</b> · Plan B triggers', `<div class="gauges">${gauge(G.collection.value, G.collection.trigger, 'Collection', `${Math.round(G.collection.exposure)}/${G.collection.need} bills`, 'high', G.collection.judgeable)}${gauge(G.retention.value, G.retention.trigger, '90-day retention', `${G.retention.n}/${G.retention.need} homes`, 'high', G.retention.judgeable)}${gauge(G.churn.value, G.churn.trigger, 'Churn / month', `${Math.round(G.churn.exposure)}/${G.churn.need} hh-mo`, 'low', G.churn.judgeable)}</div>`, `<button class="a" data-report="gate">details →</button>`)}
     ${panel('s4', 6, '<b>FCL#1</b> · order signal', fclCard(F).replace('<div class="card">', '<div>'), `<button class="a" data-report="stock">stock →</button>`)}
+    ${cardsPanel(m)}
 
     ${panel('s4', 7, '<b>Collections</b> · G-1 §1-3 pipeline', `<div class="funnel">${stages.map((s, i) => `<div class="st"><span>${esc(s.d.short)}</span><div class="b"><i style="width:${(s.n / maxSt) * 100}%;background:${stColor[s.d.stage]};animation-delay:${i * 80}ms"></i></div><span class="n">${s.n}</span></div>`).join('')}</div><div class="sub muted" style="margin-top:8px">to chase: <b class="num">${fmtN(m.collections.reduce((s, x) => s + x.dn.owed, 0))}</b> NPR · 7+ days: ${M.due7} homes</div>`, `<button class="a" data-list="collections">list →</button>`)}
     ${panel('s4', 8, '<b>Field today</b> · visits due by tole', Object.keys(byTole).length ? `<div class="heat">${Object.entries(byTole).sort((a, b) => b[1] - a[1]).slice(0, 9).map(([k, n]) => `<div class="cell" data-list="visits"><div class="n">${n}</div><div class="l">📍 ${esc(k)}</div></div>`).join('')}</div>` : '<div class="empty">No visits due 🏖️</div>', `<button class="a" data-list="visits">list →</button>`)}

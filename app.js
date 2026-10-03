@@ -2208,6 +2208,29 @@ function qrImage() { const src = S.settings.coQr; if (!src) return Promise.resol
 const RC_CACHE = new Map(); const RC_MAX = 4; /* the PNG is kept, not the canvas — a 1440 × 2800 canvas is ~16 MB of phone memory */
 const imgKey = (k, v) => (v && typeof v === 'object' && typeof v.src === 'string' && 'naturalWidth' in v ? 'img:' + v.src.length : v);
 export const rcCacheKeys = () => [...RC_CACHE.keys()];
+// ---- v0.16.0 (5) · Jun 10/3 "일단 내가 하는거로. 맥으로": the customer cards go out from the desk for now (WhatsApp Web = the company account in Chrome).
+// Which cards are sent is kept on THIS computer only (localStorage) — no server field, no rules change · 60 days, then forgotten.
+const CARDS_SENT = 'kfp_cards_sent';
+export function cardsSent() { try { const v = JSON.parse(localStorage.getItem(CARDS_SENT) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } }
+export function markCardSent(key, on) {
+  const s = cardsSent(); if (on) s[key] = today(); else delete s[key];
+  const cut = R.addDays(today(), -60); for (const k of Object.keys(s)) if (!R.isDate(s[k]) || s[k] < cut) delete s[k];
+  try { localStorage.setItem(CARDS_SENT, JSON.stringify(s)); } catch (e) {}
+  return !!s[key];
+}
+export function waWebOpen(phone) { /* one named tab: the next card reuses it instead of opening WhatsApp Web again */
+  const d = String(phone || '').replace(/\D/g, ''); if (!d) return null;
+  try { return window.open('https://web.whatsapp.com/send?phone=' + d, 'kora-wa'); } catch (e) { return null; }
+}
+function syncSentUi(key, on) { /* in place — re-rendering the modal would drop the picture */
+  for (const r of document.querySelectorAll('[data-cardrow]')) {
+    if (r.dataset.cardrow !== key) continue; r.classList.toggle('sent', on);
+    const dot = r.querySelector('.dot'); if (dot) dot.className = 'dot ' + (on ? 'g' : 'y');
+    const b = r.querySelector('[data-act="cardSent"]'); if (b) b.textContent = on ? '↩ Not sent' : '✓ Sent';
+  }
+  for (const b of document.querySelectorAll('#rcBox [data-act="cardSent"]')) if (b.dataset.key === key) b.textContent = on ? '✓ Sent' : 'Mark as sent';
+  const n = document.querySelector('[data-cards-todo]'); if (n) n.textContent = `${document.querySelectorAll('.cs-i:not(.sent)').length} to send`;
+}
 async function cardSpec(kind, id) {
   const co = { name: S.settings.coName || 'Kora Care Private Limited', nameNe: S.settings.coNameNe || '', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '', bankLine: S.settings.coBankLine || '' };
   let x, d, draw, name, alt;
@@ -2217,7 +2240,7 @@ async function cardSpec(kind, id) {
   else if (kind === 'bill') { x = model().cust.get(id); if (!x) return null; d = RC.billData(x, co, await qrImage(), today()); if (!d) return { err: 'No bill to show for this home' }; draw = () => RC.drawBillCard(d); name = `KORA-bill-${d.code || ''}-${today()}.png`; alt = 'bill with QR'; } /* v0.16 #7 */
   else if (kind === 'install') { x = model().cust.get(id); if (!x) return null; const ph = await visitPhotos(`customers/${id}`); d = RC.installData(x, co, ph.before || ph.after || null, await staffWho(x.c.agent || myName())); draw = () => RC.drawInstallCard(d); name = `KORA-installed-${d.code || ''}.png`; alt = 'installed card'; }
   else return null;
-  return { kind, d, draw, name, alt, key: kind + '|' + id + '|' + JSON.stringify(d, imgKey) };
+  return { kind, d, draw, name, alt, key: kind + '|' + id + '|' + JSON.stringify(d, imgKey), phone: (x && x.c && x.c.phone) || '', sentKey: ['receipt', 'visit', 'install'].includes(kind) ? kind + ':' + id : '' }; /* v0.16.0 (5): phone + sent key for the desk */
 }
 async function cardImage(sp) {
   const hit = RC_CACHE.get(sp.key); if (hit) { RC_CACHE.delete(sp.key); RC_CACHE.set(sp.key, hit); return { ...hit, cached: true }; }
@@ -2238,12 +2261,16 @@ async function imageCard(kind, id) {
   try {
     const sp = await cardSpec(kind, id); if (!sp || sp.err) { clearTimeout(slow); if (sp && sp.err) toast(sp.err); box.classList.add('hidden'); return; }
     const r = await cardImage(sp); clearTimeout(slow);
-    S.rcCanvas = { width: r.w, height: r.h }; S.rcKind = kind; /* the size only — the picture itself is the PNG */ S.rcBlob = r.blob; S.rcUrl = r.url; S.rcName = r.name; S.rcFromCache = r.cached;
+    S.rcCanvas = { width: r.w, height: r.h }; S.rcKind = kind; /* the size only — the picture itself is the PNG */ S.rcBlob = r.blob; S.rcUrl = r.url; S.rcName = r.name; S.rcFromCache = r.cached; S.rcPhone = sp.phone || ''; S.rcSentKey = sp.sentKey || '';
     const can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([r.blob], S.rcName, { type: 'image/png' })] }));
+    const web = !!S.desk && /^\d{8,15}$/.test(String(S.rcPhone || '').replace(/\D/g, '')); /* v0.16.0 (5) ④ the desk sends through WhatsApp Web (the company account in Chrome) */
+    const sk = S.desk ? S.rcSentKey : ''; /* ⑥ sent mark — desk only */
     box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(r.alt)}">
-      ${can ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcShare">📤 Share → WhatsApp</button>` : ''}
-      <a class="btn ghost" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
-      <div class="muted" style="margin-top:6px;font-size:12px">${can ? 'Share → choose WhatsApp → the customer' : 'Save, then send it from WhatsApp'}</div>`;
+      ${web ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcWaWeb">💬 WhatsApp Web</button>` : ''}
+      ${can && !S.desk ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcShare">📤 Share → WhatsApp</button>` : ''}${/* desk: no 📤 — the Mac share menu's WhatsApp may not be the company account */ ''}
+      <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;width:100%;text-decoration:none;margin-top:8px" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
+      ${sk ? `<button type="button" class="btn ghost" style="display:block;width:100%;margin-top:8px" data-act="cardSent" data-key="${esc(sk)}">${cardsSent()[sk] ? '✓ Sent' : 'Mark as sent'}</button>` : ''}
+      <div class="muted" style="margin-top:6px;font-size:12px">${web ? 'Saves the picture and opens the customer chat in WhatsApp Web → drag the picture in' : can && !S.desk ? 'Share → choose WA Business → the customer' : 'Save, then send it from WhatsApp'}</div>`;
     box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   } catch (e) { clearTimeout(slow); box.innerHTML = `<div class="muted">Could not make the image · ${esc(e && e.message || e)}</div>`; }
 }
@@ -3137,6 +3164,9 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'rcInst') { ev.preventDefault(); imageCard('install', a.dataset.cid); }
   else if (act === 'rcBill') { ev.preventDefault(); ev.stopPropagation(); const cid = a.dataset.cid; if ($('#rcBox')) imageCard('bill', cid); else { nav('customers', 'detail', { id: cid }); setTimeout(() => imageCard('bill', cid), 450); } } /* v0.16 #7: from a list → open the home, then draw */
   else if (act === 'rcShare') { ev.preventDefault(); if (!S.rcBlob) return; const r = await RC.shareImage(S.rcBlob, S.rcName || 'receipt.png'); toast(r === 'shared' ? '✅ Shared' : r === 'unsupported' ? 'Sharing not available here — save the image' : 'Share cancelled'); }
+  else if (act === 'rcWaWeb') { ev.preventDefault(); if (!S.rcUrl) return; const w = waWebOpen(S.rcPhone); const dl = document.createElement('a'); dl.href = S.rcUrl; dl.download = S.rcName || 'kora-card.png'; document.body.appendChild(dl); dl.click(); dl.remove(); toast(w ? '⬇️ Saved · drag the picture into the chat' : 'Pop-up blocked — allow pop-ups for this site, then tap again'); } /* v0.16.0 (5) ④ */
+  else if (act === 'cardOpen') { ev.preventDefault(); const k = a.dataset.kind, id = a.dataset.id, cid = a.dataset.cid; if (!k || !id || !cid) return; nav('customers', 'detail', k === 'receipt' ? { id: cid, receipt: id } : k === 'visit' ? { id: cid, vrep: id } : { id: cid, inst: cid }); setTimeout(() => imageCard(k, id), 450); } /* ⑥ from the desk list: the home opens with the card drawn */
+  else if (act === 'cardSent') { ev.preventDefault(); const k = a.dataset.key; if (!k) return; const on = markCardSent(k, !cardsSent()[k]); syncSentUi(k, on); toast(on ? '✓ Marked as sent' : 'Marked as not sent'); } /* ⑥ */
   else if (act === 'demoWho') { if (DEMO) demoWho(); }
   else if (act === 'demoAs') { if (DEMO) demoAs(a.dataset.as || ''); }
   else if (act === 'demoReset') { if (!DEMO || !DEMO_KEEP) return; if (a.dataset.armed !== '1') { a.dataset.armed = '1'; a.textContent = 'Tap again — delete every practice record'; a.classList.add('danger'); return; } location.href = location.pathname + '?reset=1'; }

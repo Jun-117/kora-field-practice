@@ -2218,9 +2218,10 @@ export function markCardSent(key, on) {
   try { localStorage.setItem(CARDS_SENT, JSON.stringify(s)); } catch (e) {}
   return !!s[key];
 }
+// practice/demo: the numbers are made up ('+97798' + 8 random digits) and may belong to real people — never open their chat
+export const waWebUrl = (phone, demo = DEMO) => { const d = String(phone || '').replace(/\D/g, ''); return demo || !d ? 'https://web.whatsapp.com/' : 'https://web.whatsapp.com/send?phone=' + d; };
 export function waWebOpen(phone) { /* one named tab: the next card reuses it instead of opening WhatsApp Web again */
-  const d = String(phone || '').replace(/\D/g, ''); if (!d) return null;
-  try { return window.open('https://web.whatsapp.com/send?phone=' + d, 'kora-wa'); } catch (e) { return null; }
+  try { return window.open(waWebUrl(phone), 'kora-wa'); } catch (e) { return null; }
 }
 function syncSentUi(key, on) { /* in place — re-rendering the modal would drop the picture */
   for (const r of document.querySelectorAll('[data-cardrow]')) {
@@ -3164,7 +3165,7 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'rcInst') { ev.preventDefault(); imageCard('install', a.dataset.cid); }
   else if (act === 'rcBill') { ev.preventDefault(); ev.stopPropagation(); const cid = a.dataset.cid; if ($('#rcBox')) imageCard('bill', cid); else { nav('customers', 'detail', { id: cid }); setTimeout(() => imageCard('bill', cid), 450); } } /* v0.16 #7: from a list → open the home, then draw */
   else if (act === 'rcShare') { ev.preventDefault(); if (!S.rcBlob) return; const r = await RC.shareImage(S.rcBlob, S.rcName || 'receipt.png'); toast(r === 'shared' ? '✅ Shared' : r === 'unsupported' ? 'Sharing not available here — save the image' : 'Share cancelled'); }
-  else if (act === 'rcWaWeb') { ev.preventDefault(); if (!S.rcUrl) return; const w = waWebOpen(S.rcPhone); const dl = document.createElement('a'); dl.href = S.rcUrl; dl.download = S.rcName || 'kora-card.png'; document.body.appendChild(dl); dl.click(); dl.remove(); toast(w ? '⬇️ Saved · drag the picture into the chat' : 'Pop-up blocked — allow pop-ups for this site, then tap again'); } /* v0.16.0 (5) ④ */
+  else if (act === 'rcWaWeb') { ev.preventDefault(); if (!S.rcUrl) return; const w = waWebOpen(S.rcPhone); const dl = document.createElement('a'); dl.href = S.rcUrl; dl.download = S.rcName || 'kora-card.png'; document.body.appendChild(dl); dl.click(); dl.remove(); toast(!w ? 'Pop-up blocked — allow pop-ups for this site, then tap again' : DEMO ? 'Practice: made-up numbers, so no chat was opened' : '⬇️ Saved · drag the picture into the chat'); } /* v0.16.0 (5) ④ */
   else if (act === 'cardOpen') { ev.preventDefault(); const k = a.dataset.kind, id = a.dataset.id, cid = a.dataset.cid; if (!k || !id || !cid) return; nav('customers', 'detail', k === 'receipt' ? { id: cid, receipt: id } : k === 'visit' ? { id: cid, vrep: id } : { id: cid, inst: cid }); setTimeout(() => imageCard(k, id), 450); } /* ⑥ from the desk list: the home opens with the card drawn */
   else if (act === 'cardSent') { ev.preventDefault(); const k = a.dataset.key; if (!k) return; const on = markCardSent(k, !cardsSent()[k]); syncSentUi(k, on); toast(on ? '✓ Marked as sent' : 'Marked as not sent'); } /* ⑥ */
   else if (act === 'demoWho') { if (DEMO) demoWho(); }
@@ -3382,7 +3383,7 @@ if (DEMO) {
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
     S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys};
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, waWebUrl};
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */

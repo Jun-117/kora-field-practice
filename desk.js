@@ -12,6 +12,10 @@ export { loadLeaflet };
 
 const NPT = 'Asia/Kathmandu';
 const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN');
+// v0.17.2 (5) Jun 10/4 "그게 얼마인지 한화로 보여주면 좋을듯 … npr로도 나오고 (마우스 갖다대면)": money bars say the exact NPR and ≈ ₩ (Settings → NPR per KRW 100, Nepal Rastra Bank; empty = 11.30, 2 Oct 2026)
+export const FX_DEFAULT = 11.3;
+const fxRate = () => { const r = Number(S.settings && S.settings.fxKrw100); return r > 0 ? r : FX_DEFAULT; };
+export const moneyTip = (v) => `NPR ${fmtN(v)} · ≈ ₩${Math.round((Number(v) || 0) * 100 / fxRate()).toLocaleString('ko-KR')}`;
 const fmtK = (v) => { const a = Math.abs(v); if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M'; if (a >= 1000) return (a >= 1e4 ? String(Math.round(v / 1000)) : (v / 1000).toFixed(1).replace(/\.0$/, '')) + 'k'; return fmtN(v); }; /* v0.17.0 (2): one unit per axis — "1.0L" sat over "50k" (Jun 10/3 default: tables keep the lakh commas) */ /* L = lakh (v0.16: back from ' lakh' — the space broke the translated money lines) */
 const HEX = { g: '#2ee59d', y: '#ffcc4d', o: '#ff9a3d', r: '#ff5c5c', k: '#5d7085', b: '#6aa8ff' };
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -46,6 +50,7 @@ export function renderDesk(root, fresh) {
           <button class="kbtn" data-act="palette" title="Search & actions">⌘K</button>
           <button class="locbtn" data-act="locAsk" data-locstate="unknown" title="Allow location">📍</button>
           <div class="sp"></div>
+          <div id="deskUpd"></div>
           <div style="position:relative" id="bellWrap"></div>
           <button class="story-btn" data-act="story">▶ Story</button>
           <button class="kbtn" data-act="tv" title="TV mode — pages rotate every 20 s">📺</button>
@@ -68,6 +73,8 @@ export function renderDesk(root, fresh) {
       <button data-act="deskOff"><span class="i">📱</span>Phone view</button>
       <div class="foot">${esc(APP_VERSION)}${DEMO ? '<br><span style="color:var(--warn)">DEMO DATA</span>' : ''}<br>${esc(S.user.email)}<br><span class="muted">⌘K · Esc · ‹ Back</span></div>`;
   if (side !== last.side) { root.querySelector('#deskSide').innerHTML = side; last.side = side; }
+  { const upd = S.swWaiting ? '<button class="btn small ok" data-act="swReload" title="The new version is downloaded — this switches to it">⬆️ New version — update</button>' : ''; /* v0.17.2 (4) Jun 10/4 "본방 버전 왜 아직 0.10.2냐": the button was only on the phone's Status tab */
+    const u = root.querySelector('#deskUpd'); if (u && upd !== last.upd) { u.innerHTML = upd; last.upd = upd; } }
   root.querySelector('#deskTtl').innerHTML = `KORA <b>${esc(scr === 'report' ? 'Reports' : (SIDE.find((x) => x[0] === scr) || SIDE[0])[2])}</b> · Pokhara`;
   const nAl = liveAlerts(m).length;
   const bell = `<button class="bell" data-act="bell" title="Alerts">🔔${nAl ? `<span class="badge">${nAl}</span>` : ''}</button><div id="bellBox" class="card bellbox hidden">${alertsHtml(m)}</div>`;
@@ -90,6 +97,7 @@ export function renderDesk(root, fresh) {
   if (scr === 'staff') afterRender(pg, { screen: 'report', params: { r: 'users' } });
   if (scr === 'report') afterRender(pg, { screen: 'report', params: S.route.params || {} });
   if (scr === 'backup') afterRender(pg, { screen: 'report', params: { r: 'backup' } });
+  if (scr === 'board') msScrollInit(pg);
   if (isBoss() && (!S.fleetAt || Date.now() - S.fleetAt > (scr === 'phones' ? 60e3 : 600e3))) loadFleet(scr === 'phones'); // phones page: once a minute · elsewhere every 10 min (the 📱 alerts use it) — a load re-renders
   refreshLocBtn();
 }
@@ -207,7 +215,8 @@ function bars(vals, labels, color = 'var(--brand)', w = 560, h = 180, fmt = fmtN
   const { top: max, ticks } = niceAxis(Math.max(0, ...vals), vals.every((v) => Number.isInteger(v))); const pad = 34; const bw = (w - pad) / Math.max(1, vals.length);
   const showV = opts.vals !== false && vals.length <= 24; const T = showV ? 14 : 0; /* v0.17.0 (1) A5: room above the tallest bar for its number (it sat inside the bar) */
   const grid = ticks.map((v) => { const y = (h - 20 - T) * (1 - v / max) + 4 + T; return `<line class="grid" x1="${pad}" x2="${w}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="ax" x="0" y="${(y + 3).toFixed(1)}">${fmt(v)}</text>`; }).join('');
-  const bs = vals.map((v, i) => { const bh = (v / max) * (h - 24 - T); const x = pad + i * bw + bw * 0.18; const hi = opts.hi === i; return `<rect class="barr${hi ? ' hi' : ''}" x="${x.toFixed(1)}" y="${(h - 20 - bh).toFixed(1)}" width="${(bw * 0.64).toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="4" fill="${hi ? 'var(--warn)' : color}" style="animation-delay:${i * 40}ms" ${opts.data ? opts.data(i) : ''}><title>${esc(labels[i])}: ${fmt(v)}</title></rect>`; }).join('');
+  const money = opts.money ?? (fmt === fmtK); /* v0.17.2 (5): every money bar (they all use fmtK) */
+  const bs = vals.map((v, i) => { const bh = (v / max) * (h - 24 - T); const x = pad + i * bw + bw * 0.18; const hi = opts.hi === i; return `<rect class="barr${hi ? ' hi' : ''}" x="${x.toFixed(1)}" y="${(h - 20 - bh).toFixed(1)}" width="${(bw * 0.64).toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="4" fill="${hi ? 'var(--warn)' : color}" style="animation-delay:${i * 40}ms" ${opts.data ? opts.data(i) : ''}><title>${esc(labels[i])}: ${money ? esc(moneyTip(v)) : fmt(v)}</title></rect>`; }).join('');
   const every = Math.ceil(labels.length / 9);
   const ls = labels.map((l, i) => (i % every === 0 || opts.hi === i ? `<text class="ax${opts.hi === i ? ' hi' : ''}" x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${h - 4}" text-anchor="middle">${esc(l)}</text>` : '')).join('');
   const nm = opts.keys ? noteMarks(opts.keys, (i) => pad + i * bw + bw / 2, 2, h - 20) : { marks: '', legend: '', n: 0 };
@@ -271,7 +280,7 @@ function moveBars(rows, sel, w = 900, h = 220) {
 // horizontal bars with a label and a value on each row
 function hbars(rows, color = 'var(--brand)', fmt = fmtN) {
   const max = Math.max(1, ...rows.map((r) => r.v));
-  return `<div class="funnel hb">${rows.map((r, i) => `<div class="st" ${r.attr || ''}><span>${esc(r.l)}</span><div class="b"><i style="width:${(r.v / max) * 100}%;background:${r.color || color};animation-delay:${i * 70}ms"></i></div><span class="n">${fmt(r.v)}${r.sub ? `<small> ${esc(r.sub)}</small>` : ''}</span></div>`).join('')}</div>`;
+  return `<div class="funnel hb">${rows.map((r, i) => `<div class="st" ${r.attr || ''}${fmt === fmtK ? ` title="${esc(moneyTip(r.v))}"` : ''}><span>${esc(r.l)}</span><div class="b"><i style="width:${(r.v / max) * 100}%;background:${r.color || color};animation-delay:${i * 70}ms"></i></div><span class="n">${fmt(r.v)}${r.sub ? `<small> ${esc(r.sub)}</small>` : ''}</span></div>`).join('')}</div>`;
 }
 const panel = (cls, i, title, body, action) => { const ph = `<div class="ph"><span class="t">${title}</span><span class="sp"></span>${action || ''}</div>`; return /\bfs\b/.test(cls) ? `<div class="panel ${cls}" style="--i:${i}"><div class="fs-in">${ph}<div class="fs-body">${body}</div></div></div>` : `<div class="panel ${cls}" style="--i:${i}">${ph}${body}</div>`; }; /* v0.17.0 (2) B1: .fs = a long list scrolls inside, so a short neighbour is not stretched into empty space */
 const legend = () => `<div class="legend" style="margin:0"><span><i class="dot g"></i>OK</span><span><i class="dot y"></i>overdue</span><span><i class="dot r"></i>7+ days</span><span><i class="dot b"></i>paused</span><span><i class="dot k"></i>left</span></div>`;
@@ -1234,10 +1243,23 @@ function drawWatch() {
 // v0.17.0 (7) Jun 10/3 "기존거랑 비교해서 ㅈㄴ 불친절하고 뭔말하는지 모르겠음" → tracks × weeks like the 「네팔 착지 행정 지도」 artifact:
 // one row per board · weeks from Monday · a red line = today · colour = state · hatched = the office is closed most of that week · the list stays one click away
 const msView = () => { try { return localStorage.getItem('kfp_msview') === 'list' ? 'list' : 'tl'; } catch (e) { return 'tl'; } };
+function msScrollInit(pg) { /* v0.17.2 (5): first time = one week before today at the left edge · after that the place you scrolled to survives the 30-second redraws */
+  const sc = pg.querySelector('.tl-scroll'); if (!sc) return; const nowEl = sc.querySelector('.tl-wk .tl-lane span.now'); const lbl = sc.querySelector('.tl-lbl');
+  const home = nowEl ? Math.min(Math.max(0, sc.scrollWidth - sc.clientWidth), Math.max(0, Math.round(nowEl.getBoundingClientRect().left - sc.getBoundingClientRect().left + sc.scrollLeft - (lbl ? lbl.getBoundingClientRect().width : 0) - nowEl.getBoundingClientRect().width))) : 0; /* a wide screen may not scroll that far */
+  sc.dataset.home = String(home); sc.scrollLeft = Number.isFinite(S.msScrollX) ? S.msScrollX : home;
+  sc.addEventListener('scroll', () => { S.msScrollX = sc.scrollLeft; }, { passive: true });
+}
 function msTimeline(m, all, boards) {
-  const t = m.t; const off = Number((S.route.params || {}).wk) || 0; const N = 12; /* 12 weeks: 16 made one-week bars 77 px ("Com…") */
-  const mon = (d) => R.addDays(d, -((new Date(d + 'T00:00:00').getDay() + 6) % 7));
-  const w0 = R.addDays(mon(t), 7 * (off - 4)); const weeks = Array.from({ length: N }, (_, i) => R.addDays(w0, 7 * i));
+  const t = m.t; /* v0.17.2 (5) Jun 10/4 "타임라인 밑에 바 넣어줘서 12월,내년도 쭉 이어지는거라면 볼수있게": every week the items touch (at least 12) in a strip that scrolls sideways · ‹ 4 weeks › and Today scroll it */
+  const mon = (d) => R.addDays(d, -((new Date(d + 'T00:00:00').getDay() + 6) % 7)); const base = mon(t);
+  const spanW = (x, wf, nI) => {
+    if (x.state === 'Done') { const d = [x.doneDate, x.since, x.due].find(R.isDate) || t; return [wf(d), wf(d)]; }
+    if (x.state === 'Waiting' || x.state === 'Blocked') { const a = R.isDate(x.since) ? wf(x.since) : nI; return [a, Math.max(a, R.isDate(x.due) ? wf(x.due) : nI)]; }
+    const d = R.isDate(x.due) ? x.due : t; return [wf(d), wf(d)];
+  };
+  let lo = -4, hi = 7; for (const x of all) { const [a, b] = spanW(x, (d) => Math.floor(R.daysBetween(base, d) / 7), 0); lo = Math.min(lo, a); hi = Math.max(hi, b + 1); }
+  lo = Math.max(lo, -52); hi = Math.min(hi, 104); const N = hi - lo + 1;
+  const w0 = R.addDays(base, 7 * lo); const weeks = Array.from({ length: N }, (_, i) => R.addDays(w0, 7 * i));
   const wi = (d) => Math.floor(R.daysBetween(w0, d) / 7); const nowI = wi(t);
   const dead = weeks.map((w) => { let n = 0; for (let k = 0; k < 7; k++) { const d = R.addDays(w, k); if (new Date(d + 'T00:00:00').getDay() !== 6 && ((m.hm || {})[d] || []).some((h) => h.kind === 'all')) n++; } return n >= 4; });
   const months = []; for (const w of weeks) { const k = w.slice(0, 7); if (months.length && months[months.length - 1].k === k) months[months.length - 1].n++; else months.push({ k, n: 1 }); }
@@ -1245,11 +1267,7 @@ function msTimeline(m, all, boards) {
   const gd = (g) => (String(g || '').startsWith('🟢') ? 'g' : String(g || '').startsWith('🟡') ? 'y' : 'r');
   const md = (d) => (R.isDate(d) ? d.slice(5) : '');
   const st = (x) => (x.state === 'Done' ? 'ok' : x.state === 'Blocked' || (R.isDate(x.due) && x.due < t) ? 'risk' : x.state === 'Waiting' ? 'wait' : 'acc');
-  const span = (x) => {
-    if (x.state === 'Done') { const d = [x.doneDate, x.since, x.due].find(R.isDate) || t; return [wi(d), wi(d)]; }
-    if (x.state === 'Waiting' || x.state === 'Blocked') { const a = R.isDate(x.since) ? wi(x.since) : nowI; return [a, Math.max(a, R.isDate(x.due) ? wi(x.due) : nowI)]; }
-    const d = R.isDate(x.due) ? x.due : t; return [wi(d), wi(d)];
-  };
+  const span = (x) => spanW(x, wi, nowI);
   const bar = (x) => { let [a, b] = span(x); const cutL = a < 0, cutR = b > N - 1; if (b < 0 || a > N - 1) { a = b = a > N - 1 ? N - 1 : 0; } a = Math.max(0, Math.min(N - 1, a)); b = Math.max(a, Math.min(N - 1, b)); if (b === a) { if (a < N - 1) b = a + 1; else a = a - 1; } /* at least two weeks wide so the name can be read */
     const dd = R.isDate(x.since) ? R.daysBetween(x.since, t) : null;
     const meta = x.state === 'Done' ? `✅ ${md(x.doneDate || x.since)}` : `${esc(x.who || '')}${(x.state === 'Waiting' || x.state === 'Blocked') && dd !== null ? ` · ${dd} d` : ''}${R.isDate(x.due) ? ` · ${x.due < t ? 'was due' : 'due'} ${md(x.due)}` : ''}`;
@@ -1257,13 +1275,13 @@ function msTimeline(m, all, boards) {
   const frac = (nowI + (R.daysBetween(weeks[Math.max(0, Math.min(N - 1, nowI))], t) + 0.5) / 7) / N;
   const rows = boards.map((bd) => { const xs = all.filter((x) => (x.board || 'Board') === bd).sort((p1, q1) => span(p1)[0] - span(q1)[0] || (Number(p1.order) || 0) - (Number(q1.order) || 0)); const open = xs.filter((x) => x.state !== 'Done').length;
     return `<div class="tl-row"><div class="tl-lbl"><b data-noi18n>${esc(bd)}</b><span>${open} open · ${xs.length - open} done</span></div><div class="tl-lane">${xs.map(bar).join('') || '<span class="muted tl-none">—</span>'}</div></div>`; }).join('');
-  return `<div class="tl" style="--n:${N}">
+  return `<div class="tl-scroll"><div class="tl" style="--n:${N}">
     <div class="tl-bg">${weeks.map((w, i) => `<i class="${i === nowI ? 'now' : ''}${dead[i] ? ' dead' : ''}"></i>`).join('')}</div>
     <div class="tl-row tl-head"><div class="tl-lbl">Board</div><div class="tl-lane tl-months">${months.map((x) => `<b style="grid-column:span ${x.n}">${MON[Number(x.k.slice(5)) - 1]} ${x.k.slice(0, 4)}</b>`).join('')}</div></div>
     <div class="tl-row tl-head tl-wk"><div class="tl-lbl"> </div><div class="tl-lane">${weeks.map((w, i) => `<span class="${i === nowI ? 'now' : ''}">${w.slice(5)}</span>`).join('')}</div></div>
     ${rows || '<div class="empty">No boards yet — ＋ Board</div>'}
     ${nowI >= 0 && nowI < N ? `<div class="tl-now" style="--f:${frac.toFixed(4)}"><span>today</span></div>` : ''}
-  </div>
+  </div></div>
   <div class="glegend"><span><i class="lg s-ok"></i>done</span><span><i class="lg s-acc"></i>to do</span><span><i class="lg s-wait"></i>with them — from the day they got it</span><span><i class="lg s-risk"></i>blocked or past due</span><span><i class="lg dead"></i>office closed most of the week</span><span><i class="dot g"></i><i class="dot y"></i><i class="dot r"></i> how sure the date is</span></div>`;
 }
 function pageBoard(m) {
@@ -1297,7 +1315,7 @@ function pageBoard(m) {
     const next = openA.filter((x) => R.isDate(x.due) && x.due <= R.addDays(t, 30)).sort((a1, b1) => a1.due.localeCompare(b1.due));
     return `<div class="cc board">
     <div class="panel s12 wt-bar" style="--i:0">${vseg}<span class="muted" style="margin-left:6px">all boards · weeks from Monday</span><span class="sp"></span>
-      <button class="btn small ghost" data-mswk="${(Number(p.wk) || 0) - 4}">‹ 4 weeks</button><button class="btn small ghost" data-mswk="0">Today</button><button class="btn small ghost" data-mswk="${(Number(p.wk) || 0) + 4}">4 weeks ›</button>
+      <button class="btn small ghost" data-msscroll="-4">‹ 4 weeks</button><button class="btn small ghost" data-msscroll="0">Today</button><button class="btn small ghost" data-msscroll="4">4 weeks ›</button>
       <button class="btn small" data-go-form="milestone" data-board="${esc(boards[0] || '')}">＋ Item</button><button class="btn small ghost" data-go-form="milestone" data-board="__new__">＋ Board</button></div>
     ${panel('s3 kpi', 1, '<b>Waiting on others</b>', `<div class="v" style="color:${waitA.length ? 'var(--warn)' : 'inherit'}">${waitA.length}</div><div class="sub">${Object.entries(whoA).sort((a1, b1) => b1[1] - a1[1]).map(([k, n]) => `<span><span>${esc(k)}</span> ${n}</span>`).join('') || '<span>nobody</span>'}</div>`)}
     ${panel('s3 kpi', 2, '<b>Longest wait</b>', `<div class="v" style="color:${longA && days(longA) > 14 ? 'var(--bad)' : 'inherit'}">${longA ? days(longA) + ' d' : '—'}</div><div class="sub">${longA ? `<span data-noi18n>${esc(longA.title)}</span>` : '<span>nothing waiting</span>'}</div>`)}
@@ -1341,7 +1359,7 @@ document.addEventListener('click', (ev) => {
   const box = document.getElementById('deskSearchRes'); if (box && !ev.target.closest('#deskSearchRes') && ev.target.id !== 'deskSearch') box.classList.add('hidden');
   const mb = ev.target.closest('[data-msboard]'); if (mb) { S.route.params.b = mb.dataset.msboard; reDesk(); return; } /* v0.15 board tabs */
   const mv = ev.target.closest('[data-msview]'); if (mv) { S.route.params.v = mv.dataset.msview; try { localStorage.setItem('kfp_msview', mv.dataset.msview); } catch (e) {} reDesk(); return; } /* v0.17.0 (7) */
-  const mw = ev.target.closest('[data-mswk]'); if (mw) { S.route.params.wk = Number(mw.dataset.mswk) || 0; reDesk(); return; }
+  const mw = ev.target.closest('[data-msscroll]'); if (mw) { const sc = document.querySelector('#deskPage .tl-scroll'); if (sc) { const n = Number(mw.dataset.msscroll) || 0; const c = sc.querySelector('.tl-wk .tl-lane span'); const cw = c ? c.getBoundingClientRect().width : 100; const to = n ? sc.scrollLeft + n * cw : Number(sc.dataset.home) || 0; sc.scrollTo({ left: to, behavior: 'smooth' }); S.msScrollX = to; } return; } /* v0.17.2 (5): the strip scrolls (it used to redraw a 12-week window) */
   const tg = ev.target.closest('[data-tolego]'); if (tg) { ev.preventDefault(); go('customers', 'customers', { tole: tg.dataset.tolego }); return; } /* v0.17.1 ① */
   const wt = ev.target.closest('[data-act="wardsToggle"]'); if (wt) { ev.preventDefault(); wardsToggle(); return; } /* v0.17.0 (6) */
   const cn = ev.target.closest('[data-act="chartNotes"]'); if (cn) { ev.preventDefault(); const wq = cn.closest('.chartw'); if (wq) wq.classList.toggle('notes-on'); return; } /* v0.15 */

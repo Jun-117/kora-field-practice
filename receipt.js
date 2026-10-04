@@ -39,7 +39,7 @@ const ord = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd
 const money = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN');
 // receipt number: date + the tail of the payment id (unique per payment, stable across phones)
 export const receiptNo = (pay) => `R-${String(pay.date || '').replace(/-/g, '').slice(2)}-${String(pay.id || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase() || '0000'}`;
-const NE = { // 🔴 Nepali drafts — Tara to check
+const NE = { // Nepali checked by Tara 10/4 (51-line sheet)
   refer: 'छिमेकी ल्याउनुहोस्', half: 'तपाईंको अर्को बिल आधा मूल्य', code: 'तपाईंको कोड', report: 'भ्रमण नोट', next: 'अर्को भ्रमण', thanks: 'धन्यवाद', nextBill: 'अर्को बिल', left: 'बाँकी', person: 'तपाईंको KORA व्यक्ति', firstVisit: 'पहिलो भ्रमण',
   installed: 'जडान भयो', isIn: 'तपाईंको KORA जडान भयो', came: 'आज हामी आयौं', receipt: 'भुक्तानी रसिद', creditNote: 'क्रेडिट नोट', total: 'जम्मा', customer: 'ग्राहक', codeK: 'कोड', bill: 'बिल', payBy: 'माध्यम', deposit: 'धरौटी',
   billDue: 'बिल तिर्ने', thisMonth: 'यो महिना', bankApp: 'बैंकको एप → ग्यालरीबाट QR स्क्यान', scan: 'स्क्यान गरी तिर्नुहोस्', paidQ: 'तिर्नुभयो? स्क्रिनसट पठाउनुहोस्',
@@ -102,7 +102,7 @@ export function referralData(x, co = {}) {
   return { name: x.c.name || '', code: x.c.code || '', price: money(R.PRICES.monthly), half: money(Math.round(R.PRICES.monthly * REFERRAL_SHARE)), ...coOf(co) };
 }
 // v0.17.0 (8) the technician's own line — written in English or Nepali; the server adds the other language (Firebase extension "Translate Text in Firestore": visits.custNote → visits.custNoteTr {en, ne})
-const NE_VT = { 'Routine check': 'नियमित जाँच', 'Filter change': 'फिल्टर परिवर्तन', Repair: 'मर्मत', Sanitisation: 'सफाइ' }; /* 🔴 Nepali drafts — Tara to check */
+const NE_VT = { 'Routine check': 'नियमित जाँच', 'Filter change': 'फिल्टर परिवर्तन', Repair: 'मर्मत', Sanitisation: 'सफाइ' }; /* Nepali checked by Tara 10/4 */
 export function noteOf(v) {
   const o = String((v && v.custNote) || '').trim(); if (!o) return null;
   const tr = v.custNoteTr && typeof v.custNoteTr === 'object' ? v.custNoteTr : {}; const dev = /[ऀ-ॿ]/.test(o);
@@ -368,7 +368,7 @@ function paintBill(ctx, d, im, H) {
   y += qs + 12; if (d.bankLine) { text(ctx, d.bankLine, L, y + 4, { f: font(400, 9), color: C.mute, max: IW }); y += 14; }
   y += 4; hline(ctx, L, Rt, y);
   y = row(ctx, L, Rt, y, { ic: 'lock', bg: C.navy, t: d.split, s: d.splitNote, noLine: true });
-  y += 10; return foot(ctx, d, L, Rt, IW, y, `Paid? WhatsApp us the screenshot · ${NE.thanks}`, '');
+  y += 10; return foot(ctx, d, L, Rt, IW, y, `Paid? WhatsApp us the screenshot · ${NE.paidQ}`, ''); /* v0.17.2 (4): the Nepali said only "thank you" — paidQ was defined but unused (Tara OK 10/4) */
 }
 export const drawBillCard = twoPass(paintBill);
 

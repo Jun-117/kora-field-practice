@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.17.1 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.17.2 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -156,31 +156,57 @@ export function normPhone(raw) {
 }
 export const custLabel = (c) => c ? `${c.name || '(no name)'} (${c.code || '?'})` : '(unknown customer)';
 export const toleOf = (c) => (c && (c.tole === 'Other' ? c.toleOther : c.tole)) || '—';
-export const waLink = (phone, text, demo = DEMO) => `https://wa.me/${demo ? '' : String(phone || '').replace(/\D/g, '')}${text ? '?text=' + encodeURIComponent(text) : ''}`; /* v0.17.0 (9) E2: practice opens WhatsApp without a number — the demo numbers look like real people's */
+// v0.17.2 (2) Jun 10/4 — wa.me turned 🙏 into "�" (its redirect re-encodes the text: %F0%9F%99%8F → %EF%BF%BD, checked 10/4) and on the Mac every tap opened another
+// browser that had to be linked again (→ "Your account on linked devices is restricted"). Phone → api.whatsapp.com/send (where wa.me sends you, minus the broken step) ·
+// this computer → WhatsApp Web in one named tab (default) or the WhatsApp app (Settings → This computer — only once the company account is in the Mac app)
+const WA_OPEN = 'kfp_wa_open';
+export const waOpenPref = () => (lsGet(WA_OPEN, 'web') === 'app' ? 'app' : 'web');
+export const setWaOpenPref = (v) => lsSet(WA_OPEN, v === 'app' ? 'app' : 'web');
+export const isComputer = () => { const ua = navigator.userAgent || ''; return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua) && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(ua)); };
+export function waUrl(phone, text, o = {}) { /* pure — the tests call it with every combination */
+  const d = o.demo ? '' : String(phone || '').replace(/\D/g, ''); const q = [d ? 'phone=' + d : '', text ? 'text=' + encodeURIComponent(text) : ''].filter(Boolean).join('&');
+  if (o.computer) return o.app ? 'whatsapp://send' + (q ? '?' + q : '') : 'https://web.whatsapp.com/' + (q ? 'send?' + q : '');
+  return 'https://api.whatsapp.com/send' + (q ? '?' + q : '');
+}
+export const waLink = (phone, text, demo = DEMO) => waUrl(phone, text, { demo, computer: isComputer(), app: waOpenPref() === 'app' }); /* v0.17.0 (9) E2: practice opens WhatsApp without a number — the demo numbers look like real people's */
 // ---- 🛵 "On my way" (v0.8 #7): a WhatsApp before leaving; stamped on the visit when it is saved (omwAt) so the desk can compare wasted trips with and without it
 const OMW = 'kfp_omw';
 export const OMW_ETAS = [10, 20, 30, 45, 60];
-// English + Nepali in one message (no language field on customers). 🔴 Nepali lines need Tara's check — editable in Settings → WhatsApp messages.
-// v0.17.0 (8) visit-note buttons — "English | नेपाली", one per line (Settings → 📝 Visit note) · 🔴 the Nepali is a draft — Tara to check
+// v0.17.2 (2) Jun 10/4 "뭔가 좀 스팸같음": one language per customer (customer → "WhatsApp messages in"; empty = Settings default, Nepali) · no emoji. Nepali checked by Tara 10/4 — editable in Settings → WhatsApp messages.
+export const MSG_LANGS = ['Nepali', 'English', 'Both'];
+// v0.17.2 (6) Jun 10/4 "정수기 시리얼넘버를 우리가 만들어서 붙이거나 기록해야하는데 그거 자체적으로 메뉴얼이나 방법,계획 없음": KORA's own device numbers KD-YY-NNNN
+// (D = device — customer codes are KC-…) · a sticker at the arrival check (PI: within 14 days) · the install picks from stock · a number is never used twice (manual E-3)
+export const SERIAL_RE = /^KD-(\d{2})-(\d{4})$/;
+export function nextSerials(n = 1, at = today(), also = []) {
+  const yy = String(at).slice(2, 4); const seen = new Set(also.map(R.normSerial));
+  for (const d of model().devices || []) seen.add(d.serial);
+  for (const c of S.D.customers.values()) if (c.deviceSerial) seen.add(R.normSerial(c.deviceSerial));
+  let max = 0; for (const s of seen) { const m = SERIAL_RE.exec(s); if (m && m[1] === yy) max = Math.max(max, Number(m[2])); }
+  return Array.from({ length: Math.max(1, Math.min(500, Number(n) || 1)) }, (_, i) => `KD-${yy}-${String(max + 1 + i).padStart(4, '0')}`);
+}
+export const stockSerials = () => (model().devices || []).filter((d) => d.status === 'In stock').map((d) => d.serial);
+export const msgLang = (c) => (MSG_LANGS.includes(c && c.msgLang) ? c.msgLang : MSG_LANGS.includes(S.settings && S.settings.msgLang) ? S.settings.msgLang : 'Nepali');
+const bi = (c, en, ne) => { const l = msgLang(c); return l === 'English' ? en : l === 'Both' ? en + '\n\n' + ne : ne; };
+// v0.17.0 (8) visit-note buttons — "English | नेपाली", one per line (Settings → 📝 Visit note) · Nepali checked by Tara 10/4
 export const VISIT_LINES_DEFAULT = ['No leak — checked | चुहावट छैन — जाँच गरियो', 'Leak fixed (O-ring) | चुहावट मर्मत गरियो (ओ-रिङ)', 'PP filter colour checked — still fine | PP फिल्टरको रङ जाँचियो — अझै ठीक छ', 'UF backwashed | UF ब्याकवास गरियो', 'A part is needed — we will come back | पार्टपुर्जा चाहिन्छ — हामी फेरि आउँछौं', 'Weak flow — we check it at the next visit | पानी कम आउँछ — अर्को भ्रमणमा जाँच्छौं'];
 export function visitLines() { const raw = String(S.settings.visitLines || '').trim(); const ls = (raw ? raw.split('\n') : VISIT_LINES_DEFAULT).map((l) => { const [en, ...ne] = l.split('|'); return { en: String(en || '').trim().slice(0, 80), ne: ne.join('|').trim().slice(0, 90) }; }).filter((x) => x.en); return ls.slice(0, 12); }
 export const MSG_DEFAULTS = {
-  omwEn: 'Namaste {name} ji 🙏 This is {tech} from KORA CARE. I am on my way for your water purifier visit — about {eta} minutes. If now is not a good time, reply here.',
-  omwNe: 'नमस्ते {name} जी 🙏 म KORA CARE बाट {tech}। तपाईंको पानी प्युरिफायर भ्रमणका लागि आउँदैछु — करिब {eta} मिनेटमा। अहिले मिल्दैन भने यहीँ जवाफ दिनुहोस्।',
-  missEn: 'Namaste {name} ji 🙏 KORA CARE came today at {time} for your water purifier visit, but nobody was home. We will come again on {retry}. If another day is better, reply here.',
-  missNe: 'नमस्ते {name} जी 🙏 KORA CARE आज {time} मा तपाईंको पानी प्युरिफायर भ्रमणका लागि आएको थियो, तर घरमा कोही हुनुहुन्नथ्यो। हामी फेरि {retry} मा आउँछौं। अर्को दिन मिल्छ भने यहीँ जवाफ दिनुहोस्।',
-  nextEn: 'Namaste {name} ji 🙏 This is {tech} from KORA CARE. We plan to come tomorrow ({date}) for your water purifier visit. If tomorrow does not suit, reply here and we will pick another day.',
-  nextNe: 'नमस्ते {name} जी 🙏 म KORA CARE बाट {tech}। भोलि ({date}) तपाईंको पानी प्युरिफायर भ्रमणका लागि आउने योजना छ। भोलि मिल्दैन भने यहीँ जवाफ दिनुहोस्, अर्को दिन मिलाउँछौं।',
-  confEn: 'Namaste {name} ji 🙏 KORA CARE here. Your purifier installation is on {date} — is that still fine? Reply here if you need another day.',
-  confNe: 'नमस्ते {name} जी 🙏 KORA CARE। तपाईंको प्युरिफायर जडान {date} मा छ — ठीक छ? अर्को दिन चाहिए यहीँ जवाफ दिनुहोस्।',
+  omwEn: 'Namaste {name} ji, this is {tech} from KORA CARE. I am on my way for your water purifier visit — about {eta} minutes. If now is not a good time, reply here.',
+  omwNe: 'नमस्ते {name} जी, म KORA CARE बाट {tech}। तपाईंको पानी प्युरिफायर भ्रमणका लागि आउँदैछु — करिब {eta} मिनेटमा। अहिले मिल्दैन भने यहीँ जवाफ दिनुहोस्।',
+  missEn: 'Namaste {name} ji, KORA CARE came today at {time} for your water purifier visit, but nobody was home. We will come again on {retry}. If another day is better, reply here.',
+  missNe: 'नमस्ते {name} जी, KORA CARE आज {time} मा तपाईंको पानी प्युरिफायर भ्रमणका लागि आएको थियो, तर घरमा कोही हुनुहुन्नथ्यो। हामी फेरि {retry} मा आउँछौं। अर्को दिन मिल्छ भने यहीँ जवाफ दिनुहोस्।',
+  nextEn: 'Namaste {name} ji, this is {tech} from KORA CARE. We plan to come tomorrow ({date}) for your water purifier visit. If tomorrow does not suit, reply here and we will pick another day.',
+  nextNe: 'नमस्ते {name} जी, म KORA CARE बाट {tech}। भोलि ({date}) तपाईंको पानी प्युरिफायर भ्रमणका लागि आउने योजना छ। भोलि मिल्दैन भने यहीँ जवाफ दिनुहोस्, अर्को दिन मिलाउँछौं।',
+  confEn: 'Namaste {name} ji, KORA CARE here. Your purifier installation is on {date} — is that still fine? Reply here if you need another day.',
+  confNe: 'नमस्ते {name} जी, KORA CARE। तपाईंको प्युरिफायर जडान {date} मा छ — ठीक छ? अर्को दिन चाहिए यहीँ जवाफ दिनुहोस्।',
 };
-export const nextText = (c, date) => { const o = { name: firstName(c), tech: myName() || 'KORA CARE', date }; return fillMsg(msgT('nextEn'), o) + '\n\n' + fillMsg(msgT('nextNe'), o); }; /* v0.14 (#4): the evening-before notice */
-export const confText = (c, date) => { const o = { name: firstName(c), date }; return fillMsg(msgT('confEn'), o) + '\n\n' + fillMsg(msgT('confNe'), o); }; /* v0.14 (#4): 3-day confirm for a booked install */
+export const nextText = (c, date) => { const o = { name: firstName(c), tech: myName() || 'KORA CARE', date }; return bi(c, fillMsg(msgT('nextEn'), o), fillMsg(msgT('nextNe'), o)); }; /* v0.14 (#4): the evening-before notice */
+export const confText = (c, date) => { const o = { name: firstName(c), date }; return bi(c, fillMsg(msgT('confEn'), o), fillMsg(msgT('confNe'), o)); }; /* v0.14 (#4): 3-day confirm for a booked install */
 const fillMsg = (tpl, o) => String(tpl).replace(/\{(\w+)\}/g, (_, k) => (o[k] ?? ''));
 const firstName = (c) => String((c && c.name) || '').trim().split(/\s+/)[0] || '';
 const msgT = (k) => (S.settings && String(S.settings[k] || '').trim()) || MSG_DEFAULTS[k];
-export const omwText = (c, eta) => { const o = { name: firstName(c), tech: myName() || 'KORA CARE', eta }; return fillMsg(msgT('omwEn'), o) + '\n\n' + fillMsg(msgT('omwNe'), o); };
-export const missText = (c, v) => { const ms = (v.savedAt && v.savedAt.t) || v.savedAtT || v._localT || Date.now(); const o = { name: firstName(c), time: new Date(ms).toTimeString().slice(0, 5), retry: v.retryDate || '' }; return fillMsg(msgT('missEn'), o) + '\n\n' + fillMsg(msgT('missNe'), o); };
+export const omwText = (c, eta) => { const o = { name: firstName(c), tech: myName() || 'KORA CARE', eta }; return bi(c, fillMsg(msgT('omwEn'), o), fillMsg(msgT('omwNe'), o)); };
+export const missText = (c, v) => { const ms = (v.savedAt && v.savedAt.t) || v.savedAtT || v._localT || Date.now(); const o = { name: firstName(c), time: new Date(ms).toTimeString().slice(0, 5), retry: v.retryDate || '' }; return bi(c, fillMsg(msgT('missEn'), o), fillMsg(msgT('missNe'), o)); };
 // v0.11.1 (#3) a payment reminder sent by WhatsApp is remembered on this phone (per home, per day) — the list shows "sent HH:MM" and drops that home to the bottom
 const REM = 'kfp_rem';
 export function remMark(cid) { const m = lsGet(REM, {}); for (const k of Object.keys(m)) if (!m[k] || m[k].day !== today()) delete m[k]; m[cid] = { at: Date.now(), day: today() }; lsSet(REM, m); }
@@ -589,14 +615,15 @@ function field(f, v) {
       const list = arr('customers').filter((c) => c.status !== 'Churned' || c.id === val).sort((a, b) => String(a.name).localeCompare(String(b.name)));
       input = `${list.length > 12 ? `<input type="search" class="custpick" data-for="f_${f.k}" placeholder="Search name · KC code · phone" autocomplete="off">` : ''}<select id="f_${f.k}" name="${f.k}"><option value="">— choose customer —</option>${list.map((c) => `<option value="${esc(c.id)}"${c.id === val ? ' selected' : ''}>${esc(custLabel(c))} · ${esc(toleOf(c))}</option>`).join('')}</select>`; break; /* v0.11.1 (#8): 750 homes are not a wheel */
     }
-    case 'textarea': input = `<textarea id="f_${f.k}" name="${f.k}" placeholder="${esc(f.ph || '')}">${esc(val)}</textarea>`; break;
+    case 'textarea': input = `<textarea id="f_${f.k}" name="${f.k}" placeholder="${esc(f.ph || '')}">${esc(val)}</textarea>` + (f.gen ? `<div class="row sg-row"><input type="number" id="sgN" min="1" max="500" value="1" aria-label="how many" data-noi18n><button type="button" class="btn small ghost" data-act="serialGen" data-for="${f.k}">🏷️ New KORA numbers</button></div>` : ''); break; /* v0.17.2 (6) */
+    case 'serial': { const st = stockSerials(); input = `<div class="row sg-row"><input id="f_${f.k}" name="${f.k}" type="text" value="${esc(val)}" list="dl_${f.k}" placeholder="${esc(f.ph || '')}" autocomplete="off" data-noi18n><button type="button" class="btn small ghost" data-act="serialNext" data-for="${f.k}">🏷️ Next number</button></div><datalist id="dl_${f.k}">${st.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>`; break; } /* v0.17.2 (6): pick the sticker's number from stock */
     case 'gps': {
       const g = val && val.lat ? val : null;
       input = `<button type="button" class="btn ghost" data-act="gps">📍 Get location now</button><div class="hint" id="gpsOut">${g ? `✅ ${g.lat.toFixed(5)}, ${g.lng.toFixed(5)}${g.acc ? ` (±${esc(Math.round(Number(g.acc) || 0))} m)` : ''}` : 'Not captured yet'}</div>
         <input type="hidden" name="gpsLat" value="${g ? esc(Number(g.lat)) : ''}"><input type="hidden" name="gpsLng" value="${g ? esc(Number(g.lng)) : ''}"><input type="hidden" name="gpsAcc" value="${g && g.acc ? esc(Number(g.acc) || '') : ''}">`; break;
     }
-    case 'photos':
-      input = `<div class="row"><button type="button" class="photo-btn" data-act="cam">📷<br>Take photo</button><button type="button" class="photo-btn" data-act="gal">🖼️<br>From album</button></div>
+    case 'photos': /* v0.17.2 (3) Jun 10/4 "사진 한번에 2장 이상 누를수있게": on a computer both buttons opened the same file window, one photo each → one button, several at once */
+      input = `<div class="row">${isComputer() ? '' : '<button type="button" class="photo-btn" data-act="cam">📷<br>Take photo</button>'}<button type="button" class="photo-btn" data-act="gal">🖼️<br>${isComputer() ? 'Choose photos (several at once)' : 'From album'}</button></div>
         <input type="file" accept="image/*" capture="environment" hidden class="photoIn"><input type="file" accept="${f.pdf ? 'image/*,application/pdf' : 'image/*'}" multiple hidden class="photoIn">
         <div class="thumbs" id="thumbs"></div>`; break;
     case 'counts': {
@@ -683,6 +710,7 @@ FORMS.install = {
     { t: 'section', l: 'Customer' },
     { k: 'name', l: 'Customer name', t: 'text', req: 1 },
     { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX' },
+    { k: 'msgLang', l: 'WhatsApp messages in', t: 'chips', o: MSG_LANGS, hint: 'Empty = the Settings default (Nepali) · one language reads less like spam' }, /* v0.17.2 (2) */
     { k: 'zone', l: 'Zone', t: 'chips', o: OPT.zone, req: 1 },
     { k: 'ward', l: 'Ward', t: 'select', o: OPT.ward, req: 1 },
     { k: 'tole', l: 'Tole', t: 'select', o: OPT.tole, req: 1 },
@@ -696,7 +724,7 @@ FORMS.install = {
     { k: 'pressurePsi', l: 'Water pressure (PSI)', t: 'number', hint: '30–80 normal · 20–30 low (pump needed) · <20 very low · >80 needs a reducer' },
     { k: 'rawTds', l: 'Raw water TDS', t: 'number', req: 1 },
     { t: 'section', l: 'Device' },
-    { k: 'deviceSerial', l: 'Device serial number', t: 'text', req: 1 },
+    { k: 'deviceSerial', l: 'Device number (KORA sticker)', t: 'serial', req: 1, ph: 'KD-26-0001', hint: 'Pick the number on the sticker from the stock list · no sticker yet → 🏷️ Next number, then write it on a sticker (manual E-3)' },
     { k: 'installDate', l: 'Install date', t: 'date', req: 1, def: today, hint: 'The monthly bill falls on this same day every month.' },
     { k: 'signUpDate', l: 'Sign-up date', t: 'date', req: 1, def: today },
     { t: 'section', l: 'Final checks', hint: 'All must be ticked. Flow and water source are required.' },
@@ -743,7 +771,8 @@ FORMS.install = {
     else if (v.pressurePsi !== null && !confirmed && (v.pressurePsi < 20 || v.pressurePsi > 80)) warns.pressurePsi = v.pressurePsi < 20 ? 'Very low pressure — tell the customer flow may be slow.' : 'High pressure — a reducing valve is needed.';
     if (v.rawTds === null) errs.rawTds = 'Measure the raw water TDS.'; else if (!inRange(v.rawTds, 0, 5000)) errs.rawTds = 'Check the TDS number (0–5000).';
     else if (v.rawTds >= 250 && !confirmed) warns.rawTds = 'TDS 250+ → offer the Siliphos option.';
-    need(errs, v, 'deviceSerial', 'Enter the device serial.'); need(errs, v, 'installDate', 'Enter the date.'); need(errs, v, 'signUpDate', 'Enter the date.');
+    need(errs, v, 'deviceSerial', 'Enter the device serial.');
+    { const ns = R.normSerial(v.deviceSerial); const stock = stockSerials(); if (ns && stock.length && !stock.includes(ns) && !(v._id && R.normSerial((S.D.customers.get(v._id) || {}).deviceSerial) === ns)) warns.deviceSerial = 'This number is not "In stock" in Devices — check the sticker, or receive it into stock first.'; } /* v0.17.2 (6) */ need(errs, v, 'installDate', 'Enter the date.'); need(errs, v, 'signUpDate', 'Enter the date.');
     if ((v.checks || []).length < OPT.installChecks.length && !v._edit) errs.checks = `Tick all ${OPT.installChecks.length} checks before finishing.`;
     if (v.purifiedTds === null && !v._edit) errs.purifiedTds = 'Measure the purified water TDS.'; else if (!inRange(v.purifiedTds, 0, 5000)) errs.purifiedTds = 'Check the TDS number.';
     if (v.flow === null && !v._edit) errs.flow = 'Measure the flow.'; else if (!inRange(v.flow, 0, 10)) errs.flow = 'Check the flow (0–10 L/min).';
@@ -1207,7 +1236,7 @@ FORMS.device = {
   col: 'deviceEvents', title: 'Device event', icon: '📦', perm: 'stock',
   spec: () => [
     { k: 'event', l: 'What happened', t: 'chips', o: OPT.devEvent.filter((e) => !['Installed'].includes(e)), req: 1, def: 'Received into stock', hint: 'Installs, recoveries and relocation swaps are added automatically from those forms.' },
-    { k: 'serials', l: 'Serial number(s)', t: 'textarea', req: 1, ph: 'one per line — several at once for a shipment' },
+    { k: 'serials', l: 'Serial number(s)', t: 'textarea', req: 1, ph: 'one per line — several at once for a shipment', gen: 1, hint: 'New units: type how many → 🏷️ New KORA numbers (KD-26-0001 …) → same order as the stickers' },
     { k: 'date', l: 'Date', t: 'date', req: 1, def: today },
     { k: 'batch', l: 'Batch / PI', t: 'text', ph: 'e.g. TQ-PI-20260808', show: (v) => ['Received into stock', 'Arrival check OK', 'Arrival check — defect'].includes(v.event) },
     { k: 'cost', l: 'Landed cost per device (NPR)', t: 'number', show: (v) => v.event === 'Received into stock', hint: 'Price + freight + customs + clearing ÷ units (for the asset register).' },
@@ -1713,11 +1742,25 @@ export function scheduleRender() {
   rq = requestAnimationFrame(() => { rq = 0; rerender(); });
 }
 let routeMod = null;
+// v0.17.2 (1): a page or window holding a form (Settings · What-if · a new staff line) is not redrawn while someone types in it, or while it has unsaved changes
+function pageEditing() {
+  const ae = document.activeElement;
+  if (ae && ae.matches && ae.matches('input:not([type=file]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea, select') && ae.closest('#view, #drawer')) return true;
+  return !!document.querySelector('#view form[data-dirty="1"], #drawer form[data-dirty="1"]');
+}
+document.addEventListener('input', (ev) => { const f = ev.target && ev.target.closest && ev.target.closest('form'); if (f && f.id !== 'theForm' && f.id !== 'loginForm' && f.closest('#view, #drawer') && !ev.target.closest('[data-nodirty]')) f.dataset.dirty = '1'; }, true);
+document.addEventListener('change', (ev) => { if (ev.target && ev.target.id === 'waOpenSel') { setWaOpenPref(ev.target.value); toast('Choice saved on this computer'); } }); /* v0.17.2 (2) */
+document.addEventListener('click', (ev) => { /* v0.17.2 (2): one WhatsApp Web tab, reused (every new tab made WhatsApp ask again) · the app link opens the app, no empty tab */
+  const a = ev.target && ev.target.closest && ev.target.closest('a[href^="https://web.whatsapp.com/"], a[href^="whatsapp://"]'); if (!a) return;
+  ev.preventDefault(); try { if (a.href.startsWith('whatsapp:')) location.href = a.href; else window.open(a.href, 'kora-wa'); } catch (e) {}
+}, true);
+document.addEventListener('focusout', () => { setTimeout(() => { if (S.staleDesk && !pageEditing() && !(S.route.screen === 'form' || (S.drawer && S.drawer.screen === 'form'))) scheduleRender(); }, 0); }, true);
 function rerender() {
   if (S.route.screen === 'form' || (S.drawer && S.drawer.screen === 'form')) { S.staleDesk = true; refreshChrome(true); return; }
   if (S.route.screen === 'route' && !S.desk) { if (routeMod) routeMod.update(); refreshChrome(true); return; }
   const ae = document.activeElement;
   if (ae && ae.id === 'custSearch') { const l = $('#custList'); if (l) l.innerHTML = custListHtml(S.route.params); refreshChrome(true); return; }
+  if (pageEditing()) { S.staleDesk = true; refreshChrome(true); return; } /* v0.17.2 (1) Jun 10/4 "번호,이름 다 넣어도 빈칸으로 자동으로 바뀌는데": the 30-second check redrew Settings over what was being typed */
   S.staleDesk = false;
   render(false);
   if (S.drawer && S.drawer.screen !== 'form') refreshDrawer();
@@ -1988,14 +2031,14 @@ export function watchItem(w, opts = {}) {
     <div class="wacts">${form && canForm(form) ? `<button class="btn small" data-go-form="${form}" data-cid="${esc(c.id)}"${form === 'checkin' ? ` data-kind="${esc(w.callKind || 'Follow-up call')}"` : ''}>${lab}</button>` : `<button class="btn small ghost" data-cust="${esc(c.id)}">${form ? '👤 Open' : lab}</button>`}<a class="btn small ghost" href="tel:${esc(c.phone)}" data-stop>📞</a><a class="btn small ghost" href="${esc(waLink(c.phone))}" target="_blank" rel="noopener" data-stop>💬</a><button class="btn small ghost" data-watchok="${esc(c.id)}|${w.score}" title="Checked — hide for 7 days unless it gets worse">✓ Checked</button></div></div></div>`;
 }
 // Message wording follows G-1 §1-3 (3 days before) with the actual amount of this bill.
-export function dunText(x) { /* v0.17.0 (9) E3: the company bank QR (Jun 10/3 — no personal wallets) · English + Nepali · dates like the cards (AD + BS) · 🔴 Nepali drafts — Tara to check */
+export function dunText(x) { /* v0.17.0 (9) E3: the company bank QR (Jun 10/3 — no personal wallets) · dates like the cards (AD + BS) · Nepali checked by Tara 10/4 · v0.17.2 (2): the customer's language, no emoji */
   const d = x.dn; const n = (x.c.name || '').split(' ')[0]; const amt = Math.round(d.owed).toLocaleString('en-IN');
   const ref = x.c.code ? ` Please write ${x.c.code} in the payment remark.` : '', refNe = x.c.code ? ` भुक्तानीको रिमार्कमा ${x.c.code} लेख्नुहोस्।` : ''; /* v0.11.1 (#9): the bank CSV match looks for the KC code first */
   const when = (iso) => (R.isDate(iso) ? `${RC.niceDate(iso)} · ${RC.bsText(iso)}` : String(iso || '')); const whenNe = (iso) => (R.isDate(iso) ? RC.bsText(iso) : String(iso || ''));
   const qr = 'scan the KORA CARE QR on your bill picture with any bank app', qrNe = 'बिलको तस्बिरमा भएको KORA CARE को QR जुनसुकै बैंकको एपबाट स्क्यान गर्नुहोस्';
-  if (d.stage === 'reminder') return `Namaste ${n} ji 🙏 This is KORA CARE. Your water purifier bill of NPR ${amt} is due on ${when(d.bill.due)}. To pay, ${qr}.${ref} Thank you 🙏\n\nनमस्ते ${n} जी 🙏 KORA CARE बाट। तपाईंको पानी प्युरिफायरको NPR ${amt} को बिल ${whenNe(d.bill.due)} मा तिर्नुपर्छ। तिर्न ${qrNe}।${refNe} धन्यवाद 🙏`;
-  if (d.stage === 'due') return `Namaste ${n} ji 🙏 A friendly reminder from KORA CARE: today's bill of NPR ${amt} is due. To pay, ${qr}.${ref} Thank you 🙏\n\nनमस्ते ${n} जी 🙏 KORA CARE बाट सम्झना: आज NPR ${amt} को बिल तिर्ने दिन हो। तिर्न ${qrNe}।${refNe} धन्यवाद 🙏`;
-  return `Namaste ${n} ji, this is KORA CARE. We have not received NPR ${amt} (due ${when(x.led.overdueSince)}). Please ${qr}, or call us if something is wrong with the purifier.${ref} Thank you 🙏\n\nनमस्ते ${n} जी, KORA CARE बाट। हामीले NPR ${amt} (${whenNe(x.led.overdueSince)} मा तिर्नुपर्ने) अझै पाएका छैनौं। कृपया ${qrNe}, वा प्युरिफायरमा केही समस्या छ भने हामीलाई फोन गर्नुहोस्।${refNe} धन्यवाद 🙏`;
+  if (d.stage === 'reminder') return bi(x.c, `Namaste ${n} ji, this is KORA CARE. Your water purifier bill of NPR ${amt} is due on ${when(d.bill.due)}. To pay, ${qr}.${ref} Thank you.`, `नमस्ते ${n} जी, KORA CARE बाट। तपाईंको पानी प्युरिफायरको NPR ${amt} को बिल ${whenNe(d.bill.due)} मा तिर्नुपर्छ। तिर्न ${qrNe}।${refNe} धन्यवाद।`);
+  if (d.stage === 'due') return bi(x.c, `Namaste ${n} ji, a friendly reminder from KORA CARE: today's bill of NPR ${amt} is due. To pay, ${qr}.${ref} Thank you.`, `नमस्ते ${n} जी, KORA CARE बाट सम्झना: आज NPR ${amt} को बिल तिर्ने दिन हो। तिर्न ${qrNe}।${refNe} धन्यवाद।`);
+  return bi(x.c, `Namaste ${n} ji, this is KORA CARE. We have not received NPR ${amt} (due ${when(x.led.overdueSince)}). Please ${qr}, or call us if something is wrong with the purifier.${ref} Thank you.`, `नमस्ते ${n} जी, KORA CARE बाट। हामीले NPR ${amt} (${whenNe(x.led.overdueSince)} मा तिर्नुपर्ने) अझै पाएका छैनौं। कृपया ${qrNe}, वा प्युरिफायरमा केही समस्या छ भने हामीलाई फोन गर्नुहोस्।${refNe} धन्यवाद।`);
 }
 export function reqItem(o) {
   const late = Date.now() > o.sla.replyBy, visitLate = Date.now() > o.sla.visitBy, old = Date.now() - (o.r.receivedAtMs || 0) > 3 * 864e5;
@@ -2213,7 +2256,9 @@ function receiptCard(x, pay) { /* v0.14 (Jun 10/3 #6): the picture is the receip
 async function visitPhotos(parent) { /* v0.14: the first two photos saved with a record (phone copies first, then the cache) → Image objects for the canvas */
   const out = []; const toImg = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
   for (const e of myJournal().filter((e) => e.photo && e.data && e.data.parent === parent)) { const img = await photoGet(e.id); if (img && out.length < 2) out.push(img); }
-  if (out.length < 2 && !DEMO) { try { const q = query(collection(db, 'photos'), where('parent', '==', parent), qLimit(4)); (await getDocsFromCache(q)).forEach((d) => { const x = d.data(); if (typeof x.img === 'string' && x.img.startsWith('data:image/') && out.length < 2) out.push(x.img); }); } catch (e) {} }
+  if (out.length < 2 && !DEMO) { const q = query(collection(db, 'photos'), where('parent', '==', parent), qLimit(4)); const take = (snap) => snap.forEach((d) => { const x = d.data(); if (typeof x.img === 'string' && x.img.startsWith('data:image/') && out.length < 2 && !out.includes(x.img)) out.push(x.img); });
+    try { take(await getDocsFromCache(q)); } catch (e) {}
+    if (!out.length) { try { take(await getDocs(q)); } catch (e) {} } /* v0.17.2 (3) Jun 10/4 "사진 3장 올렸는데도 안나옴": this browser had no copy (another browser · another phone · cleared data) → ask the server */ }
   const ims = []; for (const src of out) { const im = await toImg(src); if (im) ims.push(im); }
   return { before: ims[0] || null, after: ims[1] || null };
 }
@@ -2247,7 +2292,8 @@ export function markCardSent(key, on) {
 }
 // practice/demo: the numbers are made up ('+97798' + 8 random digits) and may belong to real people — never open their chat
 export const waWebUrl = (phone, demo = DEMO) => { const d = String(phone || '').replace(/\D/g, ''); return demo || !d ? 'https://web.whatsapp.com/' : 'https://web.whatsapp.com/send?phone=' + d; };
-export function waWebOpen(phone) { /* one named tab: the next card reuses it instead of opening WhatsApp Web again */
+export function waWebOpen(phone) { /* one named tab: the next card reuses it instead of opening WhatsApp Web again · v0.17.2 (2): or the WhatsApp app */
+  if (waOpenPref() === 'app') { try { location.href = waUrl(phone, '', { demo: DEMO, computer: true, app: true }); return true; } catch (e) { return null; } }
   try { return window.open(waWebUrl(phone), 'kora-wa'); } catch (e) { return null; }
 }
 function csLayout() { /* v0.16.0 (7): 8 rows on screen, the rest behind "+N more" · counts follow the rows */
@@ -2272,7 +2318,8 @@ async function cardSpec(kind, id) {
   let x, d, draw, name, alt, noteWait = false;
   if (kind === 'receipt') { const pay = S.D.payments.get(id); if (!pay) return null; x = model().cust.get(pay.customerId); if (!x) return { err: 'Customer not found' }; d = RC.receiptData(x, pay, co, [...S.D.payments.values()].filter((q) => q.customerId === pay.customerId), today()); draw = () => RC.drawReceipt(d); name = `${d.no}.png`; alt = 'receipt'; }
   else if (kind === 'referral') { x = model().cust.get(id); if (!x) return null; d = RC.referralData(x, co); draw = () => RC.drawReferralCard(d); name = `KORA-referral-${d.code || 'card'}.png`; alt = 'referral card'; }
-  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return null; x = model().cust.get(v.customerId); if (!x) return null; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; d = RC.visitData(x, v, co, ph, await staffWho(v.technician)); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; noteWait = !!(d.note && d.note.waiting); }
+  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return null; x = model().cust.get(v.customerId); if (!x) return null; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; d = RC.visitData(x, v, co, ph, await staffWho(v.technician)); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; noteWait = !!(d.note && d.note.waiting);
+    if (noteWait && !DEMO && !(S.trAsk || (S.trAsk = {}))[id]) { S.trAsk[id] = 1; getDocFromServer(doc(db, 'visits', id)).then((sn) => { const tr = sn.exists() ? sn.get('custNoteTr') : null; const cur = S.D.visits.get(id); if (tr && typeof tr === 'object' && cur) { S.D.visits.set(id, { ...cur, custNoteTr: tr }); bump(); } }).catch(() => { delete S.trAsk[id]; }); } /* v0.17.2 (4): the server adds custNoteTr without a new updatedAt → a phone restarted right after saving never got it */ }
   else if (kind === 'bill') { x = model().cust.get(id); if (!x) return null; d = RC.billData(x, co, await qrImage(), today()); if (!d) return { err: 'No bill to show for this home' }; draw = () => RC.drawBillCard(d); name = `KORA-bill-${d.code || ''}-${today()}.png`; alt = 'bill with QR'; } /* v0.16 #7 */
   else if (kind === 'install') { x = model().cust.get(id); if (!x) return null; const ph = await visitPhotos(`customers/${id}`); d = RC.installData(x, co, ph.before || ph.after || null, await staffWho(x.c.agent || myName())); draw = () => RC.drawInstallCard(d); name = `KORA-installed-${d.code || ''}.png`; alt = 'installed card'; }
   else return null;
@@ -2301,17 +2348,17 @@ async function imageCard(kind, id) {
     const can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([r.blob], S.rcName, { type: 'image/png' })] }));
     const web = !!S.desk && /^\d{8,15}$/.test(String(S.rcPhone || '').replace(/\D/g, '')); /* v0.16.0 (5) ④ the desk sends through WhatsApp Web (the company account in Chrome) */
     const sk = S.desk ? S.rcSentKey : ''; /* ⑥ sent mark — desk only */
-    const hint = web ? 'Saves the picture and opens the customer chat in WhatsApp Web → drag the picture in' : can && !S.desk ? 'Share → choose WA Business → the customer' : 'Save, then send it from WhatsApp';
+    const hint = web ? 'Copies the picture and opens the customer chat → press ⌘V in the chat, then send' : can && !S.desk ? 'Share → choose WA Business → the customer' : 'Save, then send it from WhatsApp';
     if (S.desk) { /* v0.17.0 (1) A2: picture left · buttons right — stacked under the picture they sat below a 990-px screen (y 1103 · 1225) */
       box.innerHTML = `<div class="rc-desk"><img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(r.alt)}"><div class="rc-side">
-        ${web ? '<button type="button" class="btn ok" data-act="rcWaWeb">💬 WhatsApp Web</button>' : ''}
+        ${web ? `<button type="button" class="btn ok" data-act="rcWaWeb">${waOpenPref() === 'app' ? '💬 WhatsApp app' : '💬 WhatsApp Web'}</button>` : ''}
         <a class="btn ghost rc-save" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
         ${sk ? `<button type="button" class="btn ghost rc-sent${cardsSent()[sk] ? ' on' : ''}" data-act="cardSent" data-key="${esc(sk)}">${sentLabel(!!cardsSent()[sk])}</button>` : ''}
         <div class="muted rc-hint">${hint}</div>${sk ? '<div class="muted rc-hint">✓ = it leaves 📨 Cards to send (this computer only)</div>' : ''}${sp.noteWait ? '<div class="warn rc-hint">📝 The note is not translated yet — it is added once the visit reaches the server. Open the card again in a minute.</div>' : ''}</div></div>`;
       box.scrollIntoView({ block: 'start', behavior: 'smooth' }); return;
     }
     box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(r.alt)}">
-      ${web ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcWaWeb">💬 WhatsApp Web</button>` : ''}
+      ${web ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcWaWeb">${waOpenPref() === 'app' ? '💬 WhatsApp app' : '💬 WhatsApp Web'}</button>` : ''}
       ${can && !S.desk ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcShare">📤 Share → WhatsApp</button>` : ''}${/* desk: no 📤 — the Mac share menu's WhatsApp may not be the company account */ ''}
       <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;width:100%;text-decoration:none;margin-top:8px" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
       ${sk ? `<button type="button" class="btn ghost" style="display:block;width:100%;margin-top:8px" data-act="cardSent" data-key="${esc(sk)}">${sentLabel(!!cardsSent()[sk])}</button>` : ''}
@@ -2779,10 +2826,15 @@ export function viewReport(p) {
       <label>Deposit refund needs an OK above (NPR)</label><input name="apprRefundOver" type="number" min="0" value="${esc(S.settings.apprRefundOver ?? '')}" placeholder="${R.APPROVAL.refundOver} (every refund)">
       <label>Who can give the OK</label><select name="apprWho">${['Admin only', 'Admin or money right'].map((o) => `<option value="${o}"${(S.settings.apprWho || R.APPROVAL.who) === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
       <h3>📝 Visit note</h3>
-      <label>Buttons on the visit form (one per line: English | नेपाली)</label><textarea name="visitLines" rows="7" data-noi18n placeholder="${esc(VISIT_LINES_DEFAULT.join('\n'))}">${esc(S.settings.visitLines || '')}</textarea><div class="hint">Empty = the six default lines. 🔴 The Nepali needs Tara's check. A visit keeps the words it was saved with.</div>
+      <label>Buttons on the visit form (one per line: English | नेपाली)</label><textarea name="visitLines" rows="7" data-noi18n placeholder="${esc(VISIT_LINES_DEFAULT.join('\n'))}">${esc(S.settings.visitLines || '')}</textarea><div class="hint">Empty = the six default lines. The Nepali was checked by Tara (10/4). A visit keeps the words it was saved with.</div>
       <h3>💬 WhatsApp messages</h3>
-      <div class="hint">Words in {braces} are filled in: {name} first name · {tech} who is going · {eta} minutes · {time} when you were there · {retry} next try. Empty = the default text. 🔴 The Nepali default needs Tara's check.</div>
+      <div class="hint">Words in {braces} are filled in: {name} first name · {tech} who is going · {eta} minutes · {time} when you were there · {retry} next try. Empty = the default text. The Nepali was checked by Tara (10/4).</div>
+      <label>Language of the messages (customers without their own choice)</label><select name="msgLang">${MSG_LANGS.map((o) => `<option value="${o}"${msgLang(null) === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
+      <label>This computer opens WhatsApp in</label><select id="waOpenSel" data-nodirty><option value="web"${waOpenPref() === 'web' ? ' selected' : ''}>WhatsApp Web (company account in this browser)</option><option value="app"${waOpenPref() === 'app' ? ' selected' : ''}>WhatsApp app (only if the company account is in the app)</option></select>
+      <div class="hint">Saved on this computer at once. 🚨 If your personal WhatsApp is in the app, messages would go from your personal number — keep "Web" until the company account is in the app.</div>
       ${[['omwEn', '🛵 On my way — English'], ['omwNe', '🛵 On my way — Nepali'], ['missEn', '🚪 Sorry we missed you — English'], ['missNe', '🚪 Sorry we missed you — Nepali']].map(([k2, l]) => `<label>${esc(l)}</label><textarea name="${k2}" rows="3" data-noi18n placeholder="${esc(MSG_DEFAULTS[k2])}">${esc(S.settings[k2] || '')}</textarea>`).join('')}
+      <h3>💱 Exchange rate (for ₩ on the money charts)</h3>
+      <label>NPR per KRW 100 (Nepal Rastra Bank)</label><input name="fxKrw100" inputmode="decimal" value="${esc(S.settings.fxKrw100 ?? '')}" placeholder="11.30 (NRB · 2 Oct 2026)"><div class="hint">Only for the ₩ shown when you point at a money bar. Empty = 11.30 (NRB, 2 Oct 2026). Update it from nrb.org.np when it moves.</div>
       <h3>🗓️ Calendar</h3>
       <label>Payday — day of the Nepali month</label><input name="payday" value="${esc(S.settings.payday ?? '')}" placeholder="empty = last day · e.g. 1 · off"><div class="hint">Shown in the company calendar. Empty = the last day of each Nepali month. Type "off" to hide it.</div>
       <label>TDS table from the CA (one line per bracket: yearly amount up to, rate %; last line: rest, rate %)</label><textarea name="taxTable" rows="4" data-noi18n placeholder="${esc(R.TAX_DEFAULT.replace(/\n/g, ' · '))}">${esc(S.settings.taxTable || '')}</textarea><div class="hint">Empty = the Inland Revenue table for 2083/84 (🟢, single = couple). SSF members pay no 1% band. Type the CA's table here to replace it.</div>
@@ -3223,8 +3275,15 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'rcVisit') { ev.preventDefault(); imageCard('visit', a.dataset.vid); }
   else if (act === 'rcInst') { ev.preventDefault(); imageCard('install', a.dataset.cid); }
   else if (act === 'rcBill') { ev.preventDefault(); ev.stopPropagation(); const cid = a.dataset.cid; if ($('#rcBox')) imageCard('bill', cid); else { nav('customers', 'detail', { id: cid }); setTimeout(() => imageCard('bill', cid), 450); } } /* v0.16 #7: from a list → open the home, then draw */
+  else if (act === 'serialNext') { ev.preventDefault(); const f = a.closest('form'); const el = f && f.elements[a.dataset.for]; if (el) { el.value = nextSerials(1)[0]; el.dispatchEvent(new Event('input', { bubbles: true })); } } /* v0.17.2 (6) */
+  else if (act === 'serialGen') { ev.preventDefault(); const f = a.closest('form'); const ta = f && f.elements[a.dataset.for]; const n = Number((f.querySelector('#sgN') || {}).value) || 1;
+    if (ta) { const have = String(ta.value || '').split(/[\n,;]+/).map(R.normSerial).filter(Boolean); ta.value = [...have, ...nextSerials(n, today(), have)].join('\n'); ta.dispatchEvent(new Event('input', { bubbles: true })); } } /* v0.17.2 (6) */
   else if (act === 'rcShare') { ev.preventDefault(); if (!S.rcBlob) return; const r = await RC.shareImage(S.rcBlob, S.rcName || 'receipt.png'); toast(r === 'shared' ? '✅ Shared' : r === 'unsupported' ? 'Sharing not available here — save the image' : 'Share cancelled'); }
-  else if (act === 'rcWaWeb') { ev.preventDefault(); if (!S.rcUrl) return; const w = waWebOpen(S.rcPhone); const dl = document.createElement('a'); dl.href = S.rcUrl; dl.download = S.rcName || 'kora-card.png'; document.body.appendChild(dl); dl.click(); dl.remove(); toast(!w ? 'Pop-up blocked — allow pop-ups for this site, then tap again' : DEMO ? 'Practice: made-up numbers, so no chat was opened' : '⬇️ Saved · drag the picture into the chat'); } /* v0.16.0 (5) ④ */
+  else if (act === 'rcWaWeb') { ev.preventDefault(); if (!S.rcUrl) return; /* v0.16.0 (5) ④ · v0.17.2 (2) Jun 10/4 "일부러 이미지 직접 다운하고 넣게 설정한거임?": the picture goes to the clipboard → ⌘V in the chat (a web page cannot attach a file to WhatsApp) */
+    let cp = null; try { if (S.rcBlob && navigator.clipboard && window.ClipboardItem) cp = navigator.clipboard.write([new ClipboardItem({ 'image/png': S.rcBlob })]); } catch (e) { cp = null; }
+    const w = waWebOpen(S.rcPhone); let copied = false; if (cp) { try { await cp; copied = true; } catch (e) {} }
+    if (!copied) { const dl = document.createElement('a'); dl.href = S.rcUrl; dl.download = S.rcName || 'kora-card.png'; document.body.appendChild(dl); dl.click(); dl.remove(); }
+    toast(!w ? 'Pop-up blocked — allow pop-ups for this site, then tap again' : DEMO ? 'Practice: made-up numbers, so no chat was opened' : copied ? '📋 Copied · in the chat press ⌘V, then send' : '⬇️ Saved · drag the picture into the chat'); }
   else if (act === 'cardOpen') { ev.preventDefault(); const k = a.dataset.kind, id = a.dataset.id, cid = a.dataset.cid; if (!k || !id || !cid) return; nav('customers', 'detail', k === 'receipt' ? { id: cid, receipt: id } : k === 'visit' ? { id: cid, vrep: id } : { id: cid, inst: cid }); setTimeout(() => imageCard(k, id), 450); } /* ⑥ from the desk list: the home opens with the card drawn */
   else if (act === 'cardsMore') { ev.preventDefault(); const L = document.querySelector('.cs-list'); if (L) { L.classList.add('cs-open'); csLayout(); } } /* v0.16.0 (7) */
   else if (act === 'cardSent') { ev.preventDefault(); const k = a.dataset.key; if (!k) return; const on = markCardSent(k, !cardsSent()[k]); syncSentUi(k, on); toast(on ? '✓ Marked as sent' : 'Marked as not sent'); } /* ⑥ */
@@ -3338,7 +3397,7 @@ function custPickFilter(inp) {
 }
 function unconfirm(f) { if (f.dataset.confirmed === '1') { delete f.dataset.confirmed; const b = f.querySelector('#saveBtn'); if (b) b.textContent = 'Save'; } }
 document.addEventListener('submit', async (ev) => {
-  ev.preventDefault(); const f = ev.target;
+  ev.preventDefault(); const f = ev.target; if (f.id !== 'settingsForm') delete f.dataset.dirty; /* v0.17.2 (1): saved → the page may redraw again */
   if (f.id === 'loginForm') {
     const e = $('#lgErr'); e.classList.add('hidden');
     const email = f.elements.email.value.trim(); const rem = !!($('#lg_remember') || {}).checked; const keep = ($('#lg_keep') || { checked: true }).checked;
@@ -3356,7 +3415,8 @@ document.addEventListener('submit', async (ev) => {
     if (!S.isAdmin) { toast('Only Jun changes settings'); return; }
     const e = f.elements; const pan = e.coPan.value.replace(/\s/g, '');
     if (pan && !/^\d{9}$/.test(pan)) { toast('Company PAN has 9 digits'); return; }
-    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), coNameNe: e.coNameNe.value.trim().slice(0, 80), coBankLine: e.coBankLine.value.trim().slice(0, 120), referralCampaign: e.referralCampaign.value, filterMode: e.filterMode.value, bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600),
+    delete f.dataset.dirty; /* v0.17.2 (1) */
+    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), coNameNe: e.coNameNe.value.trim().slice(0, 80), coBankLine: e.coBankLine.value.trim().slice(0, 120), referralCampaign: e.referralCampaign.value, filterMode: e.filterMode.value, bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600), fxKrw100: Number(e.fxKrw100.value) > 0 ? Number(e.fxKrw100.value) : null, msgLang: MSG_LANGS.includes(e.msgLang.value) ? e.msgLang.value : 'Nepali',
       apprDiscountOver: e.apprDiscountOver.value.trim() === '' ? null : Math.max(0, Number(e.apprDiscountOver.value) || 0), apprRefundOver: e.apprRefundOver.value.trim() === '' ? null : Math.max(0, Number(e.apprRefundOver.value) || 0), apprWho: e.apprWho.value, visitLines: e.visitLines.value.trim().slice(0, 2000) }; // numbers: the rules compare them
     auditLog('settings', 'app', S.settings, data); save('settings/app', data, false); S.settings = { ...S.settings, ...data }; B.setOverrides(data.bsOverride); bump(); toast('Settings saved'); goBack();
   }
@@ -3443,7 +3503,7 @@ if (DEMO) {
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
     S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, waWebUrl, msBoards };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, waWebUrl, msBoards, rerenderSoon: scheduleRender };
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */

@@ -317,23 +317,23 @@ export function loadDemo(S, today) {
     put('payroll', { kind: 'person', name: 'Sita', job: 'Office', basic: 22000, allowance: 0, ssf: 'Yes', startDate: R.addDays(today, -400), active: 'Yes', by: 'Jun' });
   }
   // v0.15 demo: two milestone boards with generic names — the real items live in the company's own data (imported JSON), never in this public demo
-  { const b1 = 'Company & licences', b2 = '1st shipment'; let o = 0;
+  { const b1 = '회사·인허가', b2 = '첫 선적'; /* v0.17.2 (5) Jun 10/4: Korean, the WP item precise */ let o = 0;
     const ms = (board, title, who, state, since, due, grade, src, note) => put('milestones', { board, title, who, state, since, due, grade, src, note, order: (o += 10), doneDate: state === 'Done' ? since : '', by: 'Jun' });
-    ms(b1, 'Company registration', 'Us', 'Done', R.addDays(today, -26), '', '🟢 measured', 'registration certificate (demo)', '');
-    ms(b1, 'Tax registration (PAN / VAT)', 'Us', 'Done', R.addDays(today, -20), '', '🟢 measured', 'tax office (demo)', '');
-    ms(b1, 'Commerce department appearance', 'Ministry', 'Waiting', R.addDays(today, -3), '', '🟡 second-hand', 'lawyer: they set the date', 'in person');
-    ms(b1, 'Import licence (EXIM code)', 'Us', 'Blocked', R.addDays(today, -3), '', '🟡 second-hand', 'only after the commerce registration', '');
-    ms(b1, 'Work permit — written confirmation', 'Lawyer', 'Waiting', R.addDays(today, -33), '', '🟡 second-hand', 'lawyer letter', '');
-    ms(b1, 'Residence visa decision', 'Immigration', 'Waiting', R.addDays(today, -10), R.addDays(today, 6), '🟢 measured', 'immigration slip', 'both of us present');
+    ms(b1, '회사 설립 등록', 'Us', 'Done', R.addDays(today, -26), '', '🟢 measured', 'registration certificate (demo)', '');
+    ms(b1, '세무 등록 (PAN·VAT)', 'Us', 'Done', R.addDays(today, -20), '', '🟢 measured', 'tax office (demo)', '');
+    ms(b1, '상무부 출석', 'Ministry', 'Waiting', R.addDays(today, -3), '', '🟡 second-hand', 'lawyer: they set the date', 'in person');
+    ms(b1, '수입 면허 (EXIM 코드)', 'Us', 'Blocked', R.addDays(today, -3), '', '🟡 second-hand', 'only after the commerce registration', '');
+    ms(b1, '근로허가(WP) — 변호사 서면 확답', 'Lawyer', 'Waiting', R.addDays(today, -33), '', '🟡 second-hand', 'lawyer letter', '');
+    ms(b1, '거주 비자 결정', 'Immigration', 'Waiting', R.addDays(today, -10), R.addDays(today, 6), '🟢 measured', 'immigration slip', 'both of us present');
     o = 0;
-    ms(b2, 'Freight rate for this month', 'Forwarder', 'Waiting', R.addDays(today, -19), '', '🟡 second-hand', 'forwarder email', 'the old rate was for August shipping');
-    ms(b2, 'Final PI from the supplier', 'Supplier', 'Done', R.addDays(today, -50), '', '🟢 measured', 'PI pdf', '');
-    ms(b2, 'Certificate of origin (original)', 'Supplier', 'Todo', '', R.addDays(today, 9), '🟡 second-hand', 'customs document list', 'ask with the order');
-    ms(b2, 'Insurance certificate', 'Us', 'Todo', '', R.addDays(today, 9), '🟢 measured', 'customs document list', '');
-    ms(b2, 'Ship from the factory', 'Supplier', 'Todo', '', R.addDays(today, 9), '🔴 guess', 'forwarder: "2nd week"', 'production starts when the licence is filed');
-    ms(b2, 'Port handling (Kolkata)', 'Forwarder', 'Todo', '', R.addDays(today, 30), '🔴 guess', '', '');
-    ms(b2, 'Border customs', 'Forwarder', 'Todo', '', R.addDays(today, 40), '🔴 guess', '', 'festival: customs keeps working');
-    ms(b2, 'Arrival in Pokhara', 'Us', 'Todo', '', R.addDays(today, 48), '🔴 guess', 'forwarder estimate', 'worst case + 2 weeks');
+    ms(b2, '이번 달 운임 견적', 'Forwarder', 'Waiting', R.addDays(today, -19), '', '🟡 second-hand', 'forwarder email', 'the old rate was for August shipping');
+    ms(b2, '공급사 최종 PI', 'Supplier', 'Done', R.addDays(today, -50), '', '🟢 measured', 'PI pdf', '');
+    ms(b2, '원산지 증명서 (원본)', 'Supplier', 'Todo', '', R.addDays(today, 9), '🟡 second-hand', 'customs document list', 'ask with the order');
+    ms(b2, '보험 증권', 'Us', 'Todo', '', R.addDays(today, 9), '🟢 measured', 'customs document list', '');
+    ms(b2, '공장 출고', 'Supplier', 'Todo', '', R.addDays(today, 9), '🔴 guess', 'forwarder: "2nd week"', 'production starts when the licence is filed');
+    ms(b2, '콜카타 항구 처리', 'Forwarder', 'Todo', '', R.addDays(today, 30), '🔴 guess', '', '');
+    ms(b2, '국경 통관', 'Forwarder', 'Todo', '', R.addDays(today, 40), '🔴 guess', '', 'festival: customs keeps working');
+    ms(b2, '포카라 도착', 'Us', 'Todo', '', R.addDays(today, 48), '🔴 guess', 'forwarder estimate', 'worst case + 2 weeks');
   }
   // v0.9 #10 demo: 14 vials — read and unread, blue on municipal water for one recent install (an ENPHO candidate)
   { const q = rng(9292032); const cs = [...S.D.customers.values()].filter((c) => c.status === 'Active' && R.isDate(c.installDate));

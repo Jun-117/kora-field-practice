@@ -1350,6 +1350,8 @@ P.push([/^📥 (\d+) item\(s\) added · (\d+) updated$/, '📥 $1개 추가됨 �
 P.push([/^(\d+) app error\(s\) in 24 h — (.+)$/, '24시간 안 앱 오류 $1건 — $2', '२४ घण्टामा एप त्रुटि $1 — $2']);
 /* v0.18.1 (B4·B5) — 🔴 ne draft */ W['⏮ Load 90 days more'] = ['⏮ 90일 더 불러오기', '⏮ थप ९० दिन ल्याउनुहोस्'];
 P.push([/^· since (\d{4}-\d{2}-\d{2})$/, '· $1부터', '· $1 देखि'], [/^⏮ (\d+) older change\(s\) loaded$/, '⏮ 옛 변경 $1건 불러옴', '⏮ $1 पुराना परिवर्तन ल्याइयो']);
+/* v0.18.3 (B3) — 🔴 ne draft */ W['⤓ full size'] = ['⤓ 원본 크기', '⤓ पूरा साइज'];
+P.push([/^Could not open: (.+)$/, '열 수 없음: $1', 'खोल्न सकिएन: $1']);
 Object.assign(W, { 'Practice — saved on this phone only': ['연습 — 이 폰에만 저장', 'अभ्यास — यो फोनमा मात्र सेभ'], 'PRACTICE — NOT SENT TO THE SERVER': ['연습용 — 서버로 안 보냄', 'अभ्यास — सर्भरमा पठाइँदैन'] });
 
 const D2 = {}; for (const [en, [ko, ne]] of Object.entries(W)) { D2[en.trim()] = { ko, ne }; }

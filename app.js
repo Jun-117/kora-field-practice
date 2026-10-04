@@ -8,6 +8,7 @@ import {
   collection, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromCache, onSnapshot, query, where,
   serverTimestamp, Timestamp, waitForPendingWrites, terminate, clearIndexedDbPersistence,
   limit as qLimit, writeBatch, connectFirestoreEmulator, disableNetwork, enableNetwork } from './vendor/firebase-firestore.js';
+import { getStorage, ref as sRef, uploadString, getDownloadURL, deleteObject, getMetadata, connectStorageEmulator } from './vendor/firebase-storage.js';
 import * as R from './logic.js';
 import { initLang, setLang, getLang, locale, langSegHtml, fmtDate, fmtTime } from './i18n.js';
 import * as G from './geo.js';
@@ -17,7 +18,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.18.2 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.18.3 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -123,7 +124,19 @@ const auth = getAuth(app);
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager(), cacheSizeBytes: CACHE_SIZE_UNLIMITED }),
 });
-if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
+// v0.18.3 (B3) Jun 10/4 "2000가구여도 끄떡없게": the picture itself goes to Cloud Storage (photos/{customerId}/{photoId}.jpg); the Firestore photo
+// document keeps a small thumbnail (480 px · ≤ ~110 KB) for the cards and the gallery + the Storage path. Full size = a link (download URL).
+// Old documents with the whole picture inside (img) still read as before. Firebase's own guidance: files in Storage, the URL/path in Firestore.
+const storage = getStorage(app);
+if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); connectStorageEmulator(storage, '127.0.0.1', 9199); }
+const THUMB_PX = 480, THUMB_Q = 0.6, THUMB_MAX_CHARS = 110000;
+export const photoSrc = (x) => (x && (x.thumb || x.img)) || '';
+function makeThumb(dataUrl) {
+  return new Promise((resolve) => { if (!dataUrl || !dataUrl.startsWith('data:image/')) return resolve(''); const img = new Image();
+    img.onload = () => { const k = Math.min(1, THUMB_PX / Math.max(img.naturalWidth, img.naturalHeight)); const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k)); const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); let q = THUMB_Q, d = c.toDataURL('image/jpeg', q); while (d.length > THUMB_MAX_CHARS && q > 0.2) { q -= 0.15; d = c.toDataURL('image/jpeg', q); } resolve(d.length > THUMB_MAX_CHARS ? '' : d); };
+    img.onerror = () => resolve(''); img.src = dataUrl; });
+}
+export const storagePath = (e) => `photos/${String((e.data && e.data.customerId) || 'none').replace(/[^A-Za-z0-9_-]/g, '')}/${e.id}.${String(e.img || '').startsWith('data:application/pdf') ? 'pdf' : 'jpg'}`;
 
 // ---------- helpers ----------
 export const $ = (sel, root = document) => root.querySelector(sel);
@@ -326,7 +339,9 @@ async function sendEntry(e, img) {
   if (e.photo) {
     img = img || await photoGet(e.id);
     if (!img) { jMark(e.key, 'rejected', 'photo copy missing on this phone'); refreshChrome(); return; }
-    p.img = img;
+    const path = storagePath({ ...e, img }); /* v0.18.3 (B3): the file → Storage first (needs the network; a failed upload stays "pending" and is tried again), then the small document */
+    try { await uploadString(sRef(storage, path), img, 'data_url'); } catch (err) { jMark(e.key, err && err.code === 'storage/unauthorized' ? 'rejected' : 'pending', err && err.code); refreshChrome(); return; }
+    p.st = path; p.thumb = await makeThumb(img); p.bytes = Math.round(img.length * 0.75); delete p.img;
   }
   setDoc(doc(db, e.path), p, { merge: !e.isNew })
     .then(() => { jMark(e.key, 'done'); if (e.photo) photoDel(e.id); refreshChrome(); hbSoon(); })
@@ -2326,9 +2341,9 @@ export async function visitPhotos(parent) { /* v0.14: the first two photos saved
   const out = []; const toImg = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
   /* v0.17.3 (1) Jun 10/4 "여전히 사진 3장 업로드해도 안된다": a sent photo has no copy here any more (dropped once the server has it) — photoGet now says so
      instead of true, so the server is asked. The record's own photos (install · visit · repair) by their number; never the signature (same parent) */
-  const add = (src) => { if (typeof src === 'string' && src.startsWith('data:image/') && out.length < 2 && !out.includes(src)) out.push(src); };
+  const add = (src) => { if (typeof src === 'string' && src.startsWith('data:image/') && out.length < 2 && !out.includes(src)) out.push(src); }; /* v0.18.3: cards draw the thumbnail (new docs) or the picture (old docs) */
   const own = (x) => (['install', 'visit', 'repair'].includes(x.kind) ? 0 : 1);
-  const take = (xs) => xs.filter((x) => x && x.kind !== 'Signature').sort((a, b) => own(a) - own(b) || (Number(a.n) || 0) - (Number(b.n) || 0)).forEach((x) => add(x.img));
+  const take = (xs) => xs.filter((x) => x && x.kind !== 'Signature').sort((a, b) => own(a) - own(b) || (Number(a.n) || 0) - (Number(b.n) || 0)).forEach((x) => add(photoSrc(x)));
   const loc = []; for (const e of myJournal().filter((e) => e.photo && e.data && e.data.parent === parent)) { const img = await photoGet(e.id); if (img) loc.push({ ...e.data, img }); } take(loc);
   if (out.length < 2 && !DEMO) { const q = query(collection(db, 'photos'), where('parent', '==', parent), qLimit(8)); const docs = (snap) => snap.docs.map((d) => d.data());
     try { take(docs(await getDocsFromCache(q))); } catch (e) {}
@@ -2346,7 +2361,8 @@ export async function deleteCustomer(id) {
   const refs = custRefs(id);
   if (!DEMO) {
     if (!navigator.onLine) return { ok: false, msg: 'Offline — deleting needs the internet' };
-    try { (await getDocs(query(collection(db, 'photos'), where('customerId', '==', id)))).forEach((d) => refs.push(`photos/${d.id}`)); } catch (e) { return { ok: false, msg: 'Photos could not be listed: ' + (e.code || e.message) }; }
+    const stPaths = []; try { (await getDocs(query(collection(db, 'photos'), where('customerId', '==', id)))).forEach((d) => { refs.push(`photos/${d.id}`); const st = d.get('st'); if (st) stPaths.push(st); }); } catch (e) { return { ok: false, msg: 'Photos could not be listed: ' + (e.code || e.message) }; }
+    await Promise.allSettled(stPaths.map((p) => deleteObject(sRef(storage, p)))); /* v0.18.3 (B3): the files in Storage go too (best effort) */
     const all = [...refs, `customers/${id}/private/main`];
     try { for (let i = 0; i < all.length; i += 400) { const b = writeBatch(db); for (const p of all.slice(i, i + 400)) b.delete(doc(db, p)); await b.commit(); } }
     catch (e) { return { ok: false, msg: e && e.code === 'permission-denied' ? 'The server refused — publish the new rules first (Firebase → Firestore → Rules)' : 'Not deleted: ' + (e.code || e.message) }; }
@@ -2494,7 +2510,7 @@ async function loadPhotos(cid, parent, net = false) { /* v0.11.1 (#2): the serve
   const seen = new Map();
   const show = () => {
     const b = $('#drawer #photoBox') || $('#photoBox'); if (!b) return;
-    const list = [...seen.values()].filter((x) => typeof x.img === 'string' && (x.img.startsWith('data:image/') || isPdf(x.img))).sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))); /* v0.14 (#5): a timeline — oldest first */
+    const list = [...seen.values()].filter((x) => (typeof photoSrc(x) === 'string' && (photoSrc(x).startsWith('data:image/') || isPdf(photoSrc(x)))) || (x.st && String(x.st).endsWith('.pdf'))).sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))); /* v0.14 (#5): a timeline — oldest first · v0.18.3: thumbnail + Storage path */
     const stage = (x) => String(x.parent || '').startsWith('visits/') ? (x.kind === 'repair' ? '🛠️ repair' : '🔧 visit') : String(x.parent || '').startsWith('customers/') ? '🏠 install' : esc(x.kind || '');
     b.innerHTML = list.map((x) => figOf(x, `${stage(x)} · ${esc(x.date || '')}${x.local ? ' · 🟡' : ''}`)).join('') || '<span class="muted">No photos yet</span>';
   };
@@ -2508,7 +2524,7 @@ async function loadPhotos(cid, parent, net = false) { /* v0.11.1 (#2): the serve
 }
 const isPdf = (x) => typeof x === 'string' && x.startsWith('data:application/pdf');
 const thumb = (img) => (isPdf(img) ? `<div class="pdf-tile" data-pdf="1">📄<span>PDF</span></div>` : `<img src="${esc(img)}" alt="" data-full="1">`);
-const figOf = (x, cap) => `<figure${isPdf(x.img) ? ` data-src="${esc(x.img)}"` : ''}>${thumb(x.img)}<figcaption>${cap}</figcaption></figure>`;
+const figOf = (x, cap) => { const src = photoSrc(x); const pdf = isPdf(src) || (!src && x.st && String(x.st).endsWith('.pdf')); return `<figure${isPdf(src) ? ` data-src="${esc(src)}"` : ''}${x.st ? ` data-st="${esc(x.st)}"` : ''}>${pdf ? `<div class="pdf-tile" data-pdf="1">📄<span>PDF</span></div>` : thumb(src)}<figcaption>${cap}${x.st ? ' <button type="button" class="a" data-act="photoFull">⤓ full size</button>' : ''}</figcaption></figure>`; }; /* v0.18.3 (B3): the full picture lives in Storage */
 function renderThumbs() {
   const t = $('#drawer #thumbs') || $('#thumbs'); if (!t) return;
   t.innerHTML = S.formPhotos.map((p, i) => `<figure>${isPdf(p.img) ? '<div class="pdf-tile">📄<span>PDF</span></div>' : `<img src="${p.img}" alt="">`}<button type="button" class="rm" data-rmphoto="${i}">✕</button></figure>`).join('');
@@ -3479,6 +3495,7 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'full') { if (navigator.onLine && !DEMO) { await startData(true); toast('Reloading from server…'); } else toast('Needs internet'); }
   else if (act === 'persist') { let r = false; try { r = await navigator.storage.persist(); } catch (e) {} toast('Storage protection: ' + (r ? 'ON' : 'not granted')); fillDiag(); }
   else if (act === 'swReload' && S.swWaiting) S.swWaiting.postMessage('skipWaiting');
+  else if (act === 'photoFull') { const fg = a.closest('figure'); const st = fg && fg.dataset.st; if (st) { a.disabled = true; try { const url = await getDownloadURL(sRef(storage, st)); window.open(url, '_blank', 'noopener'); } catch (e) { toast('Could not open: ' + (e.code || e.message)); } a.disabled = false; } } /* v0.18.3 (B3) */
   else if (act === 'delCust') delAsk(a.dataset.cid); /* v0.17.3 (6) */
   else if (act === 'delCustNo') { const s0 = $('#delSlot'); if (s0) s0.innerHTML = ''; }
   else if (act === 'delCustGo') await delGo(a.dataset.cid);
@@ -3677,7 +3694,7 @@ if (EMU) { /* v0.18.0 (A-1): the self-test drives the real sign-in → save → 
     serverGet: async (path) => { const s = await getDocFromServer(doc(db, path)); return s.exists() ? s.data() : null; },
     serverSet: (path, data, merge) => setDoc(doc(db, path), data, { merge: !!merge }),
     serverList: async (col, field, value) => (await getDocs(query(collection(db, col), where(field, '==', value)))).docs.map((d) => ({ id: d.id, ...d.data() })),
-    offline: () => disableNetwork(db), online: () => enableNetwork(db), deleteCustomer, visitPhotos, serverTimestamp, liveSweep, liveSweepPlan,
+    offline: () => disableNetwork(db), online: () => enableNetwork(db), deleteCustomer, visitPhotos, serverTimestamp, liveSweep, liveSweepPlan, storageMeta: (p) => getMetadata(sRef(storage, p)),
   };
 }
 render(true);

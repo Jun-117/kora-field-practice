@@ -2,12 +2,12 @@
 // Storage = Firestore offline cache (IndexedDB) + a second copy of every save (localStorage journal; photos in our own IndexedDB).
 // A save counts as "arrived" only when the server confirms it. Until then the second copy is kept and re-sent.
 import { initializeApp, deleteApp } from './vendor/firebase-app.js';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword, initializeAuth, inMemoryPersistence, setPersistence, browserSessionPersistence, indexedDBLocalPersistence } from './vendor/firebase-auth.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, connectAuthEmulator, sendPasswordResetEmail, createUserWithEmailAndPassword, initializeAuth, inMemoryPersistence, setPersistence, browserSessionPersistence, indexedDBLocalPersistence } from './vendor/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, CACHE_SIZE_UNLIMITED,
   collection, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromCache, onSnapshot, query, where,
   serverTimestamp, Timestamp, waitForPendingWrites, terminate, clearIndexedDbPersistence,
-  limit as qLimit, writeBatch } from './vendor/firebase-firestore.js';
+  limit as qLimit, writeBatch, connectFirestoreEmulator, disableNetwork, enableNetwork } from './vendor/firebase-firestore.js';
 import * as R from './logic.js';
 import { initLang, setLang, getLang, locale, langSegHtml, fmtDate, fmtTime } from './i18n.js';
 import * as G from './geo.js';
@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.17.4 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.18.0 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -29,6 +29,9 @@ const firebaseConfig = { apiKey: 'practice-no-server', authDomain: 'practice.inv
 // Local self-test/preview only (127.0.0.1 / localhost with ?demo): fake signed-in admin + demo data. Never active on the live site.
 export const DEMO = true; // PRACTICE build (koracarenepal.com/kora-field-practice/): fake data only — nothing reaches the server (fake Firebase config above)
 if (/[?&]reset=1/.test(location.search)) { try { Object.keys(localStorage).filter((k) => k.startsWith('kfp_')).forEach((k) => localStorage.removeItem(k)); indexedDB.deleteDatabase('kfp-photos'); } catch (e) {} location.replace(location.pathname); }
+// v0.18.0 (A-1) Jun 10/4 "300가구 전까지 해야할거 다 하자": the real save → server → read-back path, against the Firebase Local Emulator Suite
+// (a fake Firestore + Auth on this Mac). Only on localhost with ?emu=1 — never on the live site. The emulator run is tools/emutest.sh.
+export const EMU = !DEMO && ['127.0.0.1', 'localhost'].includes(location.hostname) && /[?&]emu=1/.test(location.search);
 const DEMO_KEEP = true; // the practice build turns this on: the chosen person is remembered · a start-over button · the fake world keeps living
 const DEMO_LABEL = 'PRACTICE';
 
@@ -120,6 +123,7 @@ const auth = getAuth(app);
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager(), cacheSizeBytes: CACHE_SIZE_UNLIMITED }),
 });
+if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); }
 
 // ---------- helpers ----------
 export const $ = (sel, root = document) => root.querySelector(sel);
@@ -586,6 +590,16 @@ async function wipePhone() {
   try { indexedDB.deleteDatabase('kfp-photos'); } catch (e) {}
   S.wiped = true; S.profile = {};
 }
+// v0.18.0 (A-4) Jun 10/4: app errors reach the desk — the last 10 (message · where · screen · version, never record contents) ride on the
+// phone heartbeat (devices/{id}.errors) → Phones page + alert. No third-party service, no CSP change.
+const ERR_MAX = 10; let errQ = lsGet('kfp_errs', []);
+export function noteError(kind, msg, where) {
+  const e = { t: Date.now(), k: String(kind || 'error').slice(0, 12), m: String(msg || '').slice(0, 200), w: String(where || '').slice(0, 120), s: String((S.route && S.route.screen) || '').slice(0, 20), v: APP_VERSION };
+  errQ = [...errQ.slice(-(ERR_MAX - 1)), e]; lsSet('kfp_errs', errQ); try { hbSoon(); } catch (e2) {} return e;
+}
+export const errList = () => errQ;
+window.addEventListener('error', (ev) => { if (ev && ev.message) noteError('error', ev.message, `${String(ev.filename || '').split('/').pop()}:${ev.lineno || ''}`); });
+window.addEventListener('unhandledrejection', (ev) => { const r = ev && ev.reason; noteError('reject', (r && (r.code || r.message)) || String(r || ''), ''); });
 export const myName = () => (S.isAdmin ? 'Jun' : (S.profile && S.profile.name) || (S.user && S.user.email ? S.user.email.split('@')[0] : ''));
 export const referralOn = () => S.settings.referralCampaign === 'Yes'; /* v0.15: the referral campaign (card · rewards · tree) is off until Settings says Yes */
 export const techNames = () => { const base = ['Tara', 'Jun']; const extra = String(S.settings.techNames || '').split(',').map((s) => s.trim()).filter(Boolean); return [...new Set([...base, ...extra])]; };
@@ -3132,7 +3146,8 @@ export async function heartbeat(force) {
   let persisted = null; try { persisted = await lim(navigator.storage.persisted(), 1500); } catch (e) {}
   const data = { uid: S.user.uid, email: S.user.email || '', name: myName(), appVersion: APP_VERSION, ua: shortUa(), desk: !!S.desk, lang: getLang(),
     pending: pend.length, rejected: j.filter((e) => e.state === 'rejected').length, oldestPendingAt: pend.length ? Math.min(...pend.map((e) => e.t)) : null,
-    lastServerAt: S.lastServer || null, online: navigator.onLine, storageOk: !!S.storageOk, persisted, standalone: !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches), seenAtMs: Date.now() };
+    lastServerAt: S.lastServer || null, online: navigator.onLine, storageOk: !!S.storageOk, persisted, standalone: !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches), seenAtMs: Date.now(),
+    errors: errQ.slice(-ERR_MAX), errLast: errQ.length ? errQ[errQ.length - 1].t : null }; /* v0.18.0 (A-4) */
   if (DEMO) { S.demoDevices = S.demoDevices || []; const i = S.demoDevices.findIndex((d) => d.id === deviceId()); const row = { id: deviceId(), ...data, seenAt: { toMillis: () => data.seenAtMs } }; if (i >= 0) S.demoDevices[i] = row; else S.demoDevices.push(row); return row; }
   setDoc(doc(db, 'devices', deviceId()), { ...data, seenAt: serverTimestamp() }, { merge: true }).catch(() => {});
   return data;
@@ -3156,6 +3171,7 @@ export function deviceIssues(d, now = Date.now()) {
   if (!d.desk && d.persisted === false) out.push(['warn', 'storage not protected — Status → Protect phone storage']);
   if (!d.desk && d.standalone === false && /iOS/.test(d.ua || '')) out.push(['warn', 'opened in Safari, not the home-screen app']);
   if (d.storageOk === false) out.push(['bad', 'phone storage failing']);
+  const errs = Array.isArray(d.errors) ? d.errors : []; const e24 = errs.filter((e) => e && now - (Number(e.t) || 0) < 864e5).length; if (e24) out.push(['bad', `${e24} app error(s) in 24 h — ${String(errs[errs.length - 1].m || '').slice(0, 60)}`]); /* v0.18.0 (A-4) */
   return { seen, out, lvl: out.some((x) => x[0] === 'bad') ? 'bad' : out.length ? 'warn' : 'ok' };
 }
 async function fillDiag() {
@@ -3599,5 +3615,16 @@ if (DEMO) {
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */
   if (!location.search.includes('empty')) import('./demo.js').then((d) => { d.loadDemo(S, practiceDay()); practiceReplay(); practiceLive(d, true); setInterval(() => practiceLive(d, false), 180000); bump(); heartbeat(true); render(true); }).catch((e) => console.warn('demo', e));
+}
+if (EMU) { /* v0.18.0 (A-1): the self-test drives the real sign-in → save → server → read-back path */
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R, CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, noteError, errList, deviceIssues, heartbeat };
+  window.__emu = {
+    signUp: async (email, pw) => { const r = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emu', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw, returnSecureToken: true }) }); return (await r.json()).localId; },
+    signIn: (email, pw) => signInWithEmailAndPassword(auth, email, pw), signOut: () => signOut(auth),
+    serverGet: async (path) => { const s = await getDocFromServer(doc(db, path)); return s.exists() ? s.data() : null; },
+    serverSet: (path, data, merge) => setDoc(doc(db, path), data, { merge: !!merge }),
+    serverList: async (col, field, value) => (await getDocs(query(collection(db, col), where(field, '==', value)))).docs.map((d) => ({ id: d.id, ...d.data() })),
+    offline: () => disableNetwork(db), online: () => enableNetwork(db), deleteCustomer, visitPhotos, serverTimestamp,
+  };
 }
 render(true);

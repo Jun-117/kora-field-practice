@@ -1346,6 +1346,8 @@ P.push([/^(\d+) visits? done$/, '방문 $1건 완료', '$1 भ्रमण स�
 W['PI: inspect within 14 days'] = ['PI: 받은 뒤 14일 안에 검수', 'PI: प्राप्त भएको १४ दिनभित्र जाँच'];
 W['into stock'] = ['재고로 입고', 'मौज्दातमा'];
 P.push([/^📥 (\d+) item\(s\) added · (\d+) updated$/, '📥 $1개 추가됨 · $2개 갱신', '📥 $1 वटा थपियो · $2 अद्यावधिक'], [/^📥 (\d+) item\(s\) added · (\d+) updated · (\d+) skipped \(empty or already there\)$/, '📥 $1개 추가됨 · $2개 갱신 · $3개 건너뜀 (빈 칸이거나 이미 있음)', '📥 $1 वटा थपियो · $2 अद्यावधिक · $3 छोडियो (खाली वा पहिल्यै छ)']);
+/* v0.18.0 (A-4) — 🔴 ne draft */ W['Errors (24 h)'] = ['오류 (24시간)', 'त्रुटि (२४ घण्टा)'];
+P.push([/^(\d+) app error\(s\) in 24 h — (.+)$/, '24시간 안 앱 오류 $1건 — $2', '२४ घण्टामा एप त्रुटि $1 — $2']);
 Object.assign(W, { 'Practice — saved on this phone only': ['연습 — 이 폰에만 저장', 'अभ्यास — यो फोनमा मात्र सेभ'], 'PRACTICE — NOT SENT TO THE SERVER': ['연습용 — 서버로 안 보냄', 'अभ्यास — सर्भरमा पठाइँदैन'] });
 
 const D2 = {}; for (const [en, [ko, ne]] of Object.entries(W)) { D2[en.trim()] = { ko, ne }; }

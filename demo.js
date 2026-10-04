@@ -28,7 +28,8 @@ export function loadDemo(S, today) {
   let d = start; let sameDay = 0;
   while (d < R.addDays(today, -2)) {
     const monthsIn = R.monthsBetween(start, d);
-    const perMonth = (monthsIn < 6 ? 4 : 6) * (typeof location !== 'undefined' && location.search.includes('big') ? 9.5 : 1);
+    const wantN = typeof location !== 'undefined' ? Number((new URLSearchParams(location.search)).get('n')) || 0 : 0; /* v0.18.0 (B-6): ?n=2000 = about that many homes (load test) */
+    const perMonth = (monthsIn < 6 ? 4 : 6) * (wantN ? wantN / 50 : typeof location !== 'undefined' && location.search.includes('big') ? 9.5 : 1);
     sameDay = (sameDay || 0) + 1; const gap = Math.round((30 / perMonth) * (0.6 + r() * 0.8)); if (gap >= 1 || sameDay > 4) { d = R.addDays(d, Math.max(1, gap)); sameDay = 0; }
     if (d >= today) break;
     const inst = d; const tole = pick(tolesW); const [la, lo] = TOLES[tole];

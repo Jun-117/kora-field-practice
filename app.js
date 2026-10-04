@@ -18,7 +18,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.18.3 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.18.4 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -165,10 +165,13 @@ function newCode() {
   return 'KC-' + Date.now().toString(36).toUpperCase().slice(-5);
 }
 export function normPhone(raw) {
-  const s0 = String(raw || '').trim(); let d = s0.replace(/[^\d]/g, '');
+  const s0 = String(raw || '').trim(); let d = s0.replace(/[^\d]/g, ''); let intl = s0.startsWith('+');
+  if (d.startsWith('00') && d.length >= 10) { d = d.slice(2); intl = true; } /* v0.18.4: 0082 10… = the + written the old way */
   if (d.length === 13 && d.startsWith('977')) d = d.slice(3);
+  if (d.length === 11 && d.startsWith('09')) d = d.slice(1); /* v0.18.4: 09812345678 — a national 0 in front of a Nepal mobile */
   if (/^9\d{9}$/.test(d)) return '+977' + d;
-  if (s0.startsWith('+') && /^\d{8,15}$/.test(d) && !d.startsWith('977')) return '+' + d; /* v0.16.0 (8) Jun 10/3 "내 번호로 해보게 풀어봐": a non-Nepal number written with + and its country code */
+  if (/^010\d{8}$/.test(d)) return '+82' + d.slice(1); /* v0.18.4 Jun 10/4 "번호 꼭 98로 아니어도 되게": a Korean mobile written as 010-xxxx-xxxx */
+  if (/^\d{8,15}$/.test(d) && !d.startsWith('977') && (intl || (d.length >= 11 && !d.startsWith('0')))) return '+' + d; /* v0.16.0 (8) Jun 10/3 "내 번호로 해보게 풀어봐": a foreign number with its country code · v0.18.4: the + may be left out (82 10…) */
   return null;
 }
 export const custLabel = (c) => c ? `${c.name || '(no name)'} (${c.code || '?'})` : '(unknown customer)';
@@ -790,7 +793,7 @@ FORMS.install = {
   spec: () => [
     { t: 'section', l: 'Customer' },
     { k: 'name', l: 'Customer name', t: 'text', req: 1 },
-    { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX' },
+    { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX or +82 10…' },
     { k: 'msgLang', l: 'WhatsApp messages in', t: 'chips', o: MSG_LANGS, hint: 'Empty = the Settings default (Nepali) · one language reads less like spam' }, /* v0.17.2 (2) */
     { k: 'zone', l: 'Zone', t: 'chips', o: OPT.zone, req: 1 },
     { k: 'ward', l: 'Ward', t: 'select', o: OPT.ward, req: 1 },
@@ -842,7 +845,7 @@ FORMS.install = {
     const errs = {}, warns = {};
     if (!v.name || v.name.length < 2) errs.name = 'Enter the customer name.';
     const phone = normPhone(v.phone);
-    if (!phone) errs.phone = 'Enter a 10-digit mobile number starting with 9 (e.g. 98XXXXXXXX).';
+    if (!phone) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
     else { const dup = arr('customers').find((c) => c.phone === phone && c.id !== v._id); if (dup && !confirmed) warns.phone = `Same number as ${custLabel(dup)}. Save anyway only if this is really a different household.`; else if (!phone.startsWith('+977') && !confirmed) warns.phone = 'Not a Nepal number — fine for a test or a foreign phone (WhatsApp still works).'; }
     need(errs, v, 'zone', 'Choose a zone.'); need(errs, v, 'ward', 'Choose a ward.'); need(errs, v, 'tole', 'Choose a tole.');
     if (v.tole === 'Other' && !v.toleOther) errs.toleOther = 'Write the tole name.';
@@ -1133,7 +1136,7 @@ FORMS.lead = {
   check(v) {
     const errs = {}, warns = {};
     if (!v.name || v.name.length < 2) errs.name = 'Enter the name.';
-    if (v.phone && !normPhone(v.phone)) errs.phone = '10-digit mobile starting with 9.';
+    if (v.phone && !normPhone(v.phone)) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
     need(errs, v, 'outcome');
     return { errs, warns };
   },
@@ -1388,7 +1391,7 @@ FORMS.contract = {
     }
     if (v.kind === 'Transfer to a new holder') {
       if (!v.newName || String(v.newName).trim().length < 2) errs.newName = 'Enter the new holder\'s name.';
-      if (!normPhone(v.newPhone)) errs.newPhone = 'Enter a 10-digit mobile number starting with 9.';
+      if (!normPhone(v.newPhone)) errs.newPhone = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
       need(errs, v, 'transferReason', 'Choose why.'); need(errs, v, 'depositHandling', 'Choose what happens to the deposit.');
     }
     if (v.kind === 'Lost or stolen') {
@@ -1417,7 +1420,7 @@ FORMS.screening = {
   spec: () => [
     { t: 'section', l: 'Who' },
     { k: 'name', l: 'Name', t: 'text', req: 1 },
-    { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX' },
+    { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX or +82 10…' },
     { k: 'tole', l: 'Tole', t: 'select', o: OPT.tole },
     { k: 'date', l: 'Date', t: 'date', req: 1, def: today },
     { t: 'section', l: 'Home', hint: '🔴 First-guess rules (G-1 has no sign-up rule yet) — the verdict only advises; you decide at the end.' },
@@ -1458,8 +1461,8 @@ FORMS.screening = {
   check(v) {
     const errs = {}, warns = {};
     if (!v.name || v.name.length < 2) errs.name = 'Enter the name.';
-    if (!normPhone(v.phone)) errs.phone = 'Enter a 10-digit mobile number starting with 9.';
-    if (v.phone2 && !normPhone(v.phone2)) errs.phone2 = '10-digit mobile starting with 9.';
+    if (!normPhone(v.phone)) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
+    if (v.phone2 && !normPhone(v.phone2)) errs.phone2 = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
     need(errs, v, 'date'); need(errs, v, 'housing', 'Choose one.'); need(errs, v, 'stay36', 'Choose one.'); need(errs, v, 'idSeen', 'Choose one.'); need(errs, v, 'power', 'Choose one.'); need(errs, v, 'tap', 'Choose one.'); need(errs, v, 'decision', 'Choose your decision.');
     if (v.housing === 'Renting' && v.mount === 'Wall') need(errs, v, 'landlordOk', 'Choose one.'); need(errs, v, 'cashDay1', 'Choose one.');
     if (!inRange(v.householdSize, 1, 40)) errs.householdSize = 'Check this number (1–40).';

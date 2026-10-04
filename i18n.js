@@ -1351,6 +1351,7 @@ P.push([/^(\d+) app error\(s\) in 24 h — (.+)$/, '24시간 안 앱 오류 $1�
 /* v0.18.1 (B4·B5) — 🔴 ne draft */ W['⏮ Load 90 days more'] = ['⏮ 90일 더 불러오기', '⏮ थप ९० दिन ल्याउनुहोस्'];
 P.push([/^· since (\d{4}-\d{2}-\d{2})$/, '· $1부터', '· $1 देखि'], [/^⏮ (\d+) older change\(s\) loaded$/, '⏮ 옛 변경 $1건 불러옴', '⏮ $1 पुराना परिवर्तन ल्याइयो']);
 /* v0.18.3 (B3) — 🔴 ne draft */ W['⤓ full size'] = ['⤓ 원본 크기', '⤓ पूरा साइज'];
+/* v0.18.4 phone: any country — 🔴 ne draft */ W['Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).'] = ['네팔 휴대폰(98XXXXXXXX)이나 국가번호를 붙인 외국 번호(+82 10…)를 적으세요.', 'नेपाली मोबाइल (98XXXXXXXX) वा देश कोडसहितको विदेशी नम्बर (+82 10…) लेख्नुहोस्।']; W['98XXXXXXXX or +82 10…'] = ['98XXXXXXXX 또는 +82 10…', '98XXXXXXXX वा +82 10…'];
 P.push([/^Could not open: (.+)$/, '열 수 없음: $1', 'खोल्न सकिएन: $1']);
 Object.assign(W, { 'Practice — saved on this phone only': ['연습 — 이 폰에만 저장', 'अभ्यास — यो फोनमा मात्र सेभ'], 'PRACTICE — NOT SENT TO THE SERVER': ['연습용 — 서버로 안 보냄', 'अभ्यास — सर्भरमा पठाइँदैन'] });
 

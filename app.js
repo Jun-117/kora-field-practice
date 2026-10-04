@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.17.3 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.17.4 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -1453,7 +1453,7 @@ FORMS.claim = {
 export const MS_WHO = ['Us', 'Ministry', 'Lawyer', 'Supplier', 'Forwarder', 'Bank', 'CA', 'Immigration', 'Other'];
 export const MS_STATE = ['Todo', 'Waiting', 'Blocked', 'Done'];
 export const MS_GRADE = ['🟢 measured', '🟡 second-hand', '🔴 guess'];
-export const msBoards = () => [...new Set(arr('milestones').map((x) => x.board || 'Board'))];
+export const msBoards = () => { const mn = new Map(); for (const x of arr('milestones')) { const b = x.board || 'Board'; const o = Number(x.order) || 0; if (!mn.has(b) || o < mn.get(b)) mn.set(b, o); } return [...mn.keys()].sort((a, b) => mn.get(a) - mn.get(b)); }; /* v0.17.4: boards in the order of their items (the v2 board file numbers them 100 · 200 · …) — it was the order the server happened to send */
 FORMS.milestone = {
   col: 'milestones', title: 'Milestone', icon: '🧱',
   spec: () => [
@@ -1472,7 +1472,7 @@ FORMS.milestone = {
   prefill(p) { return { board: p.board && p.board !== '__new__' ? p.board : (msBoards()[0] || ''), since: today(), grade: MS_GRADE[2], order: 10 * (arr('milestones').filter((x) => (x.board || 'Board') === p.board).length + 1) }; },
   check(v) { const errs = {}; need(errs, v, 'board', 'Which board?'); need(errs, v, 'title', 'What is it?'); need(errs, v, 'who', 'Who has it?'); need(errs, v, 'state'); if (!inRange(v.order, 0, 9999)) errs.order = 'A number.'; return { errs, warns: {} }; },
   save(v, id, isNew) {
-    const d = { ...v, board: String(v.board || '').trim().slice(0, 60), title: String(v.title || '').trim().slice(0, 160), doneDate: v.state === 'Done' ? (v.doneDate || today()) : '', by: myName() };
+    const d = { ...v, board: String(v.board || '').trim().slice(0, 60), title: String(v.title || '').trim().slice(0, 160), doneDate: v.state === 'Done' ? (v.doneDate || today()) : '', by: myName(), impAt: null }; /* v0.17.4: touched in the app → a later board file only wins if it is newer */
     const ok = save(`milestones/${id}`, d, isNew); return { ok, np: 0, go: ['status', S.desk ? 'board' : 'status', { b: d.board }] };
   },
 };
@@ -1750,9 +1750,10 @@ function pageEditing() {
   return !!document.querySelector('#view form[data-dirty="1"], #drawer form[data-dirty="1"]');
 }
 document.addEventListener('input', (ev) => { const f = ev.target && ev.target.closest && ev.target.closest('form'); if (f && f.id !== 'theForm' && f.id !== 'loginForm' && f.closest('#view, #drawer') && !ev.target.closest('[data-nodirty]')) f.dataset.dirty = '1'; }, true);
-document.addEventListener('click', (ev) => { /* v0.17.2 (2): one WhatsApp Web tab, reused (every new tab made WhatsApp ask again) · the app link opens the app, no empty tab */
-  const a = ev.target && ev.target.closest && ev.target.closest('a[href^="https://web.whatsapp.com/"], a[href^="whatsapp://"]'); if (!a) return;
-  ev.preventDefault(); try { if (a.href.startsWith('whatsapp:')) WA.open(a.href); else window.open(a.href, 'kora-wa'); } catch (e) {}
+document.addEventListener('click', (ev) => { /* v0.17.2 (2) · v0.17.4 Jun 10/4 "왓츠앱 pc(앱스토어) 연결 성공 · 모든 링크는 앱 자체로": a computer opens every WhatsApp link in the WhatsApp app — a web.whatsapp.com / wa.me / api.whatsapp.com link becomes whatsapp:// (no browser tab, no QR) */
+  const a = ev.target && ev.target.closest && ev.target.closest('a[href^="https://web.whatsapp.com/"], a[href^="whatsapp://"], a[href^="https://wa.me/"], a[href^="https://api.whatsapp.com/"]'); if (!a) return;
+  if (!a.href.startsWith('whatsapp:') && !isComputer()) return; /* a phone: the WhatsApp link opens the phone's WhatsApp app itself */
+  ev.preventDefault(); try { WA.open(toAppUrl(a.href)); } catch (e) {}
 }, true);
 document.addEventListener('focusout', () => { setTimeout(() => { if (S.staleDesk && !pageEditing() && !(S.route.screen === 'form' || (S.drawer && S.drawer.screen === 'form'))) scheduleRender(); }, 0); }, true);
 function rerender() {
@@ -1910,7 +1911,7 @@ export function alertsHtml(m) {
   const s = syncState(); const live = liveAlerts(m); const hidden = m.alerts.length - live.length;
   const list = s.rejected ? [{ lvl: 'bad', ic: '🔴', t: `${s.rejected} record(s) refused by the server — see Status`, report: 'diag' }, ...live] : live;
   const col = { bad: 'var(--bad)', warn: 'var(--warn)', ok: 'var(--ok)', info: 'var(--brand)' };
-  const link = (a) => (a.list ? `data-list="${a.list}"` : a.cal ? (S.desk ? `data-cal="${a.cal}"` : '') : a.side ? (S.desk ? `data-side="${a.side}"` : '') : `data-report="${a.report}"`);
+  const link = (a) => (a.list ? `data-list="${a.list}"` : a.cal ? `data-cal="${a.cal}"` : a.side ? (S.desk ? `data-side="${a.side}"` : '') : `data-report="${a.report}"`);
   const btns = (a) => (S.desk && a.report !== 'diag' ? `<div class="snz" data-stop><button data-snooze="${esc(alertKey(a))}" data-days="1" title="Done for today">✓</button><button data-snooze="${esc(alertKey(a))}" data-days="3" title="Hide for 3 days">💤</button></div>` : '');
   // v0.11.2 (#14) Jun: "카테고리별로 정리" — four groups, a coloured dot only for red
   const CAT = [['money', 'Money', '💰🤝💵✋🧾🏦📅'], ['field', 'Field & customers', '📋🔧🧪📞🚪🛠️⏸️📜🚚🧫⚠️📍🧲🔎'], ['stock', 'Stock & devices', '📦🔩📮'], ['sys', 'System & office', '💾📱🔴🧭📑🏖️']];
@@ -2335,10 +2336,14 @@ export function markCardSent(key, on) {
   return !!s[key];
 }
 // practice/demo: the numbers are made up ('+97798' + 8 random digits) and may belong to real people — never open their chat
-export const waWebUrl = (phone, demo = DEMO) => { const d = String(phone || '').replace(/\D/g, ''); return demo || !d ? 'https://web.whatsapp.com/' : 'https://web.whatsapp.com/send?phone=' + d; };
-export function waWebOpen(phone) { /* one named tab: the next card reuses it instead of opening WhatsApp Web again · v0.17.2 (2): or the WhatsApp app */
-  if (waOpenPref() === 'app') { try { WA.open(waUrl(phone, '', { demo: DEMO, computer: true, app: true })); return true; } catch (e) { return null; } }
-  try { return window.open(waWebUrl(phone), 'kora-wa'); } catch (e) { return null; }
+// v0.17.4: a WhatsApp web link → the same chat in the app (wa.me/977…?text= · api / web …/send?phone=&text=)
+export function toAppUrl(href) {
+  if (String(href).startsWith('whatsapp:')) return href; let u; try { u = new URL(href); } catch (e) { return 'whatsapp://send'; }
+  const ph = u.searchParams.get('phone') || (u.hostname === 'wa.me' ? u.pathname.replace(/\D/g, '') : ''); const tx = u.searchParams.get('text') || '';
+  return waUrl(ph, tx, { computer: true, app: true });
+}
+export function waWebOpen(phone) { /* the customer's chat in the WhatsApp app (v0.17.3 (5) one fixed place · the web tab is gone) */
+  try { WA.open(waUrl(phone, '', { demo: DEMO, computer: true, app: true })); return true; } catch (e) { return null; }
 }
 function csLayout() { /* v0.16.0 (7): 8 rows on screen, the rest behind "+N more" · counts follow the rows */
   const L = document.querySelector('.cs-list'); if (!L) return;
@@ -2395,14 +2400,14 @@ async function imageCard(kind, id) {
     const hint = web ? 'Copies the picture and opens the customer chat → press ⌘V in the chat, then send' : can && !S.desk ? 'Share → choose WA Business → the customer' : 'Save, then send it from WhatsApp';
     if (S.desk) { /* v0.17.0 (1) A2: picture left · buttons right — stacked under the picture they sat below a 990-px screen (y 1103 · 1225) */
       box.innerHTML = `<div class="rc-desk"><img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(r.alt)}"><div class="rc-side">
-        ${web ? `<button type="button" class="btn ok" data-act="rcWaWeb">${waOpenPref() === 'app' ? '💬 WhatsApp app' : '💬 WhatsApp Web'}</button>` : ''}
+        ${web ? `<button type="button" class="btn ok" data-act="rcWaWeb">💬 WhatsApp app</button>` : ''}
         <a class="btn ghost rc-save" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
         ${sk ? `<button type="button" class="btn ghost rc-sent${cardsSent()[sk] ? ' on' : ''}" data-act="cardSent" data-key="${esc(sk)}">${sentLabel(!!cardsSent()[sk])}</button>` : ''}
         <div class="muted rc-hint">${hint}</div>${sk ? '<div class="muted rc-hint">✓ = it leaves 📨 Cards to send (this computer only)</div>' : ''}${sp.noteWait ? '<div class="warn rc-hint">📝 The note is not translated yet — it is added once the visit reaches the server. Open the card again in a minute.</div>' : ''}</div></div>`;
       box.scrollIntoView({ block: 'start', behavior: 'smooth' }); return;
     }
     box.innerHTML = `<img class="rc-img" src="${esc(S.rcUrl)}" alt="${esc(r.alt)}">
-      ${web ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcWaWeb">${waOpenPref() === 'app' ? '💬 WhatsApp app' : '💬 WhatsApp Web'}</button>` : ''}
+      ${web ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcWaWeb">💬 WhatsApp app</button>` : ''}
       ${can && !S.desk ? `<button type="button" class="btn ok" style="display:block;width:100%" data-act="rcShare">📤 Share → WhatsApp</button>` : ''}${/* desk: no 📤 — the Mac share menu's WhatsApp may not be the company account */ ''}
       <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;width:100%;text-decoration:none;margin-top:8px" href="${esc(S.rcUrl)}" download="${esc(S.rcName)}">⬇️ Save image</a>
       ${sk ? `<button type="button" class="btn ghost" style="display:block;width:100%;margin-top:8px" data-act="cardSent" data-key="${esc(sk)}">${sentLabel(!!cardsSent()[sk])}</button>` : ''}
@@ -2674,7 +2679,7 @@ function viewStatus() {
   ${rowsHtml([
     { title: 'Money', tone: 'tone-money', rows: [...rep('payments', '💵', 'Payments', 'all money in', money), ...rep('vat', '🧾', 'VAT by month', 'export CSV', money), ...rep('capack', '🧾', 'CA pack', 'IRD sales book · Excel', money), ...rep('expenses', '🧾', 'Expenses', 'bills · input VAT', can('expense') || money), ...rep('deposits', '🏦', 'Deposit book', 'what we hold', money), ...rep('billing', '🌊', 'Billing moves', 'new · left · month 14', money), ...lst('approvals', '✋', 'Money approvals', m.approvals.pending.length ? m.approvals.pending.length + ' waiting' : 'discounts · refunds', !!(m.approvals.pending.length || isApprover())), ...rep('bank', '🏧', 'Bank CSV match', 'statement → payments', !!S.isAdmin)] },
     { title: 'Customers', tone: 'tone-field', rows: [...lst('map', '🗺️', 'Map', 'all customers'), ...lst('leads', '🧲', 'Leads', 'pipeline'), ...lst('screenings', '🔎', 'Screenings', 'sign-up checks'), ...lst('contract', '📜', 'Contract events', m.contractOpen.length ? m.contractOpen.length + ' to do' : 'notice · transfer · lost'), ...lst('relocations', '🚚', 'Relocations', 'moving house'), ...lst('recoveries', '📦', 'Recoveries', 'devices back'), ...rep('referrals', '🎁', 'Referrals', 'rewards due', referralOn()), ...rep('leavers', '🚪', 'Leavers', 'why homes left')] },
-    { title: 'Field work', tone: 'tone-call', rows: [...lst('filters', '🧪', 'Filter status', 'due & overdue'), ...lst('proof', '✍️', 'Proof of visit', 'signatures · 30 days'), ...rep('callbacks', '🔁', 'Callbacks', 'problems soon after a job'), ...rep('noshows', '🚪', 'Wasted trips', 'nobody home'), ...rep('capacity', '👷', 'Field capacity', 'jobs vs hands', !!m.capacity), ...lst('water', '🧫', 'Raw-water vials', `${m.vials.started} filled · PoC`), ...rep('learning', '🧪', 'Filter learning', 'real intervals')] },
+    { title: 'Field work', tone: 'tone-call', rows: [...rep('calendar', '🗓️', 'Calendar', 'days off · the homes of each day'), ...lst('filters', '🧪', 'Filter status', 'due & overdue'), ...lst('proof', '✍️', 'Proof of visit', 'signatures · 30 days'), ...rep('callbacks', '🔁', 'Callbacks', 'problems soon after a job'), ...rep('noshows', '🚪', 'Wasted trips', 'nobody home'), ...rep('capacity', '👷', 'Field capacity', 'jobs vs hands', !!m.capacity), ...lst('water', '🧫', 'Raw-water vials', `${m.vials.started} filled · PoC`), ...rep('learning', '🧪', 'Filter learning', 'real intervals')] },
     { title: 'Devices & stock', tone: 'tone-dev', rows: [...rep('devices', '📦', 'Devices', 'every serial'), ...rep('stock', '📦', 'Stock & FCL', 'order signal', can('stock')), ...lst('claims', '📮', 'Supplier claims', m.claimsSt.open.length ? m.claimsSt.open.length + ' open' : 'defects → PI', can('stock'))] },
     { title: 'Reports', tone: 'tone-rep', rows: [...rep('gate', '🧭', 'Direction gate', 'churn · retention · collection', money), ...rep('funnel', '⏳', 'Sales stage days', 'lead → first payment'), ...rep('perform', '📑', 'Grant KPIs', 'PAYGo PERFORM', money), ...rep('quality', '🩺', 'Data to fix', 'missing GPS · bill no.')] },
     { title: 'Company', tone: 'tone-co', rows: [...rep('users', '🪪', 'Staff & permissions', 'who can do what', !!S.isAdmin), ...rep('settings', '⚙️', 'Settings', 'company · calendar · techs', !!S.isAdmin), ...rep('payroll', '💼', 'Payroll', 'SSF · TDS · payslips', isBoss()), ...rep('handover', '🆘', 'If Jun cannot work', 'handover page', isBoss()), ...rep('trainings', '🎓', 'Trainings', 'records', !!S.isAdmin), ...rep('export', '💾', 'Export all data', 'backup', can('export'))] },
@@ -2684,6 +2689,31 @@ function viewStatus() {
   <details class="card diagbox"><summary class="status" style="font-size:15px;cursor:pointer">Diagnostics</summary><div class="diag" id="diag">…</div></details>
   <button class="btn ghost" data-act="signOut">Sign out</button>`;
 }
+// v0.17.4 (D2) Jun 10/4 "pc에만있는데 일반 요원 기준에서 필요하거나 있으면 더 효율올라가는 기능": the calendar on a phone — days off (gazette), company events,
+// the homes of a day (same data as the desk calendar: cal.js). Tap a day → its list below; ‹ › = month.
+const PC_KINDS = [['ev', '📌', 'Company & own events'], ['visit', '🔧', 'Visits'], ['filter', '🧪', 'Filters'], ['call', '📞', 'Calls'], ['bill', '💵', 'Bills due'], ['lead', '🧲', 'Leads & demos'], ['move', '🚚', 'Moves'], ['arrive', '📦', 'Devices in'], ['check', '🔍', 'Arrival checks'], ['paid', '💰', 'Cash in'], ['done', '✅', 'Done']];
+const PC_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function phoneCal(m, p) {
+  const t = m.t; const mo = /^\d{4}-\d{2}$/.test(p.mo || '') ? p.mo : t.slice(0, 7);
+  const from = mo + '-01'; const to = R.addDays(R.addMonths(from, 1), -1); const days = CAL.gridDays(from, to); const g0 = days[0], g1 = days[days.length - 1];
+  const by = {}; const put = (d, x) => (by[d] = by[d] || []).push(x);
+  for (const x of CAL.ownEvents(m.D.events, g0, g1)) put(x.d, { kind: 'ev', t: x.ev.title || x.ev.kind, sub: [x.ev.kind, x.ev.time, x.ev.status === 'Done' ? 'done' : ''].filter(Boolean).join(' · '), cid: x.ev.customerId || '' });
+  for (const [d, xs] of Object.entries(CAL.customerDays(m, g0, g1))) for (const x of xs) put(d, x);
+  const sel = R.isDate(p.d) && p.d >= g0 && p.d <= g1 ? p.d : t >= from && t <= to ? t : from;
+  const off = (d) => (m.hm[d] || []).some((h) => h.kind === 'all');
+  const cell = (d) => { const xs = by[d] || []; const cnt = {}; for (const x of xs) cnt[x.kind] = (cnt[x.kind] || 0) + 1; const bs = B.adToBs(d); const wd = new Date(d + 'T00:00:00').getDay();
+    const marks = PC_KINDS.filter(([k]) => cnt[k] && !['paid', 'done'].includes(k)).slice(0, 2).map(([k, ic]) => `<i>${ic}${cnt[k]}</i>`).join('');
+    return `<button type="button" class="pc-c${d < from || d > to ? ' out' : ''}${off(d) ? ' off' : ''}${wd === 6 ? ' sat' : ''}${d === t ? ' today' : ''}${d === sel ? ' sel' : ''}" data-pcal="${d}"><b>${Number(d.slice(8))}</b><small data-noi18n>${bs ? bs.d : ''}</small><span class="pc-m" data-noi18n>${marks}</span></button>`; };
+  const a = B.adToBs(from), z = B.adToBs(to); const bsR = a && z ? (a.m === z.m ? B.bsLabel(a.y, a.m) : `${B.bsLabel(a.y, a.m)} – ${B.bsLabel(z.y, z.m)}`) : '';
+  const wd = new Date(sel + 'T00:00:00').getDay(); const hol = m.hm[sel] || []; const xs = by[sel] || []; const sb = B.adToBs(sel); const dayOff = wd === 6 || hol.some((h) => h.kind === 'all');
+  const holR = hol.map((h) => `<div class="item"><div class="main"><div class="t">${h.kind === 'all' ? '🏖️' : '·'} <span>${esc(h.n)}</span>${h.ne ? ` <span class="muted" data-noi18n>${esc(h.ne)}</span>` : ''}</div><div class="s">${h.kind === 'all' ? '<span>office closed</span>' : esc(h.who || 'some people only')}</div></div></div>`).join('');
+  const groups = PC_KINDS.map(([k, ic, l]) => { const g = xs.filter((x) => x.kind === k); if (!g.length) return ''; const tot = k === 'bill' ? ` · ${R.npr(g.reduce((s2, x) => s2 + (x.amt || 0), 0))}` : '';
+    return `<h2>${ic} <span>${l}</span> <span class="pill">${g.length}${tot}</span></h2><div class="card flush">${g.slice(0, 40).map((x) => `<div class="item${x.late ? ' late' : ''}"${x.cid ? ` data-cust="${esc(x.cid)}"` : ''}><div class="main"><div class="t"${x.cid || x.kind === 'ev' ? ' data-noi18n' : ''}>${esc(x.t)}</div><div class="s">${esc(x.sub || '')}${x.tole ? ` · <span data-noi18n>${esc(x.tole)}</span>` : ''}</div></div></div>`).join('')}${g.length > 40 ? `<div class="muted">+${g.length - 40}</div>` : ''}</div>`; }).join('');
+  return `<div class="pcal"><div class="pc-top"><button type="button" class="btn small ghost" data-pcalmo="${R.addMonths(from, -1).slice(0, 7)}">‹</button><div class="pc-ttl"><b>${PC_MON[Number(mo.slice(5)) - 1]} ${mo.slice(0, 4)}</b><span class="muted" data-noi18n>${esc(bsR)}</span></div><button type="button" class="btn small ghost" data-pcalmo="${R.addMonths(from, 1).slice(0, 7)}">›</button><button type="button" class="btn small ghost" data-pcal="${t}">Today</button></div>
+    <div class="pc-grid">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((w, i) => `<div class="pc-wd${i === 6 ? ' sat' : ''}">${w}</div>`).join('')}${days.map(cell).join('')}</div>
+    <div class="legend pc-leg"><span><i class="sw off"></i>office closed</span><span>🔧 visits</span><span>🧪 filters</span><span>💵 bills</span><span>📞 calls</span><span>📌 events</span></div>
+    <div class="pc-day"><div class="eyebrow">${dayOff ? '🏖️ Day off' : 'Working day'}</div><h2 class="pc-dh" data-noi18n>${esc(sel)}${sb ? ` · ${esc(B.bsLabel(sb.y, sb.m))} ${sb.d}` : ''}</h2>${holR ? `<div class="card flush">${holR}</div>` : ''}${groups || (holR ? '' : '<div class="card empty">Nothing on this day</div>')}</div></div>`;
+}
 const REPORT_PERM = { payroll: 'admin', handover: 'admin', backup: 'admin', payments: 'money', vat: 'money', capack: 'money', deposits: 'money', gate: 'money', billing: 'money', perform: 'money', expenses: 'expenseOrMoney', stock: 'stock', bank: 'admin', users: 'admin', settings: 'admin', export: 'export', trainings: 'adminOnly' };
 export function viewReport(p) {
   const m = model(); const k = p.r;
@@ -2691,6 +2721,7 @@ export function viewReport(p) {
   if (!allowed) return `<button class="back" data-back>‹ Back</button><div class="card empty">Nothing here.</div>`; // staff must not learn what exists beyond their rights
   const head = (t, s) => `<button class="back" data-back>‹ Back</button><h1>${t}</h1>${s ? `<div class="muted">${s}</div>` : ''}`;
   const custName = (id) => { const c = S.D.customers.get(id); return c ? c.name : '?'; };
+  if (k === 'calendar') return head('🗓️ Calendar', 'Days off · company days · the homes of each day') + phoneCal(m, p); /* v0.17.4 (D2) */
   if (k === 'payments') {
     const ps = m.D.payments.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return head('💵 Payments', `${ps.length} records`) + `<button class="btn ghost" data-csv="payments">⬇️ Download CSV</button><div class="card scroll-x"><table class="tbl"><tr><th>Date</th><th>Customer</th><th>Type</th><th class="n">NPR</th><th>Method</th></tr>${ps.slice(0, 300).map((q) => `<tr data-cust="${esc(q.customerId)}" style="cursor:pointer"><td>${esc(q.date)}</td><td>${esc(custName(q.customerId))}</td><td>${esc(q.type)}</td><td class="n">${Math.round(q.amount).toLocaleString('en-IN')}</td><td>${esc(q.method || '')}</td></tr>`).join('')}</table></div>`;
@@ -3210,6 +3241,7 @@ document.addEventListener('click', async (ev) => {
   if (t.closest('[data-offer-x]')) { const o = $('#navOffer'); if (o) o.remove(); return; }
   if (t.id === 'peek') { closePeek(); return; }
   const sz = t.closest('[data-snooze]'); if (sz) { ev.preventDefault(); snoozeAlert(sz.dataset.snooze, Number(sz.dataset.days) || 1); bump(); scheduleRender(); const bb = $('#bellBox'); if (bb && deskMod) setTimeout(() => { const b2 = $('#bellBox'); if (b2) b2.classList.remove('hidden'); }, 60); return; }
+  const clp = t.closest('[data-cal]'); if (clp && !S.desk) { ev.preventDefault(); nav('status', 'report', { r: 'calendar', d: clp.dataset.cal, mo: clp.dataset.cal.slice(0, 7) }); return; } /* v0.17.4 (D2): the phone has a calendar now */
   const cl = t.closest('[data-cal]'); if (cl && S.desk) { ev.preventDefault(); const bb = $('#bellBox'); if (bb) bb.classList.add('hidden'); go('calendar', 'calendar', { d: cl.dataset.cal, mo: cl.dataset.cal.slice(0, 7) }); return; }
   const wo = t.closest('[data-watchok]'); if (wo) { ev.preventDefault(); const [cid, sc] = wo.dataset.watchok.split('|'); watchCheck(cid, Number(sc)); toast('✓ Checked — hidden for 7 days unless it gets worse'); scheduleRender(); return; }
   const spk = t.closest('[data-staffpick]'); if (spk) { ev.preventDefault(); staffPick(spk.dataset.staffpick); return; } /* v0.17.0 (3) B2 */
@@ -3238,7 +3270,7 @@ document.addEventListener('click', async (ev) => {
   const sideb = t.closest('[data-side]'); if (sideb) { history_.length = 0; closeDrawer(true); go(sideb.dataset.side, sideb.dataset.side, {}, true); return; }
   const md = t.closest('[data-msdone], [data-msreopen]'); if (md) { /* v0.15 boards */
     ev.preventDefault(); ev.stopPropagation(); if (!S.isAdmin) return; const done = md.dataset.msdone !== undefined; const id = done ? md.dataset.msdone : md.dataset.msreopen; const x = S.D.milestones.get(id); if (!x) return;
-    auditLog('milestones', id, x, { state: done ? 'Done' : 'Waiting' }); save(`milestones/${id}`, done ? { state: 'Done', doneDate: today() } : { state: 'Waiting', doneDate: '', since: today() }, false); toast(done ? `✅ ${x.title}` : `↩ ${x.title} is open again`); scheduleRender(); return;
+    auditLog('milestones', id, x, { state: done ? 'Done' : 'Waiting' }); save(`milestones/${id}`, done ? { state: 'Done', doneDate: today(), impAt: null } : { state: 'Waiting', doneDate: '', since: today(), impAt: null }, false); toast(done ? `✅ ${x.title}` : `↩ ${x.title} is open again`); scheduleRender(); return;
   }
   const qrm = t.closest('[data-coqr-remove]'); if (qrm) { ev.preventDefault(); if (!S.isAdmin) return; save('settings/app', { coQr: '' }, false); S.settings = { ...S.settings, coQr: '' }; bump(); toast('QR removed'); scheduleRender(); return; }
   const mx = t.closest('[data-msexport]'); if (mx) { ev.preventDefault(); const b = mx.dataset.msexport; const rows = arr('milestones').filter((x) => !b || (x.board || 'Board') === b).map(({ id, createdAt, updatedAt, createdBy, updatedBy, by, ...rest }) => rest); download(`kora-board-${(b || 'all').replace(/[^\w]+/g, '_')}-${today()}.json`, JSON.stringify(rows, null, 2)); return; }
@@ -3254,6 +3286,8 @@ document.addEventListener('click', async (ev) => {
     toast(`🛠️ ${R.npr(x.c.amount)} comes off the next bill`); scheduleRender(); if (S.drawer) refreshDrawer(); return;
   }
   const c = t.closest('[data-cust]'); if (c && c.dataset.cust) { nav('customers', 'detail', { id: c.dataset.cust }); return; }
+  const pcd = t.closest('[data-pcal]'); if (pcd) { S.route.params = { ...(S.route.params || {}), d: pcd.dataset.pcal, mo: pcd.dataset.pcal.slice(0, 7) }; render(false); return; } /* v0.17.4 (D2) */
+  const pcm = t.closest('[data-pcalmo]'); if (pcm) { S.route.params = { ...(S.route.params || {}), mo: pcm.dataset.pcalmo, d: '' }; render(false); return; }
   const ls = t.closest('[data-list]'); if (ls) { nav(S.route.tab, 'list', { list: ls.dataset.list }); return; }
   const rp = t.closest('[data-report]'); if (rp) { ev.preventDefault(); nav('status', 'report', { r: rp.dataset.report, ...(rp.dataset.serial ? { serial: rp.dataset.serial } : {}), ...(rp.dataset.uid ? { uid: rp.dataset.uid } : {}), ...(rp.dataset.pm ? { pm: rp.dataset.pm } : {}) }); return; }
   const sg = t.closest('[data-seg]'); if (sg) { S.route.params.f = sg.dataset.seg; render(false); return; }
@@ -3408,10 +3442,20 @@ document.addEventListener('change', (ev) => {
   if (ev.target.id === 'msImport' && ev.target.files[0]) { /* v0.15: a board from a JSON file (the real items are kept outside the public code) */
     const file = ev.target.files[0]; ev.target.value = ''; if (!S.isAdmin) return;
     const rd = new FileReader(); rd.onload = () => { try {
-      const j = JSON.parse(rd.result); const rows = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : []; const have = new Set(arr('milestones').map((x) => `${x.board}|${x.title}`)); let n = 0, skip = 0;
+      const j = JSON.parse(rd.result); const rows = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : [];
+      /* v0.17.4 Jun 10/4 "왤케 별로없냐?" → the full board file. Same title (any board) = the same item, updated (it may move board) by a NEWER file:
+         an item still as a file left it (impAt set) → when this file's asOf is later than that file's · an item made or touched in the app (✓ · ↩ · the form clear impAt)
+         → only when this file is newer than its last change. A file without asOf only adds. */
+      const asOf = j && !Array.isArray(j) && j.asOf ? Date.parse(j.asOf) : NaN; const tk = (q) => String(q || '').trim().toLowerCase();
+      const byTitle = new Map(arr('milestones').map((x) => [tk(x.title), x])); let n = 0, up = 0, skip = 0;
+      const lastCh = (x) => { const u = x.updatedAt; return Math.max(Number(x._localT) || 0, u && u.toMillis ? u.toMillis() : typeof u === 'string' ? Date.parse(u) || 0 : 0); };
       for (const r0 of rows) { const r = { board: String(r0.board || '').trim().slice(0, 60), title: String(r0.title || '').trim().slice(0, 160), who: MS_WHO.includes(r0.who) ? r0.who : 'Other', whoName: String(r0.whoName || '').slice(0, 80), state: MS_STATE.includes(r0.state) ? r0.state : 'Todo', since: R.isDate(r0.since) ? r0.since : '', due: R.isDate(r0.due) ? r0.due : '', grade: MS_GRADE.includes(r0.grade) ? r0.grade : MS_GRADE[2], src: String(r0.src || '').slice(0, 300), note: String(r0.note || '').slice(0, 600), order: Number(r0.order) || 0, doneDate: R.isDate(r0.doneDate) ? r0.doneDate : '', by: myName() };
-        if (!r.board || !r.title) { skip++; continue; } if (have.has(`${r.board}|${r.title}`)) { skip++; continue; } have.add(`${r.board}|${r.title}`); save(`milestones/${newId('milestones')}`, r, true); n++; }
-      toast(`📥 ${n} item(s) added${skip ? ` · ${skip} skipped (empty or already there)` : ''}`); scheduleRender();
+        if (!r.board || !r.title) { skip++; continue; }
+        const stamp = { impAt: Date.now(), impAsOf: Number.isFinite(asOf) ? asOf : 0 };
+        const was = byTitle.get(tk(r.title)); if (was) { const newer = Number.isFinite(asOf) && (was.impAt ? (Number(was.impAsOf) || 0) < asOf : lastCh(was) < asOf);
+          if (newer) { const { by, ...ch } = r; save(`milestones/${was.id}`, { ...ch, ...stamp }, false); up++; } else skip++; continue; }
+        byTitle.set(tk(r.title), r); save(`milestones/${newId('milestones')}`, { ...r, ...stamp }, true); n++; }
+      toast(`📥 ${n} item(s) added${up ? ` · ${up} updated` : ''}${skip ? ` · ${skip} skipped (empty or already there)` : ''}`); scheduleRender();
     } catch (e) { toast('Not a board file: ' + (e.message || e)); } }; rd.readAsText(file); return;
   }
   if (ev.target.id === 'coQrIn' && ev.target.files[0]) { /* v0.16 #7: the company QR → 320px square PNG in settings/app.coQr */
@@ -3550,7 +3594,7 @@ if (DEMO) {
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
     S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, waWebUrl, msBoards, rerenderSoon: scheduleRender };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender };
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */

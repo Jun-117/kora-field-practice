@@ -16,6 +16,9 @@ const KIND = {
 let Lf = null, map = null, layer = null, meLayer = null, me = null, filter = 'all', lastView = null, watchId = null, orderedAt = null;
 // v0.11.2 (#7) Jun: "마커들 누르면 순서대로 1,2,3 뜨게" — tap pins in the order you want; each tap puts that stop at the next position of your own order
 let picking = false, picked = [];
+// v0.17.4 (D1) Jun 10/4 "pc에만있는데 일반 요원 기준에서 … 효율올라가는 기능": the desk's ward lines on this map too (▦ · off by default) + one badge per tole = today's stops there
+let wGJ = null, wLines = null, wLabs = null, wToles = null;
+const wardsR = () => lsGet('kfp_route_wards', false) === true;
 const dayKey = () => 'kfp_route_' + today();
 const modeKey = () => 'kfp_route_mode_' + today();
 const LIVE_REORDER_KM = 0.15; // re-order after moving 150 m (auto mode)
@@ -85,7 +88,7 @@ export function routeHtml() {
       <div class="rmode">${routeMode() === 'auto' ? `<span class="on">📡 Auto order · from where you are${me ? '' : ' (finding you…)'}</span><button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '✋ Your own order · tap the pins'}</button>` : `<span class="man">✋ Your own order</span><button data-act="rAuto">📡 Back to auto</button><button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '👆 Tap pins to re-order'}</button>`}</div>
       ${st.noGps.length ? `<div class="rsum" style="font-size:12px;color:var(--muted)">📍 ${st.noGps.length} stop(s) without GPS — open the customer and tap “Get location” next visit</div>` : ''}
     </div>
-    <div class="rbot"><button data-act="rTomorrow" title="Tomorrow's homes — send the notice">📅</button><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext"><span class="nx">🧭 Next</span></button><button class="round" data-act="rMe" title="My location">📍</button></div>
+    <div class="rbot"><button data-act="rWards" class="${wardsR() ? 'on' : ''}" title="Ward lines and tole totals">▦</button><button data-act="rTomorrow" title="Tomorrow's homes — send the notice">📅</button><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext"><span class="nx">🧭 Next</span></button><button class="round" data-act="rMe" title="My location">📍</button></div>
   </div>`;
 }
 export async function mountRoute(root) {
@@ -96,7 +99,7 @@ export async function mountRoute(root) {
   map = Lf.map(box, { ...MAP_OPTS, zoomControl: false, attributionControl: true, fadeAnimation: false, zoomAnimation: true, markerZoomAnimation: false });
   Lf.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
   layer = Lf.layerGroup().addTo(map); meLayer = Lf.layerGroup().addTo(map);
-  const lab = () => box.classList.toggle('labels', map.getZoom() >= 15); map.on('zoomend', lab);
+  const lab = () => box.classList.toggle('labels', map.getZoom() >= 15); map.on('zoomend', lab); map.on('zoomend', () => drawWardsR());
   map.on('click', () => closeSheet());
   draw(true); lab();
   if (!navigator.onLine) { toast('📵 Offline — the map tiles cannot load. The stop list still works.', 5000); setTimeout(() => listSheet(), 400); } /* v0.11.1 (#17) */
@@ -114,7 +117,7 @@ function startWatch() {
   }, () => {}, { enableHighAccuracy: true, maximumAge: 30000, timeout: 30000 });
 }
 function stopWatch() { if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId); watchId = null; }
-export function drop() { stopWatch(); if (map) { try { lastView = { c: map.getCenter(), z: map.getZoom() }; map.off(); map.remove(); } catch (e) {} } map = null; layer = null; meLayer = null; }
+export function drop() { stopWatch(); if (map) { try { lastView = { c: map.getCenter(), z: map.getZoom() }; map.off(); map.remove(); } catch (e) {} } map = null; layer = null; meLayer = null; wLines = wLabs = wToles = null; }
 export function update() { const top = document.querySelector('.route .rtop'); if (top) { const tmp = document.createElement('div'); tmp.innerHTML = routeHtml(); top.replaceWith(tmp.querySelector('.rtop')); } draw(false); if (document.querySelector('#rsheet.list')) listSheet(true); }
 function drawMe() { if (!map || !me) return; meLayer.clearLayers(); Lf.marker([me.lat, me.lng], { icon: Lf.divIcon({ className: '', html: '<div class="me-pin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }) }).addTo(meLayer); }
 function draw(fit) {
@@ -135,9 +138,25 @@ function draw(fit) {
   const nx = document.getElementById('rNext'); const first = seq[0];
   if (nx) nx.innerHTML = first ? `<span class="nx">🧭 Next</span><span class="nxn">#1 ${esc((first.x.c.name || '').split(' ')[0])}</span>` : '<span class="nx">🧭 Nothing left</span>'; /* v0.11.1: two short lines instead of one clipped line */
   if (fit) { if (lastView) map.setView(lastView.c, lastView.z, { animate: false }); else if (pts.length) map.fitBounds(pts, { padding: [70, 70], maxZoom: 16, animate: false }); else map.setView([28.2096, 83.9856], 13, { animate: false }); }
-  drawMe();
+  drawMe(); drawWardsR();
   S.routeSeq = seq; // for tests & the list
 }
+async function drawWardsR() {
+  if (!map || !Lf) return;
+  for (const l of [wLabs, wToles]) if (l) try { map.removeLayer(l); } catch (e) {}
+  wLabs = wToles = null;
+  if (!wardsR()) { if (wLines) try { map.removeLayer(wLines); } catch (e) {} wLines = null; return; }
+  if (!wGJ) { try { wGJ = await (await fetch('./vendor/osm-pokhara-wards.json')).json(); } catch (e) { return; } if (!map || !wardsR()) return; }
+  if (!map.getPane('kfWards')) { const pn = map.createPane('kfWards'); pn.style.zIndex = 350; pn.style.pointerEvents = 'none'; }
+  if (!map.getPane('kfWardLab')) { const pl = map.createPane('kfWardLab'); pl.style.zIndex = 450; pl.style.pointerEvents = 'none'; } /* under the stop pins (600), never catching a tap */
+  if (!wLines) wLines = Lf.geoJSON(wGJ, { pane: 'kfWards', interactive: false, style: () => ({ color: '#2b7bb9', weight: 1.6, opacity: 0.75, dashArray: '6 5', fill: false }) }).addTo(map);
+  const z = map.getZoom();
+  if (z >= 13) wLabs = Lf.layerGroup(wGJ.features.map((f) => { const lp = f.properties && f.properties.lp; return Array.isArray(lp) ? Lf.marker([lp[1], lp[0]], { pane: 'kfWardLab', interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', html: `<div class="rwlab">Ward ${f.properties.ward}</div>`, iconSize: [70, 16], iconAnchor: [35, 8] }) }) : null; }).filter(Boolean)).addTo(map);
+  if (z <= 15) { const cl = {}; for (const s of stopsFor(model()).withGps) { if (s.done) continue; const k = toleOf(s.x.c); const g = s.x.c.gps; const c = (cl[k] = cl[k] || { n: 0, late: 0, lat: 0, lng: 0 }); c.n++; c.lat += g.lat; c.lng += g.lng; if (s.kinds.includes('collect')) c.late++; }
+    wToles = Lf.layerGroup(Object.entries(cl).map(([k, c]) => Lf.marker([c.lat / c.n, c.lng / c.n], { pane: 'kfWardLab', interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', html: `<div class="rtole"><b data-noi18n>${esc(k)}</b> <span>${c.n}</span>${c.late ? ` <i>${c.late} late</i>` : ''}</div>`, iconSize: [120, 22], iconAnchor: [60, 58] }) }))).addTo(map); }
+}
+export const _rmap = () => map; /* selftest */
+export const _routeWards = () => ({ lines: !!wLines, labs: wLabs ? wLabs.getLayers().length : 0, toles: wToles ? wToles.getLayers().length : 0 }); /* selftest */
 function sheet(s, n) {
   const x = s.x, c = x.c; closeSheet();
   const el = document.createElement('div'); el.className = 'sheet'; el.id = 'rsheet';
@@ -236,6 +255,7 @@ document.addEventListener('click', (ev) => {
   const a = ev.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
   if (act === 'rClose') closeSheet();
+  else if (act === 'rWards') { lsSet('kfp_route_wards', !wardsR()); a.classList.toggle('on', wardsR()); drawWardsR(); toast(wardsR() ? '▦ Ward lines on' : 'Ward lines off'); } /* v0.17.4 (D1) */
   else if (act === 'rTomorrow') tomorrowSheet();
   else if (act === 'rAuto') { picking = false; picked = []; toAuto(); }
   else if (act === 'rPick') { picking = !picking; picked = []; closeSheet(); if (picking && routeMode() === 'auto') setManual((S.routeSeq || []).map((s) => s.id)); /* v0.12.1 (#7) Jun: "직접 정한 순서" = tap the pins 1·2·3 — one button */ update(); toast(picking ? '👆 Tap the pins in the order you want to visit' : '✋ Order kept'); }

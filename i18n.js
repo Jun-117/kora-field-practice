@@ -1337,6 +1337,15 @@ W['Type the code exactly'] = ['코드를 정확히 입력하세요', 'कोड 
 W['Offline — deleting needs the internet'] = ['오프라인 — 삭제는 인터넷이 필요해요', 'अफलाइन — मेटाउन इन्टरनेट चाहिन्छ']; W['The server refused — publish the new rules first (Firebase → Firestore → Rules)'] = ['서버가 거절했어요 — 새 규칙부터 게시하세요 (Firebase → Firestore → 규칙)', 'सर्भरले अस्वीकार गर्‍यो — पहिले नयाँ नियम प्रकाशित गर्नुहोस् (Firebase → Firestore → Rules)'];
 P.push([/^📥 (\d+) item\(s\) added$/, '📥 $1개 추가됨', '📥 $1 वटा थपियो'], [/^📥 (\d+) item\(s\) added · (\d+) skipped \(empty or already there\)$/, '📥 $1개 추가됨 · $2개 건너뜀 (빈 칸이거나 이미 있음)', '📥 $1 वटा थपियो · $2 छोडियो (खाली वा पहिल्यै छ)'],
   [/^(\d+) records$/, '기록 $1건', '$1 रेकर्ड'], [/^🗑️ Deleted — (\d+) records$/, '🗑️ 삭제됨 — 기록 $1건', '🗑️ मेटियो — $1 रेकर्ड'], [/^Not deleted: (.+)$/, '삭제 안 됨: $1', 'मेटिएन: $1'], [/^Photos could not be listed: (.+)$/, '사진 목록을 못 읽음: $1', 'फोटोको सूची पढ्न सकिएन: $1']);
+/* v0.17.4 — 🔴 ne draft */ W['All homes'] = ['전체 가구', 'सबै घर']; W['Show / hide'] = ['보이기 / 숨기기', 'देखाउने / लुकाउने']; W['Ward lines and tole totals'] = ['와드 경계 · 동네별 숫자', 'वडा रेखा · टोल अनुसार संख्या'];
+W['▦ Ward lines on'] = ['▦ 와드 경계 켬', '▦ वडा रेखा खुला']; W['Ward lines off'] = ['와드 경계 끔', 'वडा रेखा बन्द']; W['🗓️ Calendar'] = ['🗓️ 달력', '🗓️ पात्रो'];
+W['Days off · company days · the homes of each day'] = ['쉬는 날 · 회사 일정 · 날짜별 갈 집', 'बिदा · कम्पनी दिन · हरेक दिनका घर']; W['days off · the homes of each day'] = ['쉬는 날 · 날짜별 갈 집', 'बिदा · हरेक दिनका घर'];
+W['Company & own events'] = ['회사 · 직접 넣은 일정', 'कम्पनी · आफ्नै कार्यक्रम']; W['Day off'] = ['쉬는 날', 'बिदा']; W['🏖️ Day off'] = ['🏖️ 쉬는 날', '🏖️ बिदा']; W['Nothing on this day'] = ['이날은 할 일 없음', 'यो दिन केही छैन'];
+W['visited today'] = ['오늘 다녀옴', 'आज पुगियो']; W['events'] = ['일정', 'कार्यक्रम']; W['bills'] = ['청구', 'बिल']; W['calls'] = ['전화', 'फोन']; W['filters'] = ['필터', 'फिल्टर']; W['some people only'] = ['일부만 쉼', 'केही मानिस मात्र'];
+P.push([/^(\d+) visits? done$/, '방문 $1건 완료', '$1 भ्रमण सकियो'], [/^Cash in · ([\d,]+)$/, '입금 · $1', 'आम्दानी · $1'], [/^(\d+) payments?$/, '결제 $1건', '$1 भुक्तानी'], [/^(\d+) devices? received$/, '기기 $1대 입고', '$1 उपकरण आयो'], [/^Arrival check deadline · (\d+) devices?$/, '입고 검수 기한 · $1대', 'आगमन जाँच म्याद · $1 उपकरण']); /* v0.17.4 (D2) phone calendar summary rows — 🔴 ne draft */
+W['PI: inspect within 14 days'] = ['PI: 받은 뒤 14일 안에 검수', 'PI: प्राप्त भएको १४ दिनभित्र जाँच'];
+W['into stock'] = ['재고로 입고', 'मौज्दातमा'];
+P.push([/^📥 (\d+) item\(s\) added · (\d+) updated$/, '📥 $1개 추가됨 · $2개 갱신', '📥 $1 वटा थपियो · $2 अद्यावधिक'], [/^📥 (\d+) item\(s\) added · (\d+) updated · (\d+) skipped \(empty or already there\)$/, '📥 $1개 추가됨 · $2개 갱신 · $3개 건너뜀 (빈 칸이거나 이미 있음)', '📥 $1 वटा थपियो · $2 अद्यावधिक · $3 छोडियो (खाली वा पहिल्यै छ)']);
 Object.assign(W, { 'Practice — saved on this phone only': ['연습 — 이 폰에만 저장', 'अभ्यास — यो फोनमा मात्र सेभ'], 'PRACTICE — NOT SENT TO THE SERVER': ['연습용 — 서버로 안 보냄', 'अभ्यास — सर्भरमा पठाइँदैन'] });
 
 const D2 = {}; for (const [en, [ko, ne]] of Object.entries(W)) { D2[en.trim()] = { ko, ne }; }

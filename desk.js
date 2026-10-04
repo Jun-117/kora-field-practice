@@ -8,6 +8,7 @@ import { MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices,
 import * as CA from './capack.js';
 import * as CAL from './cal.js';
 import * as SIM from './sim.js';
+import { stopsFor } from './route.js'; /* v0.17.4 (B): the phone map's kinds (visit · collect · repair · done) */
 export { loadLeaflet };
 
 const NPT = 'Asia/Kathmandu';
@@ -121,9 +122,10 @@ function page(scr, m) {
   if (scr === 'customers') return pageCustomers(m);
   if (scr === 'money') return pageMoney(m);
   if (scr === 'field') return pageField(m);
-  if (scr === 'map') { const m = model(); const todayList = [...new Map([...m.visitsDue.map((x) => [x.c.id, { x, k: x.filterOnly ? '🧪' : '🔧', t: x.filterOnly ? 'filter due' : 'visit due ' + x.due }]), ...m.collections.filter((x) => x.dn.stage === 'visit').map((x) => [x.c.id, { x, k: '💰', t: R.npr(x.dn.owed) + ' · ' + x.dn.days + ' d late' }]), ...m.openReq.filter((o) => o.c).map((o) => [o.c.c.id, { x: o.c, k: '🛠', t: o.r.type + ' · ' + o.r.status }])]).values()];
-    return `<div class="cc mapcc"><div class="panel s9" style="--i:0"><div class="ph"><span class="t"><b>Map</b> · every household</span><span class="sp"></span>${legend()}<button class="btn small ghost tgl-w${wardsOn() ? ' on' : ''}" data-act="wardsToggle" style="margin:0 0 0 10px" title="Ward boundaries · OpenStreetMap">▦ Ward lines</button><button class="btn small" data-act="replay" style="margin:0 0 0 8px">▶ Replay growth</button></div><div id="mapBox" class="mapbox tall"></div><div class="muted" style="margin-top:6px"><span>pin colour = money</span> · <span>icon = the job: 🔧 visit · 🧪 filter · 💰 collect · 🛠 request</span> · <span>zoom out for tole totals</span> · <span>📍 = you</span></div></div>
-    <div class="panel s3 mlist" style="--i:1"><div class="ph"><span class="t"><b>Today</b> · ${todayList.length} homes</span></div><div class="ml">${todayList.map(({ x, k, t }) => `<div class="ml-i" data-mfly="${esc(x.c.id)}"><span class="k">${k}</span><div class="main"><b>${esc(x.c.name)}</b><div class="muted">${esc(toleOf(x.c))} · ${esc(t)}</div></div>${R.assigneeOf(x.c, m.t) ? `<span class="pill">${esc(R.assigneeOf(x.c, m.t))}</span>` : ''}</div>`).join('') || '<div class="empty">Nothing due today 🏖️</div>'}</div></div></div>`; }
+  if (scr === 'map') { const m = model(); const st = stopsFor(m); const k0 = S.mapKind || 'all'; const ids = k0 === 'all' ? null : new Set(st.all.filter((s0) => s0.kinds.includes(k0)).map((s0) => s0.id)); const todayList = [...new Map([...m.visitsDue.map((x) => [x.c.id, { x, k: x.filterOnly ? '🧪' : '🔧', t: x.filterOnly ? 'filter due' : 'visit due ' + x.due }]), ...m.collections.filter((x) => x.dn.stage === 'visit').map((x) => [x.c.id, { x, k: '💰', t: R.npr(x.dn.owed) + ' · ' + x.dn.days + ' d late' }]), ...m.openReq.filter((o) => o.c).map((o) => [o.c.c.id, { x: o.c, k: '🛠', t: o.r.type + ' · ' + o.r.status }])]).values()];
+    const tl0 = k0 === 'done' ? st.all.filter((s0) => s0.kinds.includes('done')).map((s0) => ({ x: s0.x, k: '✅', t: 'visited today' })) : ids ? todayList.filter((y) => ids.has(y.x.c.id)) : todayList; /* v0.17.4 (B): the chips filter this list too */
+    return `<div class="cc mapcc"><div class="panel s9" style="--i:0"><div class="ph"><span class="t"><b>Map</b> · every household</span><span class="sp"></span>${legendMap()}<button class="btn small ghost tgl-w${wardsOn() ? ' on' : ''}" data-act="wardsToggle" style="margin:0 0 0 10px" title="Ward boundaries · OpenStreetMap">▦ Ward lines</button><button class="btn small" data-act="replay" style="margin:0 0 0 8px">▶ Replay growth</button></div>${mapChips(m, st)}<div id="mapBox" class="mapbox tall"></div><div class="muted" style="margin-top:6px"><span>pin colour = money</span> · <span>icon = the job: 🔧 visit · 🧪 filter · 💰 collect · 🛠 request</span> · <span>zoom out for tole totals</span> · <span>📍 = you</span></div></div>
+    <div class="panel s3 mlist" style="--i:1"><div class="ph"><span class="t"><b>Today</b> · ${tl0.length} homes</span></div><div class="ml">${tl0.map(({ x, k, t }) => `<div class="ml-i" data-mfly="${esc(x.c.id)}"><span class="k">${k}</span><div class="main"><b>${esc(x.c.name)}</b><div class="muted">${esc(toleOf(x.c))} · ${esc(t)}</div></div>${R.assigneeOf(x.c, m.t) ? `<span class="pill">${esc(R.assigneeOf(x.c, m.t))}</span>` : ''}</div>`).join('') || '<div class="empty">Nothing due today 🏖️</div>'}</div></div></div>`; }
   if (scr === 'history') return pageHistory(m);
   if (scr === 'reports') return pageReports();
   if (scr === 'board') return pageBoard(m);
@@ -283,6 +285,15 @@ function hbars(rows, color = 'var(--brand)', fmt = fmtN) {
   return `<div class="funnel hb">${rows.map((r, i) => `<div class="st" ${r.attr || ''}${fmt === fmtK ? ` title="${esc(moneyTip(r.v))}"` : ''}><span>${esc(r.l)}</span><div class="b"><i style="width:${(r.v / max) * 100}%;background:${r.color || color};animation-delay:${i * 70}ms"></i></div><span class="n">${fmt(r.v)}${r.sub ? `<small> ${esc(r.sub)}</small>` : ''}</span></div>`).join('')}</div>`;
 }
 const panel = (cls, i, title, body, action) => { const ph = `<div class="ph"><span class="t">${title}</span><span class="sp"></span>${action || ''}</div>`; return /\bfs\b/.test(cls) ? `<div class="panel ${cls}" style="--i:${i}"><div class="fs-in">${ph}<div class="fs-body">${body}</div></div></div>` : `<div class="panel ${cls}" style="--i:${i}">${ph}${body}</div>`; }; /* v0.17.0 (2) B1: .fs = a long list scrolls inside, so a short neighbour is not stretched into empty space */
+// v0.17.4 (B) Jun 10/4 "지도 와드경계선 구분 키고끄는 기능처럼, 앱 위에 필터처럼 pc도 넣어줘": the phone map's chips on the desk map (a chip again = everyone) · the legend hides a colour
+const KCOL = { visit: '#1f6fb2', collect: '#d4382b', repair: '#e2700c', done: '#16a34a' };
+function mapChips(m, st) {
+  const n = (k) => st.all.filter((s0) => s0.kinds.includes(k)).length; const k0 = S.mapKind || 'all';
+  const homes = [...m.cust.values()].filter((x) => x.c.gps && Number.isFinite(x.c.gps.lat) && Number.isFinite(x.c.gps.lng)).length;
+  const c = (k, l, v, col) => `<button type="button" class="mchip${k0 === k ? ' on' : ''}" data-mkind="${k}" style="--c:${col}"><b>${v}</b><span>${l}</span></button>`;
+  return `<div class="mchips">${c('all', 'All homes', homes, 'var(--ink)')}${c('visit', 'Visits', n('visit'), KCOL.visit)}${c('collect', 'Collect', n('collect'), KCOL.collect)}${c('repair', 'Repairs', n('repair'), KCOL.repair)}${c('done', 'Done', n('done'), KCOL.done)}<span class="mchip-sep"></span><button type="button" class="mchip" data-list="calls" style="--c:var(--c-call)"><b>${m.calls.length}</b><span>Calls</span></button><button type="button" class="mchip" data-list="collections" style="--c:var(--c-money)"><b>${m.collections.length}</b><span>To chase</span></button></div>`;
+}
+const legendMap = () => { const hide = new Set(S.mapHide || []); return `<div class="legend lg-tg" style="margin:0">${[['g', 'OK'], ['y', 'overdue'], ['r', '7+ days'], ['b', 'paused'], ['k', 'left']].map(([d, l]) => `<button type="button" class="${hide.has(d) ? 'off' : ''}" data-mhide="${d}" title="Show / hide"><i class="dot ${d}"></i>${l}</button>`).join('')}</div>`; };
 const legend = () => `<div class="legend" style="margin:0"><span><i class="dot g"></i>OK</span><span><i class="dot y"></i>overdue</span><span><i class="dot r"></i>7+ days</span><span><i class="dot b"></i>paused</span><span><i class="dot k"></i>left</span></div>`;
 
 // ---------- pages ----------
@@ -1370,6 +1381,8 @@ document.addEventListener('click', (ev) => {
   if (!S.desk) return;
   const box = document.getElementById('deskSearchRes'); if (box && !ev.target.closest('#deskSearchRes') && ev.target.id !== 'deskSearch') box.classList.add('hidden');
   const mb = ev.target.closest('[data-msboard]'); if (mb) { S.route.params.b = mb.dataset.msboard; reDesk(); return; } /* v0.15 board tabs */
+  const mk2 = ev.target.closest('[data-mkind]'); if (mk2) { const k = mk2.dataset.mkind; S.mapKind = S.mapKind === k && k !== 'all' ? 'all' : k; reDesk(); return; } /* v0.17.4 (B) */
+  const mh = ev.target.closest('[data-mhide]'); if (mh) { const h = new Set(S.mapHide || []); if (h.has(mh.dataset.mhide)) h.delete(mh.dataset.mhide); else h.add(mh.dataset.mhide); S.mapHide = [...h]; reDesk(); return; }
   const mv = ev.target.closest('[data-msview]'); if (mv) { S.route.params.v = mv.dataset.msview; try { localStorage.setItem('kfp_msview', mv.dataset.msview); } catch (e) {} reDesk(); return; } /* v0.17.0 (7) */
   const mw = ev.target.closest('[data-msscroll]'); if (mw) { const sc = document.querySelector('#deskPage .tl-scroll'); if (sc) { const n = Number(mw.dataset.msscroll) || 0; const c = sc.querySelector('.tl-wk .tl-lane span'); const cw = c ? c.getBoundingClientRect().width : 100; const to = n ? sc.scrollLeft + n * cw : Number(sc.dataset.home) || 0; sc.scrollTo({ left: to, behavior: 'smooth' }); S.msScrollW = (Number(sc.dataset.lo) || 0) + to / cw; } return; } /* v0.17.2 (5): the strip scrolls (it used to redraw a 12-week window) */
   const tg = ev.target.closest('[data-tolego]'); if (tg) { ev.preventDefault(); go('customers', 'customers', { tole: tg.dataset.tolego }); return; } /* v0.17.1 ① */
@@ -1477,8 +1490,10 @@ function drawMarkers() {
   if (S.route.screen === 'live') { layer.clearLayers(); return drawLive(); }
   if (S.route.screen === 'watch') { layer.clearLayers(); return drawWatch(); }
   const m = model(); layer.clearLayers(); const pts = []; const clusters = {};
+  const onMap = S.route.screen === 'map'; const mk0 = onMap ? S.mapKind || 'all' : 'all'; const mIds = mk0 === 'all' ? null : new Set(stopsFor(m).all.filter((s0) => s0.kinds.includes(mk0)).map((s0) => s0.id)); const mHide = new Set(onMap ? S.mapHide || [] : []); /* v0.17.4 (B) */
   for (const x of m.cust.values()) {
     const g = x.c.gps; if (!g || !Number.isFinite(g.lat) || !Number.isFinite(g.lng)) continue;
+    if ((mIds && !mIds.has(x.c.id)) || mHide.has(x.dot)) continue;
     pts.push([g.lat, g.lng]);
     const col = HEX[x.dot] || HEX.g;
     /* v0.14 (#2 · Jun 10/2 "점이랑 텍스트만이잖아"): a pin that says what is going on — colour = money, icon = the job */

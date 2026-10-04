@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.18.1 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.18.2 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -365,9 +365,14 @@ function auditLog(col, docId, prev, data) {
   if (col === 'audit' || col === 'photos') return; const d = auditDiff(prev || {}, data); if (!d) return;
   save(`audit/${newId('audit')}`, { col, docId, customerId: (prev && prev.customerId) || data.customerId || (col === 'customers' ? docId : ''), ...d, by: myName(), at: new Date().toISOString() }, true);
 }
+// v0.18.2 (B1) Jun 10/4 "1000가구,2000가구여도 끄떡없게": every record that belongs to a customer carries live:true; once the customer has left AND the
+// recovery case is closed (or 60 days passed), the desk flips them to live:false → staff phones stop downloading them (their query = live == true).
+// The desk (admin / deputy) still loads everything. The phone keeps copies it already had; "Reload all" drops them.
+const LIVE_COLS = new Set(['visits', 'payments', 'checkins', 'requests', 'recoveries', 'relocations', 'contractEvents', 'waterTests']);
 export function save(path, data, isNew, img) {
   const parts = path.split('/'); const id = parts[parts.length - 1]; const col = parts[0];
   if (isNew && parts.length === 2) data = stampPlace(col, data);
+  if (parts.length === 2 && LIVE_COLS.has(col) && data && !('live' in data)) { const cid = data.customerId || (S.D[col].get(id) || {}).customerId; const c = cid && S.D.customers.get(cid); data = { ...data, live: !(c && c.status === 'Churned' && col !== 'recoveries') }; } /* a recovery case of a churned home stays live until it is closed */
   if (!isNew && parts.length === 2 && S.D[col] && S.D[col].has(id)) auditLog(col, id, S.D[col].get(id), data);
   const e = { key: path, path, id, data, isNew, uid: S.user.uid, state: 'practice', t: Date.now(), err: '', photo: !!img };
   const ok = jPut(e);
@@ -407,8 +412,30 @@ async function reconcile(manual) {
       }
     }
   } finally { reconciling = false; refreshChrome(); hbSoon(); }
+  if (S.desk) liveSweep(false).catch(() => {}); /* v0.18.2 (B1) */
 }
 
+// v0.18.2 (B1): the desk's housekeeping — ① records of customers who left AND whose recovery is closed (or 60 days passed) → live:false
+// ② records from before v0.18.2 (no live field) of customers still with us → live:true (one-off backfill, in chunks). Once an hour, admin / deputy, online.
+const REC_CLOSED = (r) => r.outcome && r.outcome !== 'In progress';
+export function liveSweepPlan(t = today()) {
+  const off = [], on = [];
+  for (const c of S.D.customers.values()) {
+    const churned = c.status === 'Churned'; const recs = [...S.D.recoveries.values()].filter((r) => r.customerId === c.id);
+    const closed = churned && (recs.some(REC_CLOSED) || (R.isDate(c.churnDate) && R.daysBetween(c.churnDate, t) >= 60));
+    for (const col of LIVE_COLS) for (const x of S.D[col].values()) { if (x.customerId !== c.id || x._pending) continue;
+      if (closed && x.live !== false) off.push(`${col}/${x.id}`); else if (!churned && x.live !== true) on.push(`${col}/${x.id}`); }
+  }
+  return { off, on };
+}
+let liveSweepAt = 0;
+export async function liveSweep(force) {
+  if (DEMO || !isBoss() || !navigator.onLine || (!force && Date.now() - liveSweepAt < 3600e3)) return null; liveSweepAt = Date.now();
+  const plan = liveSweepPlan(); const all = [...plan.off.map((p) => [p, false]), ...plan.on.map((p) => [p, true])]; let n = 0;
+  for (let i = 0; i < all.length; i += 400) { const b = writeBatch(db); for (const [p, live] of all.slice(i, i + 400)) b.update(doc(db, p), { live, updatedAt: serverTimestamp(), updatedBy: S.user.uid }); await b.commit(); n += Math.min(400, all.length - i); }
+  for (const [p, live] of all) { const [col, id] = p.split('/'); const x = S.D[col].get(id); if (x) S.D[col].set(id, { ...x, live }); }
+  if (n) bump(); return { off: plan.off.length, on: plan.on.length };
+}
 // ---------- data: phone cache first, then only what changed on the server ----------
 const toObj = (d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }), _pending: d.metadata.hasPendingWrites });
 const sinceKey = (col) => `kfp_since_${S.user.uid}_${col}`;
@@ -421,13 +448,14 @@ export async function auditOlder() { /* v0.18.1 (B4): one more 90-day slice of t
 async function startData(full) {
   S.unsub.forEach((u) => u()); S.unsub = [];
   await Promise.all(colsForMe().map(async (col) => {
-    try { (await getDocsFromCache(collection(db, col))).forEach((d) => S.D[col].set(d.id, toObj(d))); } catch (e) { S.listenErr = 'cache: ' + (e.code || e.message); }
+    try { (await getDocsFromCache(!isBoss() && LIVE_COLS.has(col) ? query(collection(db, col), where('live', '==', true)) : collection(db, col))).forEach((d) => S.D[col].set(d.id, toObj(d))); } catch (e) { S.listenErr = 'cache: ' + (e.code || e.message); } /* v0.18.2 (B1): a staff phone's cache copy is filtered the same way */
   }));
   bump(); scheduleRender();
   for (const col of colsForMe()) {
     const sinceMs = full ? 0 : lsGet(sinceKey(col), 0);
     const floor = col === 'audit' ? Date.now() - AUDIT_DAYS * 864e5 : 0; /* v0.18.1 (B4): the change log is append-only and grows for ever → the desk follows the last 90 days; older = "Load older" on the Change log page */
-    const q = query(collection(db, col), where('updatedAt', '>', Timestamp.fromMillis(Math.max(sinceMs, floor))));
+    const q = !isBoss() && LIVE_COLS.has(col) ? query(collection(db, col), where('live', '==', true), where('updatedAt', '>', Timestamp.fromMillis(Math.max(sinceMs, floor)))) /* v0.18.2 (B1): a staff phone follows live records only (composite index live + updatedAt) */
+      : query(collection(db, col), where('updatedAt', '>', Timestamp.fromMillis(Math.max(sinceMs, floor))));
     const un = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
       let changed = false;
       snap.docChanges({ includeMetadataChanges: true }).forEach((ch) => { if (ch.type !== 'removed') { S.D[col].set(ch.doc.id, toObj(ch.doc)); changed = true; } });
@@ -1144,6 +1172,7 @@ FORMS.recovery = {
     const c = S.D.customers.get(v.customerId);
     if (c && c.status !== 'Churned' && (isBoss() || c.createdBy === S.user.uid)) save(`customers/${c.id}`, { status: 'Churned', churnDate: v.churnDate, ...(c.status === 'Paused' ? { pauseLog: R.closePauseLog(c, v.churnDate, 'Churned', myName()), pausedFrom: '', pauseReason: '', pausedUntil: '' } : {}) }, false);
     const np = savePhotos(v.customerId, `recoveries/${id}`, 'recovery');
+    if (REC_CLOSED(data) && isBoss() && !DEMO) setTimeout(() => liveSweep(true).catch(() => {}), 4000); /* v0.18.2 (B1): the case is closed → the home's records leave the phones */
     return { ok, np, go: ['today', 'list', { list: 'recoveries' }] };
   },
 };
@@ -3648,7 +3677,7 @@ if (EMU) { /* v0.18.0 (A-1): the self-test drives the real sign-in → save → 
     serverGet: async (path) => { const s = await getDocFromServer(doc(db, path)); return s.exists() ? s.data() : null; },
     serverSet: (path, data, merge) => setDoc(doc(db, path), data, { merge: !!merge }),
     serverList: async (col, field, value) => (await getDocs(query(collection(db, col), where(field, '==', value)))).docs.map((d) => ({ id: d.id, ...d.data() })),
-    offline: () => disableNetwork(db), online: () => enableNetwork(db), deleteCustomer, visitPhotos, serverTimestamp,
+    offline: () => disableNetwork(db), online: () => enableNetwork(db), deleteCustomer, visitPhotos, serverTimestamp, liveSweep, liveSweepPlan,
   };
 }
 render(true);

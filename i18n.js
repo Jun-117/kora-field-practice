@@ -1351,7 +1351,12 @@ P.push([/^(\d+) app error\(s\) in 24 h — (.+)$/, '24시간 안 앱 오류 $1�
 /* v0.18.1 (B4·B5) — 🔴 ne draft */ W['⏮ Load 90 days more'] = ['⏮ 90일 더 불러오기', '⏮ थप ९० दिन ल्याउनुहोस्'];
 P.push([/^· since (\d{4}-\d{2}-\d{2})$/, '· $1부터', '· $1 देखि'], [/^⏮ (\d+) older change\(s\) loaded$/, '⏮ 옛 변경 $1건 불러옴', '⏮ $1 पुराना परिवर्तन ल्याइयो']);
 /* v0.18.3 (B3) — 🔴 ne draft */ W['⤓ full size'] = ['⤓ 원본 크기', '⤓ पूरा साइज'];
-/* v0.18.4 phone: any country — 🔴 ne draft */ W['Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).'] = ['네팔 휴대폰(98XXXXXXXX)이나 국가번호를 붙인 외국 번호(+82 10…)를 적으세요.', 'नेपाली मोबाइल (98XXXXXXXX) वा देश कोडसहितको विदेशी नम्बर (+82 10…) लेख्नुहोस्।']; W['98XXXXXXXX or +82 10…'] = ['98XXXXXXXX 또는 +82 10…', '98XXXXXXXX वा +82 10…'];
+/* v0.19.0 — 🔴 ne draft */ W['Enter a Nepal mobile (98XXXXXXXX) or a landline with its area code (061-…).'] = ['네팔 휴대폰(98XXXXXXXX)이나 지역번호 붙인 유선(061-…)을 적으세요.', 'नेपाली मोबाइल (98XXXXXXXX) वा एरिया कोडसहितको ल्यान्डलाइन (061-…) लेख्नुहोस्।'];
+W['Prepay — how many bills?'] = ['선납 — 몇 회차?', 'अग्रिम — कति बिल?']; W['The amount fills in: the next bills added up. More than one = paid ahead; each bill keeps its own date on the receipt.'] = ['금액이 자동으로 채워져요: 다음 회차들 합계. 2 이상 = 선납이고, 영수증엔 회차별 날짜가 그대로 찍혀요.', 'रकम आफैं भरिन्छ: अर्का बिलहरूको जम्मा। १ भन्दा बढी = अग्रिम; रसिदमा हरेक बिलको मिति रहन्छ।'];
+W['Lost device settlement'] = ['분실 정산', 'हराएको मेसिनको हिसाब']; W['Lost · not settled'] = ['분실 · 정산 전', 'हरायो · हिसाब बाँकी'];
+W['Thank-you card'] = ['감사 카드', 'धन्यवाद कार्ड']; W['👋 Card'] = ['👋 카드', '👋 कार्ड']; W['why they left · the unit back · the deposit · see you again'] = ['해지 사유 · 기기 회수 · 보증금 · 다음에 또', 'छोड्नुको कारण · मेसिन फिर्ता · धरौटी · फेरि भेटौंला']; W['👋 Thank-you card'] = ['👋 감사 카드', '👋 धन्यवाद कार्ड'];
+W['Before · old filter / fault'] = ['전 · 헌 필터 / 고장', 'अघि · पुरानो फिल्टर / खराबी']; W['After · new filter / fixed'] = ['후 · 새 필터 / 수리 후', 'पछि · नयाँ फिल्टर / मर्मत पछि']; W['TDS meter'] = ['TDS 계기', 'TDS मिटर'];
+W['Filter change: old filter · device after · TDS after. Repair: fault close-up · working after. Label each photo — "before" and "after" go on the visit note.'] = ['필터 교체: 헌 필터 · 교체 후 기기 · 교체 후 TDS. 수리: 고장 부위 클로즈업 · 수리 후 작동 모습. 사진마다 라벨 — 「전」·「후」가 방문 노트에 들어가요.', 'फिल्टर परिवर्तन: पुरानो फिल्टर · पछिको मेसिन · पछिको TDS। मर्मत: खराबीको क्लोजअप · मर्मत पछि। हरेक फोटोमा लेबल — "अघि" र "पछि" भ्रमण नोटमा जान्छ।'];
 P.push([/^Could not open: (.+)$/, '열 수 없음: $1', 'खोल्न सकिएन: $1']);
 Object.assign(W, { 'Practice — saved on this phone only': ['연습 — 이 폰에만 저장', 'अभ्यास — यो फोनमा मात्र सेभ'], 'PRACTICE — NOT SENT TO THE SERVER': ['연습용 — 서버로 안 보냄', 'अभ्यास — सर्भरमा पठाइँदैन'] });
 

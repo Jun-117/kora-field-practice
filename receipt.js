@@ -43,7 +43,11 @@ const NE = { // Nepali checked by Tara 10/4 (51-line sheet)
   refer: 'छिमेकी ल्याउनुहोस्', half: 'तपाईंको अर्को बिल आधा मूल्य', code: 'तपाईंको कोड', report: 'भ्रमण नोट', next: 'अर्को भ्रमण', thanks: 'धन्यवाद', nextBill: 'अर्को बिल', left: 'बाँकी', person: 'तपाईंको KORA व्यक्ति', firstVisit: 'पहिलो भ्रमण',
   installed: 'जडान भयो', isIn: 'तपाईंको KORA जडान भयो', came: 'आज हामी आयौं', receipt: 'भुक्तानी रसिद', creditNote: 'क्रेडिट नोट', total: 'जम्मा', customer: 'ग्राहक', codeK: 'कोड', bill: 'बिल', payBy: 'माध्यम', deposit: 'धरौटी',
   billDue: 'बिल तिर्ने', thisMonth: 'यो महिना', bankApp: 'बैंकको एप → ग्यालरीबाट QR स्क्यान', scan: 'स्क्यान गरी तिर्नुहोस्', paidQ: 'तिर्नुभयो? स्क्रिनसट पठाउनुहोस्',
+  /* v0.19.0 — 🔴 ne draft (not yet on Tara's sheet) */
+  missed: 'आज भेट हुन सकेन', again: 'हामी फेरि आउँछौं', did: 'हामीले गरेको', checked: 'जाँच गरिएको', ended: 'सेवा समाप्त', thanksFor: 'सँगै रहनुभएकोमा धन्यवाद', open: 'फेरि चाहिएमा जहिले पनि WhatsApp गर्नुहोस्', withKora: 'KORA सँग', collected: 'मेसिन फिर्ता लियौं', collect: 'मेसिन लिन आउँछौं', refunded: 'धरौटी फिर्ता', kept: 'धरौटी राखियो',
 };
+const NE_NS = { 'Nobody home': 'घरमा कोही हुनुहुन्नथ्यो', 'Gate locked / no access': 'गेट बन्द थियो', 'Asked to come another day': 'अर्को दिन आउन भन्नुभयो', 'Could not find the house': 'घर भेटिएन', 'Refused the visit': 'भ्रमण अस्वीकार', Other: 'भेट हुन सकेन' }; /* v0.19.0 (5) 🔴 ne draft */
+const NE_LEAVE = { 'Moved away (outside our area)': 'सरुवा भयो', 'Money — cannot pay': 'आर्थिक कारण', 'Went back to jar / other water': 'अर्को पानीमा फर्कनुभयो', 'Water taste or quality': 'पानीको स्वाद/गुण', 'Breakdowns / slow service': 'बिग्रिने/ढिलो सेवा', 'Landlord said no': 'घरधनीले मानेनन्', 'Bought own purifier': 'आफ्नै फिल्टर किन्नुभयो', 'Household closed / death': 'घर बन्द', Other: 'अन्य' }; /* v0.19.0 (10) 🔴 ne draft */
 // v0.16: bill k's day with pauses counted (a paused home's bill days move — the plain schedule printed "2 Nov → 1 Nov")
 const dueOf = (c, k) => { const d = R.billDays(c).dues[k - 1]; return R.isDate(d) ? d : R.billDue(c.installDate, k); };
 const coOf = (co) => ({ phone: co.phone || '', web: co.web || 'koracarenepal.com', ward: co.ward || 'Pokhara-13', pan: co.pan || '', company: co.name || 'Kora Care Private Limited', companyNe: co.nameNe || NE_CO, bankLine: co.bankLine || '' });
@@ -113,28 +117,55 @@ export function visitData(x, v, co = {}, photos = {}, who = {}) {
   // v0.14 (Jun 10/3 #7): the visit NOTE — a record, not a proof. No TDS, no stamp. Rows = what we did; PP changed → the two photos slide in.
   const f = (n) => (n === null || n === undefined || n === '' || !Number.isFinite(Number(n))) ? null : Number(n);
   const filters = v.filters || [];
-  const rows = [];
+  const rows = [], checks = [];
+  const missed = R.isNoShow(v); /* v0.19.0 (5) Jun 10/4 "문 잠겨서 못갔다고 넣었는데 왜 routine check — done임": a missed visit is written as one */
+  if (missed) {
+    const why = v.noShowReason || 'Nobody home';
+    rows.push({ ic: 'pin', bg: C.navy, tb: 'We came by', t: ` — ${String(why).toLowerCase()}`, s: NE_NS[why] || NE_NS.Other });
+    const nv = R.isDate(v.retryDate) ? v.retryDate : '';
+    return { name: x.c.name || '', code: x.c.code || '', date: niceDate(v.date), bs: bsText(v.date), tech: who.name || v.technician || '', techPhoto: who.photo || null, rows, checks, note: noteOf(v), missed: true, showPhotos: false, next: nv ? niceDate(nv) : '', nextBs: nv ? bsText(nv) : '', ...coOf(co) };
+  }
   if (filters.length) rows.push({ ic: 'swap', bg: C.navy, tb: `${filters.join(', ')} filter${filters.length > 1 ? 's' : ''}`, t: ` — new ${filters.length > 1 ? 'ones' : 'one'} in`, s: `the old ${filters.length > 1 ? 'ones' : 'one'} taken away` });
   else rows.push({ ic: 'drop', bg: C.navy, tb: `${v.visitType || 'Routine check'}`, t: ' — done', s: `${NE_VT[v.visitType] || NE_VT['Routine check']} — सकियो` }); /* v0.17.0 (8) Jun 10/3: the fixed "flow and tap fine" said what nobody had written down */
   if (v.sanitised === 'Yes') rows.push({ ic: 'clean', bg: C.blue, t: 'Housing and tube cleaned', s: 'हाउसिङ र पाइप सफा गरियो' });
-  if (f(v.flow) !== null || f(v.tdsAfter) !== null) rows.push({ ic: 'tap', bg: C.blue, t: 'Tap checked', s: 'धारा जाँच गरियो' });
-  for (const q of (Array.isArray(v.custLines) ? v.custLines : []).slice(0, 6)) if (q && q.en) rows.push({ ic: 'check', bg: C.blue, t: String(q.en).slice(0, 80), s: String(q.ne || '').slice(0, 90) }); /* the buttons the technician tapped — both languages saved with the visit */
+  const lines = (Array.isArray(v.custLines) ? v.custLines : []).filter((q) => q && q.en).slice(0, 6);
+  if ((f(v.flow) !== null || f(v.tdsAfter) !== null) && !lines.some((q) => /tap/i.test(q.en))) rows.push({ ic: 'tap', bg: C.blue, t: 'Tap checked', s: 'धारा जाँच गरियो' }); /* v0.19.0: not twice when the technician also tapped "Tap checked" */
+  for (const q of lines) checks.push({ ic: 'check', bg: C.blue, t: String(q.en).slice(0, 80), s: String(q.ne || '').slice(0, 90) }); /* the buttons the technician tapped — both languages saved with the visit · v0.19.0 (6): their own block */
+  const isRepair = v.visitType === 'Repair'; const pp = filters.includes('PP');
+  const capB = pp ? 'used PP' : filters.length ? 'old filters' : isRepair ? 'before' : 'before', capA = pp ? 'new PP' : filters.length ? 'new filters' : isRepair ? 'fixed' : 'after'; /* v0.19.0 (4): the two photos by their label — on repairs and checks too */
   const nextFilter = (x.fd || []).filter((q) => q.due && q.type !== 'Sanitise' && !filters.includes(q.type)).sort((p, q) => String(p.due).localeCompare(String(q.due)))[0]; /* a filter changed today is not the next one due */
   const nv = R.isDate(v.nextVisitDate) ? v.nextVisitDate : '';
-  const pp = (x.fd || []).find((q) => q.type === 'PP');
+  const ppDue = (x.fd || []).find((q) => q.type === 'PP');
   // filters-together: the next change is one visit with every filter that falls due before it (x.fb from the model)
   const fb = x.fb && x.fb.types && x.fb.types.some((q) => !filters.includes(q)) ? x.fb : null;
   const nextF = nv ? (fb && fb.date <= R.addDays(nv, 14) ? ' · filters' : !fb && nextFilter && nextFilter.due <= R.addDays(nv, 14) ? ' · ' + nextFilter.type + ' filter' : '') : '';
   return {
     name: x.c.name || '', code: x.c.code || '', date: niceDate(v.date), bs: bsText(v.date), tech: who.name || v.technician || '', techPhoto: who.photo || null, rows, note: noteOf(v),
-    ppChanged: filters.includes('PP'), ppBefore: photos.before || null, ppAfter: photos.after || null,
-    ppMonths: pp && R.isDate(pp.last) && R.isDate(v.date) && pp.last < v.date ? Math.max(1, Math.round(R.daysBetween(pp.last, v.date) / 30.44)) : null,
+    ppChanged: pp, ppBefore: photos.before || null, ppAfter: photos.after || null, showPhotos: !!(photos.before || photos.after), checks, missed: false,
+    ppMonths: pp && ppDue && R.isDate(ppDue.last) && R.isDate(v.date) && ppDue.last < v.date ? Math.max(1, Math.round(R.daysBetween(ppDue.last, v.date) / 30.44)) : null,
+    capBefore: capB, capAfter: capA,
     next: nv ? `${niceDate(nv)}${nextF}` : '', nextBs: nv ? bsText(nv) : '', ...coOf(co),
   };
 }
 export function installData(x, co = {}, photo = null, who = {}) {
   const c = x.c; const first = R.isDate(c.installDate) ? R.addMonths(c.installDate, 1) : '';
   return { name: c.name || '', code: c.code || '', date: niceDate(c.installDate), bs: bsText(c.installDate), tech: who.name || c.agent || '', techPhoto: who.photo || null, photo, first: first ? `${niceDate(first)} · we come to you` : '', firstBs: first ? bsText(first) : '', ...coOf(co) };
+}
+// v0.19.0 (10) Jun 10/4 "해지완료했으면 무슨 사유로 해지했고 뭐 잘가라": the goodbye — when it ended, how long they were with us, why (their words),
+// the unit back or not yet, the deposit, and the door stays open. rec = the recovery case (may be null before one is opened).
+export function endedData(x, co = {}, rec = null, who = {}) {
+  const c = x.c; const end = R.isDate(c.churnDate) ? c.churnDate : rec && R.isDate(rec.churnDate) ? rec.churnDate : '';
+  const months = R.isDate(c.installDate) && end ? Math.max(1, Math.round(R.daysBetween(c.installDate, end) / 30.44)) : null;
+  const reason = (rec && rec.reasonCode) || c.churnReason || c.leaveReason || '';
+  const back = !!rec && ['Recovered', 'Partial'].includes(rec.outcome); const refunded = rec ? Number(rec.depositRefunded) || 0 : 0, kept = rec ? Number(rec.depositForfeited) || 0 : 0;
+  const rows = [];
+  if (end) rows.push({ ic: 'cal', bg: C.navy, tb: 'Service ended', t: ` · ${niceDate(end)}`, s: bsText(end) });
+  if (months) rows.push({ ic: 'drop', bg: C.navy, t: `${months} month${months > 1 ? 's' : ''} with KORA`, s: `${devanagari(months)} महिना ${NE.withKora}` });
+  if (reason) rows.push({ ic: 'chat', bg: C.blue, t: String(reason).slice(0, 60), s: NE_LEAVE[reason] || NE_LEAVE.Other });
+  rows.push(back ? { ic: 'swap', bg: C.blue, t: 'Purifier collected — thank you', s: NE.collected } : { ic: 'swap', bg: C.blue, t: 'We come to collect the purifier', s: NE.collect });
+  if (refunded > 0) rows.push({ ic: 'lock', bg: C.blue, t: 'Deposit refunded', s: NE.refunded, v: refunded });
+  if (kept > 0) rows.push({ ic: 'lock', bg: C.blue, t: 'Deposit kept (ended before 36 months)', s: NE.kept, v: kept });
+  return { name: c.name || '', code: c.code || '', date: end ? niceDate(end) : '', bs: end ? bsText(end) : '', tech: who.name || c.agent || '', techPhoto: who.photo || null, rows, ...coOf(co) };
 }
 // v0.16 (#7, Jun 10/3 "회사 QR · 카드에 넣으면 될듯"): the bill of the month with the company QR — the customer saves the picture,
 // opens the bank app, scans from the gallery. The QR itself is uploaded in Settings (never in the code); qr = an Image or null.
@@ -198,11 +229,12 @@ function header(ctx, im, co, title, sub) {
 function h1(ctx, L, y, a, b, small, IW) { text(ctx, a, L, y, { f: font(800, 19), color: C.navy, max: IW }); if (b) { y += 22; text(ctx, b, L, y, { f: font(800, 19), color: C.blue, max: IW }); } if (small) { y += 16; text(ctx, small, L, y, { f: font(500, 10), color: C.mute, max: IW }); } return y; }
 // one row: circle icon · text (optional bold navy prefix) · small line · amount on the right
 function row(ctx, L, Rt, y, it) {
-  const h = it.s ? 46 : 38; const cy = y + h / 2; dotIcon(ctx, L + 15, cy, 15, it.bg || C.navy, it.ic, 14);
-  let tx = L + 41; const ty = it.s ? y + 19 : cy + 4.5; const maxT = Rt - tx - (it.v !== undefined ? 60 : 0);
-  if (it.tb) tx += text(ctx, it.tb, tx, ty, { f: font(700, 12.5), color: C.navy, max: maxT * 0.7 });
-  text(ctx, it.t || '', tx, ty, { f: font(400, 12.5), color: C.ink, max: Math.max(40, maxT - (tx - L - 41)) });
-  if (it.s) text(ctx, it.s, L + 41, y + 33, { f: font(400, 9.5), color: C.mute, max: Rt - L - 41 - (it.v !== undefined ? 60 : 0) });
+  const sm = !!it.sm; /* v0.19.0 (6): the visit note uses a lighter row — smaller type, a smaller circle, more air between blocks */
+  const h = sm ? (it.s ? 40 : 32) : (it.s ? 46 : 38); const cy = y + h / 2; dotIcon(ctx, L + (sm ? 12 : 15), cy, sm ? 12 : 15, it.bg || C.navy, it.ic, sm ? 12 : 14);
+  let tx = L + (sm ? 34 : 41); const ty = it.s ? y + (sm ? 16 : 19) : cy + 4.5; const maxT = Rt - tx - (it.v !== undefined ? 60 : 0); const fb = sm ? 11.5 : 12.5;
+  if (it.tb) tx += text(ctx, it.tb, tx, ty, { f: font(700, fb), color: C.navy, max: maxT * 0.7 });
+  text(ctx, it.t || '', tx, ty, { f: font(400, fb), color: C.ink, max: Math.max(40, maxT - (tx - L - (sm ? 34 : 41))) });
+  if (it.s) text(ctx, it.s, L + (sm ? 34 : 41), y + (sm ? 29 : 33), { f: font(400, sm ? 9 : 9.5), color: C.mute, max: Rt - L - (sm ? 34 : 41) - (it.v !== undefined ? 60 : 0) });
   if (it.v !== undefined) text(ctx, (it.v < 0 ? '−' : '') + money(Math.abs(it.v)), Rt, cy + 4.5, { f: font(700, 12.5), color: C.navy, align: 'right' });
   if (!it.noLine) { ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, y + h); ctx.lineTo(Rt, y + h); ctx.stroke(); }
   return y + h;
@@ -214,6 +246,10 @@ function noteRow(ctx, L, Rt, y, n, last) { /* v0.17.0 (8): the free line, wrappe
   const h = 16 + le.length * 16 + ln.length * 14 + 6; dotIcon(ctx, L + 15, y + 22, 15, C.navy, 'chat', 14);
   let yy = y + 21; for (const s of le) { text(ctx, s, tx, yy, { f: fe, color: C.ink }); yy += 16; } for (const s of ln) { text(ctx, s, tx, yy, { f: fn, color: C.mute }); yy += 14; }
   if (!last) hline(ctx, L, Rt, y + h); return y + h;
+}
+function secLabel(ctx, L, Rt, y, en, ne) { /* v0.19.0 (6): a small caps heading over a block — English left, Nepali right */
+  text(ctx, String(en).toUpperCase(), L, y, { f: font(700, 8.5), color: C.blue, ls: 1.4 }); if (ne) text(ctx, ne, Rt, y, { f: font(400, 9), color: C.mute, align: 'right', max: (Rt - L) * 0.5 });
+  return y + 8;
 }
 function hline(ctx, L, Rt, y) { ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(Rt, y); ctx.stroke(); }
 // sky box with a date on the right — a second small line carries the Nepali date
@@ -315,14 +351,19 @@ export const drawReferralCard = twoPass(paintReferral, 450);
 function paintVisit(ctx, d, im, H) {
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
   const L = 22, Rt = W - 22, IW = Rt - L; let y = header(ctx, im, d, 'VISIT NOTE', `${NE.report} · ${d.date}${d.bs ? ' · ' + d.bs : ''}`);
-  y += 16 + 19; y = h1(ctx, L, y, 'We came by today.', '', NE.came, IW);
+  y += 16 + 19; y = h1(ctx, L, y, d.missed ? 'We missed you today.' : 'We came by today.', '', d.missed ? NE.missed : NE.came, IW); /* v0.19.0 (5) */
   y += 14; avatar(ctx, L, y, 19, d.techPhoto); text(ctx, d.tech || 'KORA CARE', L + 48, y + 16, { f: font(700, 12), color: C.navy, max: IW - 52 }); text(ctx, `your KORA person · ${NE.person}`, L + 48, y + 31, { f: font(400, 9.5), color: C.mute, max: IW - 52 });
-  y += 38 + 12; hline(ctx, L, Rt, y);
-  d.rows.forEach((it, i) => { y = row(ctx, L, Rt, y, { ...it, noLine: i === d.rows.length - 1 && !d.ppChanged && !d.next && !d.note }); }); /* no double rule above the footer */
-  if (d.note) y = noteRow(ctx, L, Rt, y, d.note, !d.ppChanged && !d.next);
-  if (d.ppChanged) { y += 12; const gw = (IW - 10) / 2, ph = 88; photoBox(ctx, L, y, gw, ph, d.ppBefore, d.ppMonths ? `used PP · ${d.ppMonths} months` : 'used PP', 26); photoBox(ctx, L + gw + 10, y, gw, ph, d.ppAfter, 'new PP', 26); y += ph + 26; }
-  if (d.next) { y += 12; y += nextBox(ctx, L, Rt, IW, y, `Next visit · ${NE.next}`, d.next, d.nextBs); }
-  y += 18; return foot(ctx, d, L, Rt, IW, y, `Thank you · ${NE.thanks}`, 'Anything wrong with the water or the purifier? WhatsApp us.');
+  y += 38 + 18;
+  /* v0.19.0 (6) Jun 10/4 "문단 나누는거 좀 아쉬움": three blocks with their own heading — what we did · checked · the note — then the two photos, bigger */
+  const checks = d.checks || []; const after = (i, arr, more) => i === arr.length - 1 && !more; /* no rule under the last row of the last block */
+  const blocks = [[d.missed ? '' : 'What we did', d.missed ? '' : NE.did, d.rows], ['Checked', NE.checked, checks]].filter((b) => b[2].length);
+  blocks.forEach(([en, ne, rows], bi) => { if (bi) y += 14; if (en) y = secLabel(ctx, L, Rt, y, en, ne) + 2; hline(ctx, L, Rt, y); rows.forEach((it, i) => { y = row(ctx, L, Rt, y, { ...it, sm: 1, noLine: after(i, rows, bi < blocks.length - 1 || d.note || d.showPhotos || d.next) }); }); });
+  if (d.note) { y += 10; y = noteRow(ctx, L, Rt, y, d.note, !d.showPhotos && !d.next); }
+  if (d.showPhotos) { y += 16; const both = d.ppBefore && d.ppAfter; const gw = both ? (IW - 10) / 2 : IW, ph = both ? 150 : 170; /* one photo = one wide box, no empty "photo" slot */
+    if (both || d.ppBefore) photoBox(ctx, L, y, gw, ph, d.ppBefore, d.ppMonths ? `${d.capBefore} · ${d.ppMonths} months` : d.capBefore, 26);
+    if (both || !d.ppBefore) photoBox(ctx, both ? L + gw + 10 : L, y, gw, ph, d.ppAfter, d.capAfter, 26); y += ph + 26; }
+  if (d.next) { y += 16; y += nextBox(ctx, L, Rt, IW, y, d.missed ? `We come again · ${NE.again}` : `Next visit · ${NE.next}`, d.next, d.nextBs); }
+  y += 20; return foot(ctx, d, L, Rt, IW, y, `Thank you · ${NE.thanks}`, d.missed ? 'Tell us a good time on WhatsApp — we come when it suits you.' : 'Anything wrong with the water or the purifier? WhatsApp us.');
 }
 export const drawVisitReport = twoPass(paintVisit);
 
@@ -344,6 +385,20 @@ function paintInstall(ctx, d, im, H) {
   return need;
 }
 export const drawInstallCard = twoPass(paintInstall, 450);
+
+// ================= thank-you card (v0.19.0 (10)) =================
+function paintEnded(ctx, d, im, H) {
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  const L = 22, Rt = W - 22, IW = Rt - L; let y = header(ctx, im, d, 'THANK YOU', `${NE.ended}${d.date ? ' · ' + d.date : ''}${d.bs ? ' · ' + d.bs : ''}`);
+  y += 16 + 19; y = h1(ctx, L, y, 'Thank you for having us.', '', NE.thanksFor, IW);
+  y += 14; avatar(ctx, L, y, 19, d.techPhoto); text(ctx, d.tech || 'KORA CARE', L + 48, y + 16, { f: font(700, 12), color: C.navy, max: IW - 52 }); text(ctx, `your KORA person · ${NE.person}`, L + 48, y + 31, { f: font(400, 9.5), color: C.mute, max: IW - 52 });
+  y += 38 + 14; hline(ctx, L, Rt, y);
+  d.rows.forEach((it, i) => { y = row(ctx, L, Rt, y, { ...it, noLine: i === d.rows.length - 1 }); });
+  y += 14; const bh = 58; ctx.fillStyle = C.sky; rr(ctx, L, y, IW, bh, 14); ctx.fill(); ctx.strokeStyle = C.skyLine; ctx.lineWidth = 1.5; rr(ctx, L, y, IW, bh, 14); ctx.stroke();
+  text(ctx, 'Our door stays open.', L + IW / 2, y + 24, { f: font(800, 13), color: C.navy, align: 'center', max: IW - 20 }); text(ctx, NE.open, L + IW / 2, y + 42, { f: font(400, 9.5), color: C.skyInk, align: 'center', max: IW - 20 });
+  y += bh + 18; return foot(ctx, d, L, Rt, IW, y, `Thank you · ${NE.thanks}`, 'Want KORA again, or know a neighbour who does? WhatsApp us.');
+}
+export const drawEndedCard = twoPass(paintEnded, 450);
 
 // ================= bill of the month + company QR =================
 function paintBill(ctx, d, im, H) {

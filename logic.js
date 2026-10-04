@@ -103,7 +103,7 @@ export function pauseEligibility(c, led, asked, v = {}) {
 export const moneyEffective = (x) => !x || (x.approval !== 'Pending' && x.approval !== 'Rejected');
 const discOf = (x) => (moneyEffective(x) ? Number(x.discount) || 0 : 0);
 const CREDIT_TYPES = new Set(['Installation fee (4,900)', 'Monthly subscription', 'Referral credit', 'Service credit']);
-export const PAYMENT_TYPES = ['Installation fee (4,900)', 'Monthly subscription', 'Repair / other', 'Penalty', 'Referral credit', 'Service credit'];
+export const PAYMENT_TYPES = ['Installation fee (4,900)', 'Monthly subscription', 'Repair / other', 'Penalty', 'Lost device settlement', 'Referral credit', 'Service credit']; /* v0.19.0 (8): a lost / stolen unit settled in money (draft §2.5(b)) — outside the bills, like a penalty */
 // v0.10: credits that are not cash — a referral free month and the repair-delay credit (Jun 2026-09-29). They pay the subscription of bill 2 onward, never the first-day 4,900.
 export const NONCASH = new Set(['Referral credit', 'Service credit']);
 export const isNonCash = (p) => !!p && NONCASH.has(p.type);

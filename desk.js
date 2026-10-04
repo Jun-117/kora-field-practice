@@ -345,6 +345,7 @@ export function cardsToSend(m, days = 1) { /* v0.16.0 (7) Jun 10/3 "보낼 카�
   for (const p of m.D.payments) { if (!(Number(p.amount) > 0) || !inWin(p.date)) continue; const x = m.cust.get(p.customerId); if (!x) continue; out.push({ key: 'receipt:' + p.id, kind: 'receipt', id: p.id, c: x.c, date: p.date, what: `${R.isNonCash(p) ? '🎁 Credit note' : '🧾 Receipt'} · ${R.npr(p.amount)}` }); }
   for (const v of m.D.visits) { if (!String(v.status || '').includes('Completed') || !inWin(v.date)) continue; const x = m.cust.get(v.customerId); if (!x) continue; out.push({ key: 'visit:' + v.id, kind: 'visit', id: v.id, c: x.c, date: v.date, what: '📨 Visit note' + (v.visitType ? ' · ' + v.visitType : '') }); }
   for (const x of m.cust.values()) { if (x.status === 'Churned' || !inWin(x.c.installDate)) continue; out.push({ key: 'install:' + x.c.id, kind: 'install', id: x.c.id, c: x.c, date: x.c.installDate, what: '🏠 Installed card' }); }
+  for (const x of m.cust.values()) { if (x.status !== 'Churned' || !inWin(x.c.churnDate)) continue; out.push({ key: 'ended:' + x.c.id, kind: 'ended', id: x.c.id, c: x.c, date: x.c.churnDate, what: '👋 Thank-you card' }); } /* v0.19.0 (10) */
   for (const e of out) e.sent = !!sent[e.key];
   return out.sort((a, b) => (a.sent - b.sent) || String(b.date).localeCompare(String(a.date)));
 }
@@ -912,12 +913,14 @@ function pageDispatch(m) {
   </div>`;
 }
 function dispatchApply(cids, to, mode) {
-  const t = model().t; const undo = [];
+  const t = model().t; const undo = []; let failed = 0;
   for (const cid of cids) {
     const c = S.D.customers.get(cid); if (!c) continue; undo.push({ cid, assignee: c.assignee || '', cover: c.cover || null });
-    if (mode === 'perm' || !to || to === (c.assignee || '')) save(`customers/${cid}`, { assignee: mode === 'perm' || !to ? to : c.assignee || '', cover: null }, false);
-    else save(`customers/${cid}`, { cover: { to, until: mode === 'today' ? t : duntil, from: c.assignee || '', at: t } }, false);
+    let ok; if (mode === 'perm' || !to || to === (c.assignee || '')) ok = save(`customers/${cid}`, { assignee: mode === 'perm' || !to ? to : c.assignee || '', cover: null }, false);
+    else ok = save(`customers/${cid}`, { cover: { to, until: mode === 'today' ? t : duntil, from: c.assignee || '', at: t } }, false);
+    if (ok === false) failed++;
   }
+  if (failed) { toast(`⚠️ ${failed} home${failed > 1 ? 's' : ''} could not be saved on this computer — reload and try again`, 6000); } /* v0.19.0 (9) Jun 10/4 "다른 기사로 안옮겨지는데": a silent failure is now said out loud */
   dundo = undo; dsel.clear(); dlast = { to, cids: new Set(cids) };
   toast(`${undo.length} home${undo.length > 1 ? 's' : ''} → ${to || 'nobody'}${mode === 'perm' || !to ? '' : mode === 'today' ? ' (today only)' : ' (until ' + duntil + ')'}`);
 }

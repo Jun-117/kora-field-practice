@@ -18,7 +18,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.18.4 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.19.0 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -114,7 +114,7 @@ export function can(p) {
   return !!pr[p];
 }
 const UV_FLOW_LIMIT = 1.2; // L/min — UV 6W verdict 2026-09-22: passes at or below 1.2
-const MAX_PHOTOS = 3, PHOTO_MAX_PX = 1024, PHOTO_Q = 0.6, PHOTO_MAX_CHARS = 950000;
+const MAX_PHOTOS = 8 /* v0.19.0 Jun 10/4 "3장 이상 업로드해도 3장밖에 안보임" — was 3 */, PHOTO_MAX_PX = 1024, PHOTO_Q = 0.6, PHOTO_MAX_CHARS = 950000;
 const COLS = ['customers', 'visits', 'payments', 'requests', 'leads', 'recoveries', 'trainings', 'checkins', 'stockMoves', 'expenses', 'deviceEvents', 'relocations', 'events', 'audit', 'contractEvents', 'screenings', 'claims', 'tools', 'payroll', 'waterTests', 'milestones']; /* v0.15: milestone boards (Jun + deputy) */
 const colsForMe = () => COLS.filter((c) => (c !== 'expenses' || can('expense') || can('money')) && (c !== 'audit' || isBoss()) && (c !== 'payroll' || isBoss()) && (c !== 'milestones' || !!S.isAdmin)); // the change log and payroll: Jun + deputy · the boards: Jun only (10/3 "나만 봄") and the deputy (rules too)
 
@@ -170,7 +170,8 @@ export function normPhone(raw) {
   if (d.length === 13 && d.startsWith('977')) d = d.slice(3);
   if (d.length === 11 && d.startsWith('09')) d = d.slice(1); /* v0.18.4: 09812345678 — a national 0 in front of a Nepal mobile */
   if (/^9\d{9}$/.test(d)) return '+977' + d;
-  if (/^010\d{8}$/.test(d)) return '+82' + d.slice(1); /* v0.18.4 Jun 10/4 "번호 꼭 98로 아니어도 되게": a Korean mobile written as 010-xxxx-xxxx */
+  if (/^0[1-9]\d{7}$/.test(d) && !intl) return '+977' + d.slice(1); /* v0.19.0 Jun 10/4 "호텔이나 정부기관, 학교, 단체": a Nepal landline with its area code — 061-xxxxxx (Pokhara) · 01-xxxxxxx (Kathmandu) = 9 digits 🟡 NTC numbering */
+  if (/^010\d{8}$/.test(d)) return '+82' + d.slice(1); /* v0.18.4 Jun 10/4 "번호 꼭 98로 아니어도 되게": a Korean mobile written as 010-xxxx-xxxx (Jun's own test phone — not shown as an example anywhere) */
   if (/^\d{8,15}$/.test(d) && !d.startsWith('977') && (intl || (d.length >= 11 && !d.startsWith('0')))) return '+' + d; /* v0.16.0 (8) Jun 10/3 "내 번호로 해보게 풀어봐": a foreign number with its country code · v0.18.4: the + may be left out (82 10…) */
   return null;
 }
@@ -407,7 +408,7 @@ const newId = (col) => doc(collection(db, col)).id;
 function savePhotos(customerId, parent, kind) {
   const n = S.formPhotos.length;
   S.formPhotos.forEach((ph, i) => {
-    save(`photos/${newId('photos')}`, { customerId, parent, kind, n: i + 1, w: ph.w, h: ph.h, chars: ph.chars, date: today() }, true, ph.img);
+    save(`photos/${newId('photos')}`, { customerId, parent, kind, n: i + 1, w: ph.w, h: ph.h, chars: ph.chars, date: today(), ...(ph.role ? { role: ph.role } : {}) }, true, ph.img); /* v0.19.0 (4): role */
   });
   S.formPhotos = []; return n;
 }
@@ -709,7 +710,7 @@ function field(f, v) {
     case 'photos': /* v0.17.2 (3) Jun 10/4 "사진 한번에 2장 이상 누를수있게": on a computer both buttons opened the same file window, one photo each → one button, several at once */
       input = `<div class="row">${isComputer() ? '' : '<button type="button" class="photo-btn" data-act="cam">📷<br>Take photo</button>'}<button type="button" class="photo-btn" data-act="gal">🖼️<br>${isComputer() ? 'Choose photos (several at once)' : 'From album'}</button></div>
         <input type="file" accept="image/*" capture="environment" hidden class="photoIn"><input type="file" accept="${f.pdf ? 'image/*,application/pdf' : 'image/*'}" multiple hidden class="photoIn">
-        <div class="thumbs" id="thumbs"></div>`; break;
+        <div class="thumbs" id="thumbs"${f.roles ? ` data-roles="${esc(f.roles.join('|'))}"` : ''}></div>`; break; /* v0.19.0 (4) Jun 10/4 "헌필터 사진 넣는곳, 새 필터 사진 넣는곳": each photo carries a role */
     case 'counts': {
       const cnt = {}; for (const x of Array.isArray(val) ? val : []) cnt[x] = (cnt[x] || 0) + 1;
       input = `<div class="counts" data-counts="${f.k}">` + opts.map((o) => `<span class="cnt${cnt[o] ? ' on' : ''}" data-v="${esc(o)}" data-n="${cnt[o] || 0}"><button type="button" class="chip${cnt[o] ? ' on' : ''}" data-cplus>${esc(o)}<b class="cn">${cnt[o] ? ' ×' + cnt[o] : ''}</b></button><button type="button" class="cminus" data-cminus aria-label="one less">−</button></span>`).join('') + '</div>'; break;
@@ -793,7 +794,7 @@ FORMS.install = {
   spec: () => [
     { t: 'section', l: 'Customer' },
     { k: 'name', l: 'Customer name', t: 'text', req: 1 },
-    { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX or +82 10…' },
+    { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX' },
     { k: 'msgLang', l: 'WhatsApp messages in', t: 'chips', o: MSG_LANGS, hint: 'Empty = the Settings default (Nepali) · one language reads less like spam' }, /* v0.17.2 (2) */
     { k: 'zone', l: 'Zone', t: 'chips', o: OPT.zone, req: 1 },
     { k: 'ward', l: 'Ward', t: 'select', o: OPT.ward, req: 1 },
@@ -845,7 +846,7 @@ FORMS.install = {
     const errs = {}, warns = {};
     if (!v.name || v.name.length < 2) errs.name = 'Enter the customer name.';
     const phone = normPhone(v.phone);
-    if (!phone) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
+    if (!phone) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a landline with its area code (061-…).';
     else { const dup = arr('customers').find((c) => c.phone === phone && c.id !== v._id); if (dup && !confirmed) warns.phone = `Same number as ${custLabel(dup)}. Save anyway only if this is really a different household.`; else if (!phone.startsWith('+977') && !confirmed) warns.phone = 'Not a Nepal number — fine for a test or a foreign phone (WhatsApp still works).'; }
     need(errs, v, 'zone', 'Choose a zone.'); need(errs, v, 'ward', 'Choose a ward.'); need(errs, v, 'tole', 'Choose a tole.');
     if (v.tole === 'Other' && !v.toleOther) errs.toleOther = 'Write the tole name.';
@@ -990,8 +991,8 @@ FORMS.visit = {
     { k: 'signName', l: 'Signed by (name)', t: 'text', show: (v) => !R.isNoShow(v) },
     { k: 'sign', l: '', t: 'sign', show: (v) => !R.isNoShow(v) },
     { k: 'noSign', l: 'No signature — why?', t: 'chips', o: OPT.noSign, show: (v) => !R.isNoShow(v) && !v.sign },
-    { t: 'section', l: 'Photos', hint: 'Filter change: old filter · device after · TDS after. Repair: fault close-up · working after.' },
-    { k: 'photos', l: 'Photos', t: 'photos' },
+    { t: 'section', l: 'Photos', hint: 'Filter change: old filter · device after · TDS after. Repair: fault close-up · working after. Label each photo — "before" and "after" go on the visit note.' },
+    { k: 'photos', l: 'Photos', t: 'photos', roles: ['before', 'after', 'tds', 'other'] }, /* v0.19.0 (4) */
     { k: 'notes', l: 'Notes', t: 'textarea', ph: 'complaints, symptoms, anything to remember' },
   ],
   info(v) {
@@ -1050,6 +1051,7 @@ FORMS.payment = {
     { k: 'due', t: 'info' },
     { k: 'date', l: 'Payment date', t: 'date', req: 1, def: today },
     { k: 'type', l: 'What for', t: 'chips', o: () => R.PAYMENT_TYPES.filter((x) => !R.NONCASH.has(x) || isBoss()), req: 1, def: 'Monthly subscription' },
+    { k: 'months', l: 'Prepay — how many bills?', t: 'chips', o: ['1', '2', '3', '6', '12'], def: '1', show: (v) => v.type === 'Monthly subscription', hint: 'The amount fills in: the next bills added up. More than one = paid ahead; each bill keeps its own date on the receipt.' }, /* v0.19.0 (3) Jun 10/4 "선납 옵션" — no discount: one price (memory kora-price-1100-decision) */
     { k: 'amount', l: 'Amount received (NPR)', t: 'number', req: 1 },
     { k: 'method', l: 'Paid by', t: 'chips', o: OPT.method, req: 1, def: 'Khalti' },
     { k: 'ref', l: 'Transaction ID', t: 'text', ph: 'from Khalti / eSewa / bank' },
@@ -1064,7 +1066,14 @@ FORMS.payment = {
   prefill(p) {
     const x = p.cid && model().cust.get(p.cid); if (!x) return { customerId: p.cid || '' };
     const b = x.led.nextBill; const owed = x.led.overdue > 0 ? x.led.overdue : b ? b.amount - b.paid : null;
+    S.payLost = p.lost || ''; /* v0.19.0 (8): a lost-device settlement opened from the customer page remembers which contract event it closes */
     return { customerId: p.cid, amount: p.amount || owed, type: b && b.k === 1 ? 'Installation fee (4,900)' : 'Monthly subscription', referralFor: p.referralFor || '', ...(p.type ? { type: p.type } : {}) };
+  },
+  onChange(form, v, key) { /* v0.19.0 (3): the "how many bills" chip → the amount = the next N open bills (beyond the ledger: the price rule) */
+    if (key !== 'months' || v.type !== 'Monthly subscription') return; const n = Math.max(1, Number(v.months) || 1); const x = v.customerId && model().cust.get(v.customerId); if (!x) return;
+    const open = x.led.bills.filter((b) => b.status !== 'paid'); let sum = 0, k = 0;
+    for (let i = 0; i < n; i++) { const b = open[i]; if (b) { sum += b.amount - b.paid; k = b.k; } else { k = (k || (x.led.bills.length ? x.led.bills[x.led.bills.length - 1].k : 1)) + 1; sum += R.billAmount(k).amount; } }
+    const el = form.elements.amount; if (el) el.value = Math.round(sum);
   },
   info(v) {
     const x = v.customerId && model().cust.get(v.customerId); if (!x) return '';
@@ -1088,6 +1097,7 @@ FORMS.payment = {
   save(v, id, isNew) {
     const data = withApproval('payments', id, { ...v, by: myName() });
     const ok = save(`payments/${id}`, data, isNew);
+    if (ok && v.type === 'Lost device settlement' && S.payLost && S.D.contractEvents.has(S.payLost)) { save(`contractEvents/${S.payLost}`, { settledDate: v.date, settleAmount: Number(v.amount) || 0, settlePaymentId: id }, false); S.payLost = ''; } /* v0.19.0 (8) Jun 10/4 "정산 누르면 걍 정보 수정 페이지뿐": the money closes the case */
     if (data.approval === 'Pending') setTimeout(() => toast(`Discount ${R.npr(Number(v.discount))} sent for an OK — it counts once approved`, 4500), 50);
     return { ok, np: 0, go: ['customers', 'detail', { id: v.customerId, receipt: id }] };
   },
@@ -1136,7 +1146,7 @@ FORMS.lead = {
   check(v) {
     const errs = {}, warns = {};
     if (!v.name || v.name.length < 2) errs.name = 'Enter the name.';
-    if (v.phone && !normPhone(v.phone)) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
+    if (v.phone && !normPhone(v.phone)) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a landline with its area code (061-…).';
     need(errs, v, 'outcome');
     return { errs, warns };
   },
@@ -1391,7 +1401,7 @@ FORMS.contract = {
     }
     if (v.kind === 'Transfer to a new holder') {
       if (!v.newName || String(v.newName).trim().length < 2) errs.newName = 'Enter the new holder\'s name.';
-      if (!normPhone(v.newPhone)) errs.newPhone = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
+      if (!normPhone(v.newPhone)) errs.newPhone = 'Enter a Nepal mobile (98XXXXXXXX) or a landline with its area code (061-…).';
       need(errs, v, 'transferReason', 'Choose why.'); need(errs, v, 'depositHandling', 'Choose what happens to the deposit.');
     }
     if (v.kind === 'Lost or stolen') {
@@ -1420,7 +1430,7 @@ FORMS.screening = {
   spec: () => [
     { t: 'section', l: 'Who' },
     { k: 'name', l: 'Name', t: 'text', req: 1 },
-    { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX or +82 10…' },
+    { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX' },
     { k: 'tole', l: 'Tole', t: 'select', o: OPT.tole },
     { k: 'date', l: 'Date', t: 'date', req: 1, def: today },
     { t: 'section', l: 'Home', hint: '🔴 First-guess rules (G-1 has no sign-up rule yet) — the verdict only advises; you decide at the end.' },
@@ -1461,8 +1471,8 @@ FORMS.screening = {
   check(v) {
     const errs = {}, warns = {};
     if (!v.name || v.name.length < 2) errs.name = 'Enter the name.';
-    if (!normPhone(v.phone)) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
-    if (v.phone2 && !normPhone(v.phone2)) errs.phone2 = 'Enter a Nepal mobile (98XXXXXXXX) or a foreign number with its country code (+82 10…).';
+    if (!normPhone(v.phone)) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a landline with its area code (061-…).';
+    if (v.phone2 && !normPhone(v.phone2)) errs.phone2 = 'Enter a Nepal mobile (98XXXXXXXX) or a landline with its area code (061-…).';
     need(errs, v, 'date'); need(errs, v, 'housing', 'Choose one.'); need(errs, v, 'stay36', 'Choose one.'); need(errs, v, 'idSeen', 'Choose one.'); need(errs, v, 'power', 'Choose one.'); need(errs, v, 'tap', 'Choose one.'); need(errs, v, 'decision', 'Choose your decision.');
     if (v.housing === 'Renting' && v.mount === 'Wall') need(errs, v, 'landlordOk', 'Choose one.'); need(errs, v, 'cashDay1', 'Choose one.');
     if (!inRange(v.householdSize, 1, 40)) errs.householdSize = 'Check this number (1–40).';
@@ -1754,10 +1764,11 @@ function formHtml(p) {
       <button class="btn" type="submit" id="saveBtn">Save</button>
     </form>`;
 }
-function refreshConditional(form) {
+function refreshConditional(form, key) {
   const F = FORMS[form.dataset.form]; if (!F) return;
   const spec = F.spec(); const v = readForm(form, spec);
   for (const f of spec) if (f.show && f.k) { const el = form.querySelector(`.fld[data-k="${f.k}"], .fsec[data-k="${f.k}"]`); if (el) el.classList.toggle('hidden', !f.show(v)); }
+  if (F.onChange && key) F.onChange(form, v, key); /* v0.19.0 (3) */
   if (F.info) for (const f of spec) if (f.t === 'info') { const el = form.querySelector('#info_' + f.k); if (el) { const h = F.info(v); el.innerHTML = h; el.parentElement.classList.toggle('hidden', !h); } }
 }
 function submitForm(form) {
@@ -2194,7 +2205,7 @@ function viewDetail(p) {
   const recs = m.D.recoveries.filter((q) => q.customerId === c.id);
   const dep = m.deposits.rows.find((r) => r.c.id === c.id);
   const refs = m.referrals.filter((r) => r.who.id === c.id && !r.done);
-  const stPill = { Active: 'ok', Paused: 'blue', Churned: 'grey' }[x.status];
+  const stPill = { Active: 'ok', Paused: 'blue', Churned: 'grey' }[x.status]; const lostOpen = m.contractOpen.some((o) => o.kind === 'lost' && o.e.customerId === c.id); /* v0.19.0 (7) Jun 10/4 "도난 정산 안됨인데 왜 초록 정상표시임" */
   const receipt = p.receipt && m.D.payments.find((q) => q.id === p.receipt);
   const vrep = p.vrep && m.D.visits.find((q) => q.id === p.vrep); /* v0.14 (#7): no auto popup — a button; Tara decides whether the note goes out */
   const inst = p.inst && c.id === p.inst;
@@ -2218,16 +2229,16 @@ function viewDetail(p) {
   for (const o of x.ob.filter((q) => q.status === 'due' || q.status === 'overdue')) todo.push({ lvl: o.status === 'overdue' ? 'warn' : 'info', ic: '📞', t: o.label, s: `due ${o.due}`, a: `<button class="btn small ghost" data-go-form="checkin" data-cid="${esc(c.id)}" data-kind="${esc(o.k === 'Q' ? 'Quarterly call' : o.k)}">📞 Log call</button>` });
   for (const wt of m.vials.waiting.filter((q) => q.customerId === c.id)) todo.push({ lvl: 'info', ic: '🧫', t: 'Read the water vial', s: `filled ${wt.sampledDate || '?'}`, a: `<button class="btn small ghost" data-edit="waterTest" data-id="${esc(wt.id)}">🧫 Read</button>` });
   if (led.contractEnded) todo.push({ lvl: 'warn', ic: '📝', t: 'Contract ended — renew', s: `${R.PRICES.contractMonths} months since ${c.installDate}` });
-  for (const o of m.contractOpen.filter((q) => q.e.customerId === c.id)) todo.push(o.kind === 'notice' ? { lvl: o.overdue || o.soon ? 'bad' : 'warn', ic: '📜', t: `ending on ${o.e.endDate || '?'} — book the recovery`, s: o.e.early ? `before 36 months · deposit paid ${R.npr(o.e.depositPaid || 0)} is kept (draft §2.2)` : 'after 36 months · deposit back with the unit (draft §2.2)', a: can('visit') ? `<button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start recovery</button>` : '' } : { lvl: 'warn', ic: '📜', t: 'device lost or stolen — not settled', s: `${o.e.fault || ''}${o.lateNotice ? ' · told us late (draft §2.5(b))' : ''}`, a: canForm('contract') ? `<button class="btn small ghost" data-edit="contract" data-id="${esc(o.e.id)}">Settle</button>` : '' });
+  for (const o of m.contractOpen.filter((q) => q.e.customerId === c.id)) todo.push(o.kind === 'notice' ? { lvl: o.overdue || o.soon ? 'bad' : 'warn', ic: '📜', t: `ending on ${o.e.endDate || '?'} — book the recovery`, s: o.e.early ? `before 36 months · deposit paid ${R.npr(o.e.depositPaid || 0)} is kept (draft §2.2)` : 'after 36 months · deposit back with the unit (draft §2.2)', a: can('visit') ? `<button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start recovery</button>` : '' } : { lvl: 'warn', ic: '📜', t: 'device lost or stolen — not settled', s: `${o.e.fault || ''}${o.lateNotice ? ' · told us late (draft §2.5(b))' : ''}`, a: `${can('pay') ? (() => { const LS = R.lostSettlement(c, led, o.e.lostDate || o.e.date); const amt = Number(o.e.settleAmount) > 0 ? Number(o.e.settleAmount) : Math.max(0, LS.total); return `<button class="btn small" data-go-form="payment" data-cid="${esc(c.id)}" data-type="Lost device settlement" data-amount="${amt}" data-lost="${esc(o.e.id)}">💵 Settle · ${R.npr(amt)}</button>`; })() : ''}${canForm('contract') ? `<button class="btn small ghost" data-edit="contract" data-id="${esc(o.e.id)}">Edit</button>` : ''}` }); /* v0.19.0 (8): Settle = take the money (the event closes itself) · Edit = the event */
   for (const r of refs.filter((q) => q.ready)) todo.push({ lvl: 'info', ic: '🎁', t: `Brought ${esc((S.D.customers.get(r.forId) || {}).name || 'a new home')} — referrer's 50% off a bill`, s: '3 months after their install · apply once', a: isBoss() ? `<a href="#" class="btn small ghost" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">Apply</a>` : '' });
   const worst = todo.some((q) => q.lvl === 'bad') ? 'bad' : todo.some((q) => q.lvl === 'warn') ? 'warn' : todo.length ? 'info' : 'ok';
-  const nowCard = x.status === 'Churned' ? `<div class="card now lv-info"><div class="now-h">⚫ Customer has left${c.churnDate ? ` <span class="muted">${esc(c.churnDate)}</span>` : ''}</div>${recs.length ? '' : `<div class="now-i lv-warn"><span class="ic">📦</span><div class="main"><div class="t">No recovery case yet</div><div class="s">get the device back and settle the deposit</div></div><div class="acts"><button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start</button></div></div>`}</div>`
+  const nowCard = x.status === 'Churned' ? `<div class="card now lv-info"><div class="now-h">⚫ Customer has left${c.churnDate ? ` <span class="muted">${esc(c.churnDate)}</span>` : ''}</div>${recs.length ? '' : `<div class="now-i lv-warn"><span class="ic">📦</span><div class="main"><div class="t">No recovery case yet</div><div class="s">get the device back and settle the deposit</div></div><div class="acts"><button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start</button></div></div>`}<div class="now-i lv-info"><span class="ic">👋</span><div class="main"><div class="t">Thank-you card</div><div class="s">why they left · the unit back · the deposit · see you again</div></div><div class="acts"><button class="btn small ghost" data-act="rcEnd" data-cid="${esc(c.id)}">👋 Card</button></div></div></div>`
     : `<div class="card now lv-${worst}"><div class="now-h">${worst === 'ok' ? '✅ Nothing due here' : '⚡ Do now'}<span class="sp"></span>${worst === 'ok' ? `<span class="muted">${x.nv ? `next visit ${esc(x.nv.date)} · ` : ''}${led.nextBill ? 'next bill ' + esc(led.nextBill.due) : ''}</span>` : ''}</div>
     ${todo.map((q) => `<div class="now-i lv-${q.lvl}"><span class="ic">${q.ic}</span><div class="main"><div class="t">${esc(q.t)}</div><div class="s">${esc(q.s || '')}</div></div>${q.a ? `<div class="acts">${q.a}</div>` : ''}</div>`).join('')}</div>`;
   const kv = (rows) => `<div class="kv">${rows.filter(([, v]) => v !== undefined).map(([k, v, raw]) => `<div class="k">${esc(k)}</div><div class="v">${raw ? v : esc(v ?? '–') || '–'}</div>`).join('')}</div>`;
   return `<button class="back" data-back>‹ Back</button>
-  <div class="det-h"><span class="dot ${x.dot}" style="width:16px;height:16px"></span><h1 style="margin:0">${esc(c.name)}</h1></div>
-  <div class="muted">${esc(c.code)} · ${esc(toleOf(c))} · Ward ${esc(c.ward || '–')} · <span class="pill ${stPill}">${esc(x.status)}</span>${c._pending ? ' <span class="pill warn">on phone</span>' : ''}</div>
+  <div class="det-h"><span class="dot ${lostOpen ? 'y' : x.dot}" style="width:16px;height:16px"></span><h1 style="margin:0">${esc(c.name)}</h1></div>
+  <div class="muted">${esc(c.code)} · ${esc(toleOf(c))} · Ward ${esc(c.ward || '–')} · <span class="pill ${stPill}">${esc(x.status)}</span>${lostOpen ? ' <span class="pill warn">Lost · not settled</span>' : ''}${c._pending ? ' <span class="pill warn">on phone</span>' : ''}</div>
   ${assignLine(c, t)}
   <div class="links${S.desk ? '' : ' top3'}">
     <a href="tel:${esc(c.phone)}">📞 Call</a><a href="${esc(waLink(c.phone))}" target="_blank" rel="noopener">💬 WhatsApp</a>
@@ -2344,15 +2355,19 @@ export async function visitPhotos(parent) { /* v0.14: the first two photos saved
   const out = []; const toImg = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
   /* v0.17.3 (1) Jun 10/4 "여전히 사진 3장 업로드해도 안된다": a sent photo has no copy here any more (dropped once the server has it) — photoGet now says so
      instead of true, so the server is asked. The record's own photos (install · visit · repair) by their number; never the signature (same parent) */
-  const add = (src) => { if (typeof src === 'string' && src.startsWith('data:image/') && out.length < 2 && !out.includes(src)) out.push(src); }; /* v0.18.3: cards draw the thumbnail (new docs) or the picture (old docs) */
+  const add = (src, role) => { if (typeof src === 'string' && src.startsWith('data:image/') && out.length < 8 && !out.some((o) => o.src === src)) out.push({ src, role: role || '' }); }; /* v0.18.3: cards draw the thumbnail (new docs) or the picture (old docs) · v0.19.0 (4): with the role */
   const own = (x) => (['install', 'visit', 'repair'].includes(x.kind) ? 0 : 1);
-  const take = (xs) => xs.filter((x) => x && x.kind !== 'Signature').sort((a, b) => own(a) - own(b) || (Number(a.n) || 0) - (Number(b.n) || 0)).forEach((x) => add(photoSrc(x)));
+  const take = (xs) => xs.filter((x) => x && x.kind !== 'Signature').sort((a, b) => own(a) - own(b) || (Number(a.n) || 0) - (Number(b.n) || 0)).forEach((x) => add(photoSrc(x), x.role));
+  const enough = () => out.some((o) => o.role === 'before') && out.some((o) => o.role === 'after');
   const loc = []; for (const e of myJournal().filter((e) => e.photo && e.data && e.data.parent === parent)) { const img = await photoGet(e.id); if (img) loc.push({ ...e.data, img }); } take(loc);
-  if (out.length < 2 && !DEMO) { const q = query(collection(db, 'photos'), where('parent', '==', parent), qLimit(8)); const docs = (snap) => snap.docs.map((d) => d.data());
+  if (!enough() && !DEMO) { const q = query(collection(db, 'photos'), where('parent', '==', parent), qLimit(12)); const docs = (snap) => snap.docs.map((d) => d.data());
     try { take(docs(await getDocsFromCache(q))); } catch (e) {}
-    if (out.length < 2 && navigator.onLine) { try { take(docs(await getDocs(q))); } catch (e) {} } }
-  const ims = []; for (const src of out) { const im = await toImg(src); if (im) ims.push(im); }
-  return { before: ims[0] || null, after: ims[1] || null };
+    if (!enough() && navigator.onLine) { try { take(docs(await getDocs(q))); } catch (e) {} } }
+  /* "before" / "after" by label; a record without labels (older visits · installs) = the first two by order */
+  const pick = (role, idx) => { const byRole = out.find((o) => o.role === role); const rest = out.filter((o) => !['before', 'after'].includes(o.role) || o.role === role); return byRole || rest[idx] || null; };
+  const b = pick('before', 0), a = pick('after', b && !b.role ? 1 : 0);
+  const im = async (o) => (o ? await toImg(o.src) : null);
+  return { before: await im(b), after: a && a !== b ? await im(a) : null };
 }
 // ---- v0.17.3 (6) Jun 10/4 "나 (준 관리자 권한 딱 나만)나 전용으로 고객 삭제버튼 이런거 넣어봐 테스트 여러게하고 삭제하게": Jun only (the rules say the same) ·
 // the customer and every record that points at them (payments · visits · photos · requests …) · the code typed to confirm · online only (half a customer is worse).
@@ -2453,12 +2468,13 @@ async function cardSpec(kind, id) {
   let x, d, draw, name, alt, noteWait = false;
   if (kind === 'receipt') { const pay = S.D.payments.get(id); if (!pay) return null; x = model().cust.get(pay.customerId); if (!x) return { err: 'Customer not found' }; d = RC.receiptData(x, pay, co, [...S.D.payments.values()].filter((q) => q.customerId === pay.customerId), today()); draw = () => RC.drawReceipt(d); name = `${d.no}.png`; alt = 'receipt'; }
   else if (kind === 'referral') { x = model().cust.get(id); if (!x) return null; d = RC.referralData(x, co); draw = () => RC.drawReferralCard(d); name = `KORA-referral-${d.code || 'card'}.png`; alt = 'referral card'; }
-  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return null; x = model().cust.get(v.customerId); if (!x) return null; const ph = (v.filters || []).includes('PP') ? await visitPhotos(`visits/${id}`) : {}; d = RC.visitData(x, v, co, ph, await staffWho(v.technician)); draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; noteWait = !!(d.note && d.note.waiting);
+  else if (kind === 'visit') { const v = S.D.visits.get(id); if (!v) return null; x = model().cust.get(v.customerId); if (!x) return null; const ph = R.isNoShow(v) ? {} : await visitPhotos(`visits/${id}`); d = RC.visitData(x, v, co, ph, await staffWho(v.technician)); /* v0.19.0 (4)(5): photos on every completed visit (not only PP) · none on a missed one */ draw = () => RC.drawVisitReport(d); name = `KORA-visit-${v.date}-${d.code || ''}.png`; alt = 'visit note'; noteWait = !!(d.note && d.note.waiting);
     if (noteWait && !DEMO && !(S.trAsk || (S.trAsk = {}))[id]) { S.trAsk[id] = 1; getDocFromServer(doc(db, 'visits', id)).then((sn) => { const tr = sn.exists() ? sn.get('custNoteTr') : null; const cur = S.D.visits.get(id); if (tr && typeof tr === 'object' && cur) { S.D.visits.set(id, { ...cur, custNoteTr: tr }); bump(); } }).catch(() => { delete S.trAsk[id]; }); } /* v0.17.2 (4): the server adds custNoteTr without a new updatedAt → a phone restarted right after saving never got it */ }
   else if (kind === 'bill') { x = model().cust.get(id); if (!x) return null; d = RC.billData(x, co, await qrImage(), today()); if (!d) return { err: 'No bill to show for this home' }; draw = () => RC.drawBillCard(d); name = `KORA-bill-${d.code || ''}-${today()}.png`; alt = 'bill with QR'; } /* v0.16 #7 */
+  else if (kind === 'ended') { x = model().cust.get(id); if (!x) return null; const rec = [...S.D.recoveries.values()].filter((r) => r.customerId === id).sort((p, q) => String(q.startedDate || q.churnDate || '').localeCompare(String(p.startedDate || p.churnDate || '')))[0] || null; d = RC.endedData(x, co, rec, await staffWho(x.c.agent || myName())); draw = () => RC.drawEndedCard(d); name = `KORA-thankyou-${d.code || ''}.png`; alt = 'thank-you card'; } /* v0.19.0 (10) */
   else if (kind === 'install') { x = model().cust.get(id); if (!x) return null; const ph = await visitPhotos(`customers/${id}`); d = RC.installData(x, co, ph.before || ph.after || null, await staffWho(x.c.agent || myName())); draw = () => RC.drawInstallCard(d); name = `KORA-installed-${d.code || ''}.png`; alt = 'installed card'; }
   else return null;
-  return { kind, d, draw, name, alt, key: kind + '|' + id + '|' + JSON.stringify(d, imgKey), phone: (x && x.c && x.c.phone) || '', sentKey: ['receipt', 'visit', 'install'].includes(kind) ? kind + ':' + id : '', noteWait }; /* v0.16.0 (5): phone + sent key for the desk */
+  return { kind, d, draw, name, alt, key: kind + '|' + id + '|' + JSON.stringify(d, imgKey), phone: (x && x.c && x.c.phone) || '', sentKey: ['receipt', 'visit', 'install', 'ended'].includes(kind) ? kind + ':' + id : '', noteWait }; /* v0.16.0 (5): phone + sent key for the desk */
 }
 async function cardImage(sp) {
   const hit = RC_CACHE.get(sp.key); if (hit) { RC_CACHE.delete(sp.key); RC_CACHE.set(sp.key, hit); return { ...hit, cached: true }; }
@@ -2521,16 +2537,18 @@ async function loadPhotos(cid, parent, net = false) { /* v0.11.1 (#2): the serve
   for (const e of myJournal().filter((e) => e.photo && mine(e.data) && e.state !== 'done')) { const img = await photoGet(e.id); if (img) seen.set(e.id, { ...e.data, img, local: true }); }
   show();
   if (DEMO) return;
-  const q = parent ? query(collection(db, 'photos'), where('parent', '==', parent), qLimit(12)) : query(collection(db, 'photos'), where('customerId', '==', cid), qLimit(12));
+  const q = parent ? query(collection(db, 'photos'), where('parent', '==', parent), qLimit(40)) : query(collection(db, 'photos'), where('customerId', '==', cid), qLimit(40)); /* v0.19.0: 40 (was 12) — the strip scrolls sideways */
   try { (await getDocsFromCache(q)).forEach((d) => seen.set(d.id, { ...d.data(), local: d.metadata.hasPendingWrites })); show(); } catch (e) {}
   if (net && navigator.onLine) { try { (await getDocs(q)).forEach((d) => seen.set(d.id, { ...d.data(), local: false })); show(); } catch (e) {} }
 }
 const isPdf = (x) => typeof x === 'string' && x.startsWith('data:application/pdf');
 const thumb = (img) => (isPdf(img) ? `<div class="pdf-tile" data-pdf="1">📄<span>PDF</span></div>` : `<img src="${esc(img)}" alt="" data-full="1">`);
 const figOf = (x, cap) => { const src = photoSrc(x); const pdf = isPdf(src) || (!src && x.st && String(x.st).endsWith('.pdf')); return `<figure${isPdf(src) ? ` data-src="${esc(src)}"` : ''}${x.st ? ` data-st="${esc(x.st)}"` : ''}>${pdf ? `<div class="pdf-tile" data-pdf="1">📄<span>PDF</span></div>` : thumb(src)}<figcaption>${cap}${x.st ? ' <button type="button" class="a" data-act="photoFull">⤓ full size</button>' : ''}</figcaption></figure>`; }; /* v0.18.3 (B3): the full picture lives in Storage */
+export const PHOTO_ROLES = { before: 'Before · old filter / fault', after: 'After · new filter / fixed', tds: 'TDS meter', other: 'Other' }; /* v0.19.0 (4): the technician labels each photo; the card draws "before" and "after" by label, not by order */
+const thumbRoles = () => { const t = $('#drawer #thumbs') || $('#thumbs'); return t && t.dataset.roles ? t.dataset.roles.split('|') : null; };
 function renderThumbs() {
-  const t = $('#drawer #thumbs') || $('#thumbs'); if (!t) return;
-  t.innerHTML = S.formPhotos.map((p, i) => `<figure>${isPdf(p.img) ? '<div class="pdf-tile">📄<span>PDF</span></div>' : `<img src="${p.img}" alt="">`}<button type="button" class="rm" data-rmphoto="${i}">✕</button></figure>`).join('');
+  const t = $('#drawer #thumbs') || $('#thumbs'); if (!t) return; const roles = thumbRoles();
+  t.innerHTML = S.formPhotos.map((p, i) => `<figure>${isPdf(p.img) ? '<div class="pdf-tile">📄<span>PDF</span></div>' : `<img src="${p.img}" alt="">`}<button type="button" class="rm" data-rmphoto="${i}">✕</button>${roles ? `<select class="prole" data-prole="${i}">${roles.map((r) => `<option value="${esc(r)}"${(p.role || '') === r ? ' selected' : ''}>${esc(PHOTO_ROLES[r] || r)}</option>`).join('')}</select>` : ''}</figure>`).join('');
 }
 // PDF bills (e.g. online receipts) are kept as they are if small enough for one Firestore document (1 MiB).
 function readPdf(f) {
@@ -2539,7 +2557,7 @@ function readPdf(f) {
 export async function addFormPhotos(files) {
   for (const f of files) {
     if (S.formPhotos.length >= MAX_PHOTOS) { toast(`Max ${MAX_PHOTOS} photos`); break; }
-    try { S.formPhotos.push(f.type === 'application/pdf' ? await readPdf(f) : await shrinkPhoto(f)); } catch (e) { toast('Photo failed: ' + e.message); }
+    try { const ph = f.type === 'application/pdf' ? await readPdf(f) : await shrinkPhoto(f); const roles = thumbRoles(); if (roles) { const used = new Set(S.formPhotos.map((q) => q.role)); ph.role = roles.find((r) => r !== 'other' && !used.has(r)) || 'other'; } S.formPhotos.push(ph); } catch (e) { toast('Photo failed: ' + e.message); } /* v0.19.0 (4): the first free role (before → after → TDS), the rest "other" — the technician can change it */
   }
   renderThumbs();
 }
@@ -3346,7 +3364,7 @@ document.addEventListener('click', async (ev) => {
     const g = chip.parentElement; const multi = g.dataset.multi === '1';
     if (multi) chip.classList.toggle('on');
     else { const was = chip.classList.contains('on'); g.querySelectorAll('.chip').forEach((b) => b.classList.remove('on')); if (!was) chip.classList.add('on'); }
-    const f = chip.closest('form'); if (f && f.id === 'theForm') { refreshConditional(f); draftSave(f); unconfirm(f); }
+    const f = chip.closest('form'); if (f && f.id === 'theForm') { refreshConditional(f, g.dataset.group); draftSave(f); unconfirm(f); }
     return;
   }
   const lg = t.closest('[data-lang]'); if (lg) { setLang(lg.dataset.lang); render(true); if (S.drawer) refreshDrawer(); if (deskMod) deskMod.paletteClose(); return; }
@@ -3363,7 +3381,7 @@ document.addEventListener('click', async (ev) => {
   const qrm = t.closest('[data-coqr-remove]'); if (qrm) { ev.preventDefault(); if (!S.isAdmin) return; save('settings/app', { coQr: '' }, false); S.settings = { ...S.settings, coQr: '' }; bump(); toast('QR removed'); scheduleRender(); return; }
   const mx = t.closest('[data-msexport]'); if (mx) { ev.preventDefault(); const b = mx.dataset.msexport; const rows = arr('milestones').filter((x) => !b || (x.board || 'Board') === b).map(({ id, createdAt, updatedAt, createdBy, updatedBy, by, ...rest }) => rest); download(`kora-board-${(b || 'all').replace(/[^\w]+/g, '_')}-${today()}.json`, JSON.stringify(rows, null, 2)); return; }
   const gf = t.closest('[data-go-form]'); if (gf && !canForm(gf.dataset.goForm)) return; // hidden rights stay hidden (no message)
-  if (gf) { ev.preventDefault(); nav(S.route.tab === 'customers' || S.route.screen === 'detail' ? 'customers' : 'new', 'form', { form: gf.dataset.goForm, cid: gf.dataset.cid, id: gf.dataset.id, lead: gf.dataset.lead, kind: gf.dataset.kind, serial: gf.dataset.serial, event: gf.dataset.kind, date: gf.dataset.date, lane: gf.dataset.lane, board: gf.dataset.board }); return; }
+  if (gf) { ev.preventDefault(); nav(S.route.tab === 'customers' || S.route.screen === 'detail' ? 'customers' : 'new', 'form', { form: gf.dataset.goForm, cid: gf.dataset.cid, id: gf.dataset.id, lead: gf.dataset.lead, kind: gf.dataset.kind, serial: gf.dataset.serial, event: gf.dataset.kind, date: gf.dataset.date, lane: gf.dataset.lane, board: gf.dataset.board, type: gf.dataset.type, amount: gf.dataset.amount ? Number(gf.dataset.amount) : undefined, lost: gf.dataset.lost }); return; }
   const cv = t.closest('[data-convert]'); if (cv) { nav('new', 'form', { form: 'install', lead: cv.dataset.convert }); return; } /* v0.11: the install form prefills itself from the lead + its screening */
   const cb = t.closest('button[data-cust]'); if (cb && cb.dataset.cust) { nav('customers', 'detail', { id: cb.dataset.cust }); return; } // a button inside an edit row
   const ed = t.closest('[data-edit]'); if (ed) { nav(S.route.tab, 'form', { form: ed.dataset.edit, id: ed.dataset.id }); return; }
@@ -3389,6 +3407,7 @@ document.addEventListener('click', async (ev) => {
   if (t.closest('[data-back]')) { backClick(); return; }
   if (t.id === 'drawerBg') { closeDrawer(); return; }
   if (t.dataset.rmphoto !== undefined) { S.formPhotos.splice(Number(t.dataset.rmphoto), 1); renderThumbs(); return; }
+  if (t.dataset.prole !== undefined) return; /* the role select — handled on change */
   if (t.dataset.full) { const o = $('#viewer'); o.querySelector('img').src = t.src; o.style.display = 'flex'; return; }
   const pdf = t.closest('[data-pdf]'); if (pdf) { const fig = pdf.closest('figure'); const src = fig && fig.dataset.src; if (src) { const bin = atob(src.split(',')[1]); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); window.open(URL.createObjectURL(new Blob([u8], { type: 'application/pdf' })), '_blank'); } return; }
   if (t.closest('#viewer')) { $('#viewer').style.display = 'none'; return; }
@@ -3439,6 +3458,7 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'rcRef') { ev.preventDefault(); imageCard('referral', a.dataset.cid); }
   else if (act === 'rcVisit') { ev.preventDefault(); imageCard('visit', a.dataset.vid); }
   else if (act === 'rcInst') { ev.preventDefault(); imageCard('install', a.dataset.cid); }
+  else if (act === 'rcEnd') { ev.preventDefault(); imageCard('ended', a.dataset.cid); } /* v0.19.0 (10) Jun 10/4 "해지완료했으면 … 잘가라" */
   else if (act === 'rcBill') { ev.preventDefault(); ev.stopPropagation(); const cid = a.dataset.cid; if ($('#rcBox')) imageCard('bill', cid); else { nav('customers', 'detail', { id: cid }); setTimeout(() => imageCard('bill', cid), 450); } } /* v0.16 #7: from a list → open the home, then draw */
   else if (act === 'serialNext') { ev.preventDefault(); const f = a.closest('form'); const el = f && f.elements[a.dataset.for]; if (el) { el.value = nextSerials(1)[0]; el.dispatchEvent(new Event('input', { bubbles: true })); } } /* v0.17.2 (6) */
   else if (act === 'serialGen') { ev.preventDefault(); const f = a.closest('form'); const ta = f && f.elements[a.dataset.for]; const n = Number((f.querySelector('#sgN') || {}).value) || 1;
@@ -3526,6 +3546,7 @@ document.addEventListener('click', async (ev) => {
 });
 document.addEventListener('change', (ev) => {
   if (ev.target.classList.contains('photoIn')) { addFormPhotos([...ev.target.files]); ev.target.value = ''; return; }
+  if (ev.target.dataset && ev.target.dataset.prole !== undefined) { const p = S.formPhotos[Number(ev.target.dataset.prole)]; if (p) p.role = ev.target.value; return; } /* v0.19.0 (4) */
   if (ev.target.id === 'bankFile' && ev.target.files[0]) { bankUpload(ev.target.files[0]); return; }
   if (ev.target.id === 'bkCheck' && ev.target.files[0]) { checkBackupFile(ev.target.files[0]); return; }
   if (ev.target.id === 'msImport' && ev.target.files[0]) { /* v0.15: a board from a JSON file (the real items are kept outside the public code) */

@@ -18,7 +18,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.19.1 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.19.2 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -2249,7 +2249,7 @@ function viewDetail(p) {
     ${can('visit') ? `<button data-go-form="request" data-cid="${esc(c.id)}">📋 Request</button>` : ''}
     ${can('visit') && x.status !== 'Churned' ? omwBtn(c) : ''}
     ${canEdit ? `<button data-go-form="customerEdit" data-id="${esc(c.id)}">✏️ Edit</button>` : ''}${canForm('contract') ? `<button data-go-form="contract" data-cid="${esc(c.id)}">📜 Contract</button>` : ''}
-    ${x.status === 'Active' && referralOn() ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && String(q.status).includes('Completed')).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">📨 Visit note</button>` : ''; })()}${x.status === 'Active' ? `<button data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card</button>` : ''}${x.status === 'Active' && S.settings.coQr && (x.dn || (x.led && x.led.nextBill)) ? `<button data-act="rcBill" data-cid="${esc(c.id)}">🧾 Bill + QR</button>` : ''}
+    ${x.status === 'Active' && referralOn() ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && (String(q.status).includes('Completed') || R.isNoShow(q))).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">${R.isNoShow(lv) ? '📨 Missed-visit note' : '📨 Visit note'}</button>` : ''; })()}${x.status === 'Active' ? `<button data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card</button>` : ''}${x.status === 'Active' && S.settings.coQr && (x.dn || (x.led && x.led.nextBill)) ? `<button data-act="rcBill" data-cid="${esc(c.id)}">🧾 Bill + QR</button>` : ''}
     ${S.isAdmin ? `<button data-act="delCust" data-cid="${esc(c.id)}" style="color:var(--bad)">🗑️ Delete (test)</button>` : ''}
   </div>
   <div id="delSlot"></div>
@@ -2544,7 +2544,7 @@ async function loadPhotos(cid, parent, net = false) { /* v0.11.1 (#2): the serve
 const isPdf = (x) => typeof x === 'string' && x.startsWith('data:application/pdf');
 const thumb = (img) => (isPdf(img) ? `<div class="pdf-tile" data-pdf="1">📄<span>PDF</span></div>` : `<img src="${esc(img)}" alt="" data-full="1">`);
 const figOf = (x, cap) => { const src = photoSrc(x); const pdf = isPdf(src) || (!src && x.st && String(x.st).endsWith('.pdf')); return `<figure${isPdf(src) ? ` data-src="${esc(src)}"` : ''}${x.st ? ` data-st="${esc(x.st)}"` : ''}>${pdf ? `<div class="pdf-tile" data-pdf="1">📄<span>PDF</span></div>` : thumb(src)}<figcaption>${cap}${x.st ? ' <button type="button" class="a" data-act="photoFull">⤓ full size</button>' : ''}</figcaption></figure>`; }; /* v0.18.3 (B3): the full picture lives in Storage */
-export const PHOTO_ROLES = { before: 'Before · old filter / fault', after: 'After · new filter / fixed', tds: 'TDS meter', other: 'Other' }; /* v0.19.0 (4): the technician labels each photo; the card draws "before" and "after" by label, not by order */
+export const PHOTO_ROLES = { before: 'Before (old)', after: 'After (new)', tds: 'TDS', other: 'Other' }; /* v0.19.2: short — the select under a 118 px thumbnail cut the long Nepali labels */ /* v0.19.0 (4): the technician labels each photo; the card draws "before" and "after" by label, not by order */
 const thumbRoles = () => { const t = $('#drawer #thumbs') || $('#thumbs'); return t && t.dataset.roles ? t.dataset.roles.split('|') : null; };
 function renderThumbs() {
   const t = $('#drawer #thumbs') || $('#thumbs'); if (!t) return; const roles = thumbRoles();

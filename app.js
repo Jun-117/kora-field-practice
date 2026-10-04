@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, CACHE_SIZE_UNLIMITED,
   collection, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromCache, onSnapshot, query, where,
   serverTimestamp, Timestamp, waitForPendingWrites, terminate, clearIndexedDbPersistence,
-  limit as qLimit } from './vendor/firebase-firestore.js';
+  limit as qLimit, writeBatch } from './vendor/firebase-firestore.js';
 import * as R from './logic.js';
 import { initLang, setLang, getLang, locale, langSegHtml, fmtDate, fmtTime } from './i18n.js';
 import * as G from './geo.js';
@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.17.2 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.17.3 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -159,9 +159,10 @@ export const toleOf = (c) => (c && (c.tole === 'Other' ? c.toleOther : c.tole)) 
 // v0.17.2 (2) Jun 10/4 — wa.me turned 🙏 into "�" (its redirect re-encodes the text: %F0%9F%99%8F → %EF%BF%BD, checked 10/4) and on the Mac every tap opened another
 // browser that had to be linked again (→ "Your account on linked devices is restricted"). Phone → api.whatsapp.com/send (where wa.me sends you, minus the broken step) ·
 // this computer → WhatsApp Web in one named tab (default) or the WhatsApp app (Settings → This computer — only once the company account is in the Mac app)
-const WA_OPEN = 'kfp_wa_open';
-export const waOpenPref = () => (lsGet(WA_OPEN, 'web') === 'app' ? 'app' : 'web');
-export const setWaOpenPref = (v) => lsSet(WA_OPEN, v === 'app' ? 'app' : 'web');
+// v0.17.3 (5) Jun 10/4 "딱 하나로만 나오게 니가 확실히 정해봐 고정으로": a web page cannot pick the browser (a link opens in the browser KORA runs in — from
+// the Dock app, in the Mac's default browser) → the one fixed place on a computer is the WhatsApp app with the company account. The Web / app choice is gone.
+export const waOpenPref = () => 'app';
+export const WA = { open: (url) => { location.href = url; } }; /* one door for the app links (the tests watch it) */
 export const isComputer = () => { const ua = navigator.userAgent || ''; return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua) && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(ua)); };
 export function waUrl(phone, text, o = {}) { /* pure — the tests call it with every combination */
   const d = o.demo ? '' : String(phone || '').replace(/\D/g, ''); const q = [d ? 'phone=' + d : '', text ? 'text=' + encodeURIComponent(text) : ''].filter(Boolean).join('&');
@@ -249,7 +250,7 @@ async function photoOp(mode, fn) {
   } catch (e) { return null; }
 }
 const photoPut = (id, v) => photoOp('readwrite', (st) => st.put(v, id));
-export const photoGet = (id) => photoOp('readonly', (st) => st.get(id));
+export const photoGet = (id) => photoOp('readonly', (st) => st.get(id)).then((v) => (typeof v === 'string' && v.startsWith('data:') ? v : null)); /* v0.17.3 (1) Jun 10/4 "여전히 사진 3장 업로드해도 안된다": a copy already dropped (the server has the photo) came back as true — photoOp's "done" value — and the card took true for a photo */
 const photoDel = (id) => photoOp('readwrite', (st) => st.delete(id));
 
 // v0.16: the payment QR as a crisp 320px square PNG (contain on white) for settings/app.coQr
@@ -1749,10 +1750,9 @@ function pageEditing() {
   return !!document.querySelector('#view form[data-dirty="1"], #drawer form[data-dirty="1"]');
 }
 document.addEventListener('input', (ev) => { const f = ev.target && ev.target.closest && ev.target.closest('form'); if (f && f.id !== 'theForm' && f.id !== 'loginForm' && f.closest('#view, #drawer') && !ev.target.closest('[data-nodirty]')) f.dataset.dirty = '1'; }, true);
-document.addEventListener('change', (ev) => { if (ev.target && ev.target.id === 'waOpenSel') { setWaOpenPref(ev.target.value); toast('Choice saved on this computer'); } }); /* v0.17.2 (2) */
 document.addEventListener('click', (ev) => { /* v0.17.2 (2): one WhatsApp Web tab, reused (every new tab made WhatsApp ask again) · the app link opens the app, no empty tab */
   const a = ev.target && ev.target.closest && ev.target.closest('a[href^="https://web.whatsapp.com/"], a[href^="whatsapp://"]'); if (!a) return;
-  ev.preventDefault(); try { if (a.href.startsWith('whatsapp:')) location.href = a.href; else window.open(a.href, 'kora-wa'); } catch (e) {}
+  ev.preventDefault(); try { if (a.href.startsWith('whatsapp:')) WA.open(a.href); else window.open(a.href, 'kora-wa'); } catch (e) {}
 }, true);
 document.addEventListener('focusout', () => { setTimeout(() => { if (S.staleDesk && !pageEditing() && !(S.route.screen === 'form' || (S.drawer && S.drawer.screen === 'form'))) scheduleRender(); }, 0); }, true);
 function rerender() {
@@ -2154,7 +2154,9 @@ function viewDetail(p) {
     ${can('visit') && x.status !== 'Churned' ? omwBtn(c) : ''}
     ${canEdit ? `<button data-go-form="customerEdit" data-id="${esc(c.id)}">✏️ Edit</button>` : ''}${canForm('contract') ? `<button data-go-form="contract" data-cid="${esc(c.id)}">📜 Contract</button>` : ''}
     ${x.status === 'Active' && referralOn() ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && String(q.status).includes('Completed')).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">📨 Visit note</button>` : ''; })()}${x.status === 'Active' ? `<button data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card</button>` : ''}${x.status === 'Active' && S.settings.coQr && (x.dn || (x.led && x.led.nextBill)) ? `<button data-act="rcBill" data-cid="${esc(c.id)}">🧾 Bill + QR</button>` : ''}
+    ${S.isAdmin ? `<button data-act="delCust" data-cid="${esc(c.id)}" style="color:var(--bad)">🗑️ Delete (test)</button>` : ''}
   </div>
+  <div id="delSlot"></div>
   ${S.desk ? '' : '<button class="btn ghost small" data-act="moreLinks" style="margin-top:6px">⋯ More</button>'}
   ${can('visit') && x.status !== 'Churned' ? omwChips(c) : ''}
   ${receipt ? receiptCard(x, receipt) : ''}
@@ -2253,14 +2255,56 @@ function receiptCard(x, pay) { /* v0.14 (Jun 10/3 #6): the picture is the receip
    then the share sheet → WhatsApp → the customer. Falls back to "save the image" where the share sheet cannot take files. */
 /* v0.12 image receipt (Jun 2026-10-01 "이거로 하자") + v0.13 referral card · visit report (Jun 10/2 "뭐 할거 더 없어?") — all drawn on this phone
    (receipt.js) then the share sheet → WhatsApp → the customer. Falls back to "save the image" where the share sheet cannot take files. */
-async function visitPhotos(parent) { /* v0.14: the first two photos saved with a record (phone copies first, then the cache) → Image objects for the canvas */
+export async function visitPhotos(parent) { /* v0.14: the first two photos saved with a record (phone copies first, then the cache) → Image objects for the canvas */
   const out = []; const toImg = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
-  for (const e of myJournal().filter((e) => e.photo && e.data && e.data.parent === parent)) { const img = await photoGet(e.id); if (img && out.length < 2) out.push(img); }
-  if (out.length < 2 && !DEMO) { const q = query(collection(db, 'photos'), where('parent', '==', parent), qLimit(4)); const take = (snap) => snap.forEach((d) => { const x = d.data(); if (typeof x.img === 'string' && x.img.startsWith('data:image/') && out.length < 2 && !out.includes(x.img)) out.push(x.img); });
-    try { take(await getDocsFromCache(q)); } catch (e) {}
-    if (!out.length) { try { take(await getDocs(q)); } catch (e) {} } /* v0.17.2 (3) Jun 10/4 "사진 3장 올렸는데도 안나옴": this browser had no copy (another browser · another phone · cleared data) → ask the server */ }
+  /* v0.17.3 (1) Jun 10/4 "여전히 사진 3장 업로드해도 안된다": a sent photo has no copy here any more (dropped once the server has it) — photoGet now says so
+     instead of true, so the server is asked. The record's own photos (install · visit · repair) by their number; never the signature (same parent) */
+  const add = (src) => { if (typeof src === 'string' && src.startsWith('data:image/') && out.length < 2 && !out.includes(src)) out.push(src); };
+  const own = (x) => (['install', 'visit', 'repair'].includes(x.kind) ? 0 : 1);
+  const take = (xs) => xs.filter((x) => x && x.kind !== 'Signature').sort((a, b) => own(a) - own(b) || (Number(a.n) || 0) - (Number(b.n) || 0)).forEach((x) => add(x.img));
+  const loc = []; for (const e of myJournal().filter((e) => e.photo && e.data && e.data.parent === parent)) { const img = await photoGet(e.id); if (img) loc.push({ ...e.data, img }); } take(loc);
+  if (out.length < 2 && !DEMO) { const q = query(collection(db, 'photos'), where('parent', '==', parent), qLimit(8)); const docs = (snap) => snap.docs.map((d) => d.data());
+    try { take(docs(await getDocsFromCache(q))); } catch (e) {}
+    if (out.length < 2 && navigator.onLine) { try { take(docs(await getDocs(q))); } catch (e) {} } }
   const ims = []; for (const src of out) { const im = await toImg(src); if (im) ims.push(im); }
   return { before: ims[0] || null, after: ims[1] || null };
+}
+// ---- v0.17.3 (6) Jun 10/4 "나 (준 관리자 권한 딱 나만)나 전용으로 고객 삭제버튼 이런거 넣어봐 테스트 여러게하고 삭제하게": Jun only (the rules say the same) ·
+// the customer and every record that points at them (payments · visits · photos · requests …) · the code typed to confirm · online only (half a customer is worse).
+// The change log keeps its entries (append-only) and gets one more: who deleted which customer and how many records.
+const DEL_COLS = ['visits', 'payments', 'requests', 'leads', 'recoveries', 'trainings', 'checkins', 'stockMoves', 'deviceEvents', 'relocations', 'contractEvents', 'screenings', 'claims', 'tools', 'waterTests'];
+export function custRefs(id) { const out = [`customers/${id}`]; for (const col of DEL_COLS) { const m = S.D[col]; if (m) for (const [did, x] of m) if (x && x.customerId === id) out.push(`${col}/${did}`); } return out; }
+export async function deleteCustomer(id) {
+  const x = S.D.customers.get(id); if (!S.isAdmin) return { ok: false, msg: 'Only Jun can delete' }; if (!x) return { ok: false, msg: 'Customer not found' };
+  const refs = custRefs(id);
+  if (!DEMO) {
+    if (!navigator.onLine) return { ok: false, msg: 'Offline — deleting needs the internet' };
+    try { (await getDocs(query(collection(db, 'photos'), where('customerId', '==', id)))).forEach((d) => refs.push(`photos/${d.id}`)); } catch (e) { return { ok: false, msg: 'Photos could not be listed: ' + (e.code || e.message) }; }
+    const all = [...refs, `customers/${id}/private/main`];
+    try { for (let i = 0; i < all.length; i += 400) { const b = writeBatch(db); for (const p of all.slice(i, i + 400)) b.delete(doc(db, p)); await b.commit(); } }
+    catch (e) { return { ok: false, msg: e && e.code === 'permission-denied' ? 'The server refused — publish the new rules first (Firebase → Firestore → Rules)' : 'Not deleted: ' + (e.code || e.message) }; }
+  }
+  for (const p of refs) { const [col, did] = p.split('/'); if (S.D[col]) S.D[col].delete(did); }
+  const keep = []; for (const e of jLoad()) { const d = e.data || {}; if (d.customerId === id || e.path === `customers/${id}` || String(e.path || '').startsWith(`customers/${id}/`)) { if (e.photo) photoDel(e.id); } else keep.push(e); } jSave(keep); /* a copy still waiting to be sent would bring them back */
+  save(`audit/${newId('audit')}`, { col: 'customers', docId: id, customerId: '', fields: ['deleted'], before: { deleted: `${x.code || ''} ${x.name || ''}`.trim() }, after: { deleted: `${refs.length} records` }, by: myName(), at: new Date().toISOString() }, true);
+  bump(); return { ok: true, n: refs.length };
+}
+function delAsk(id) {
+  const slot = $('#drawer #delSlot') || $('#delSlot'); const x = S.D.customers.get(id); if (!slot || !x || !S.isAdmin) return;
+  const refs = custRefs(id); const per = {}; for (const p of refs.slice(1)) { const k = p.split('/')[0]; per[k] = (per[k] || 0) + 1; }
+  slot.innerHTML = `<form class="card delbox" id="delForm" autocomplete="off"><div class="status">🗑️ Delete this test customer for good?</div>
+    <div class="muted"><span data-noi18n>${esc(custLabel(x))}</span> · <span>${refs.length} records</span>${Object.keys(per).length ? ` <span data-noi18n>(${esc(Object.entries(per).map(([k, n]) => `${k} ${n}`).join(' · '))})</span>` : ''} <span>and their photos.</span></div>
+    <div class="muted">It cannot be undone. Only for test customers — a real customer's bills are tax records.</div>
+    <label for="delCode">Type the code to confirm</label><input id="delCode" placeholder="${esc(x.code || '')}" data-noi18n>
+    <div class="row"><button type="button" class="btn bad" data-act="delCustGo" data-cid="${esc(id)}">🗑️ Delete for good</button><button type="button" class="btn ghost" data-act="delCustNo">Cancel</button></div></form>`;
+  const inp = $('#delCode'); if (inp) inp.focus();
+}
+async function delGo(id) {
+  const x = S.D.customers.get(id); const inp = $('#delCode'); if (!x || !S.isAdmin) return;
+  if (!inp || inp.value.trim().toUpperCase() !== String(x.code || '').trim().toUpperCase()) { toast('Type the code exactly'); if (inp) inp.focus(); return; }
+  const b = $('[data-act="delCustGo"]'); if (b) b.disabled = true;
+  const r = await deleteCustomer(id); if (!r.ok) { toast(r.msg, 7000); if (b) b.disabled = false; return; }
+  toast(`🗑️ Deleted — ${r.n} records`); if (S.drawer) closeDrawer(); go('customers', 'customers', {});
 }
 // v0.15: who is on the card — full name + photo from the Staff page (users.fullName / users.photo); own profile on a staff phone; the name alone otherwise
 export async function staffWho(name) {
@@ -2293,7 +2337,7 @@ export function markCardSent(key, on) {
 // practice/demo: the numbers are made up ('+97798' + 8 random digits) and may belong to real people — never open their chat
 export const waWebUrl = (phone, demo = DEMO) => { const d = String(phone || '').replace(/\D/g, ''); return demo || !d ? 'https://web.whatsapp.com/' : 'https://web.whatsapp.com/send?phone=' + d; };
 export function waWebOpen(phone) { /* one named tab: the next card reuses it instead of opening WhatsApp Web again · v0.17.2 (2): or the WhatsApp app */
-  if (waOpenPref() === 'app') { try { location.href = waUrl(phone, '', { demo: DEMO, computer: true, app: true }); return true; } catch (e) { return null; } }
+  if (waOpenPref() === 'app') { try { WA.open(waUrl(phone, '', { demo: DEMO, computer: true, app: true })); return true; } catch (e) { return null; } }
   try { return window.open(waWebUrl(phone), 'kora-wa'); } catch (e) { return null; }
 }
 function csLayout() { /* v0.16.0 (7): 8 rows on screen, the rest behind "+N more" · counts follow the rows */
@@ -2830,8 +2874,7 @@ export function viewReport(p) {
       <h3>💬 WhatsApp messages</h3>
       <div class="hint">Words in {braces} are filled in: {name} first name · {tech} who is going · {eta} minutes · {time} when you were there · {retry} next try. Empty = the default text. The Nepali was checked by Tara (10/4).</div>
       <label>Language of the messages (customers without their own choice)</label><select name="msgLang">${MSG_LANGS.map((o) => `<option value="${o}"${msgLang(null) === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
-      <label>This computer opens WhatsApp in</label><select id="waOpenSel" data-nodirty><option value="web"${waOpenPref() === 'web' ? ' selected' : ''}>WhatsApp Web (company account in this browser)</option><option value="app"${waOpenPref() === 'app' ? ' selected' : ''}>WhatsApp app (only if the company account is in the app)</option></select>
-      <div class="hint">Saved on this computer at once. 🚨 If your personal WhatsApp is in the app, messages would go from your personal number — keep "Web" until the company account is in the app.</div>
+      <label>On a computer, 💬 opens</label><div class="hint wa-fixed">The WhatsApp app — always (not a browser). Put the company account in it: the company phone → WhatsApp → Linked devices → Link a device → scan the code in the Mac app. 🚨 While your personal account is in the app, 💬 opens your personal WhatsApp.</div>
       ${[['omwEn', '🛵 On my way — English'], ['omwNe', '🛵 On my way — Nepali'], ['missEn', '🚪 Sorry we missed you — English'], ['missNe', '🚪 Sorry we missed you — Nepali']].map(([k2, l]) => `<label>${esc(l)}</label><textarea name="${k2}" rows="3" data-noi18n placeholder="${esc(MSG_DEFAULTS[k2])}">${esc(S.settings[k2] || '')}</textarea>`).join('')}
       <h3>💱 Exchange rate (for ₩ on the money charts)</h3>
       <label>NPR per KRW 100 (Nepal Rastra Bank)</label><input name="fxKrw100" inputmode="decimal" value="${esc(S.settings.fxKrw100 ?? '')}" placeholder="11.30 (NRB · 2 Oct 2026)"><div class="hint">Only for the ₩ shown when you point at a money bar. Empty = 11.30 (NRB, 2 Oct 2026). Update it from nrb.org.np when it moves.</div>
@@ -3333,6 +3376,9 @@ document.addEventListener('click', async (ev) => {
   else if (act === 'full') { if (navigator.onLine && !DEMO) { await startData(true); toast('Reloading from server…'); } else toast('Needs internet'); }
   else if (act === 'persist') { let r = false; try { r = await navigator.storage.persist(); } catch (e) {} toast('Storage protection: ' + (r ? 'ON' : 'not granted')); fillDiag(); }
   else if (act === 'swReload' && S.swWaiting) S.swWaiting.postMessage('skipWaiting');
+  else if (act === 'delCust') delAsk(a.dataset.cid); /* v0.17.3 (6) */
+  else if (act === 'delCustNo') { const s0 = $('#delSlot'); if (s0) s0.innerHTML = ''; }
+  else if (act === 'delCustGo') await delGo(a.dataset.cid);
   else if (act === 'privSave') { const ok = save(`customers/${a.dataset.cid}/private/main`, { notes: ($('#drawer #privNotes') || $('#privNotes')).value.trim() }, false); toast(ok ? 'Private notes saved' : '🔴 Could not save on phone'); }
   else if (act === 'theme') { const k = 'kfp_theme_' + (S.desk ? 'desk' : 'phone'); const nx = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; lsSet(k, nx); render(true); }
   else if (act === 'deskOn') { lsSet('kfp_desk', true); S.route = { tab: 'command', screen: 'command', params: {} }; render(true); }
@@ -3398,6 +3444,7 @@ function custPickFilter(inp) {
 function unconfirm(f) { if (f.dataset.confirmed === '1') { delete f.dataset.confirmed; const b = f.querySelector('#saveBtn'); if (b) b.textContent = 'Save'; } }
 document.addEventListener('submit', async (ev) => {
   ev.preventDefault(); const f = ev.target; if (f.id !== 'settingsForm') delete f.dataset.dirty; /* v0.17.2 (1): saved → the page may redraw again */
+  if (f.id === 'delForm') { const b = f.querySelector('[data-act="delCustGo"]'); if (b) await delGo(b.dataset.cid); return; } /* v0.17.3 (6): Enter in the code box */
   if (f.id === 'loginForm') {
     const e = $('#lgErr'); e.classList.add('hidden');
     const email = f.elements.email.value.trim(); const rem = !!($('#lg_remember') || {}).checked; const keep = ($('#lg_keep') || { checked: true }).checked;

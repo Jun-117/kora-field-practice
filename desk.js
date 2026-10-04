@@ -86,7 +86,7 @@ export function renderDesk(root, fresh) {
   const pg = root.querySelector('#deskPage');
   pg.className = `deskpage ${fresh ? 'page-in' : 'calm'}`; /* v0.17.0 (3): Settings was held to 820 px (now two columns across the page) */
   if (fresh) { void pg.offsetWidth; }
-  pg.innerHTML = page(scr, m);
+  pg.innerHTML = page(scr, m); chartTips(pg); /* v0.17.3 (2) */
   tickClock(); ensureClock();
   animateCounts(root);
   const box = pg.querySelector('#mapBox');
@@ -1243,11 +1243,21 @@ function drawWatch() {
 // v0.17.0 (7) Jun 10/3 "기존거랑 비교해서 ㅈㄴ 불친절하고 뭔말하는지 모르겠음" → tracks × weeks like the 「네팔 착지 행정 지도」 artifact:
 // one row per board · weeks from Monday · a red line = today · colour = state · hatched = the office is closed most of that week · the list stays one click away
 const msView = () => { try { return localStorage.getItem('kfp_msview') === 'list' ? 'list' : 'tl'; } catch (e) { return 'tl'; } };
+let msPaint = null; window.addEventListener('resize', () => { if (msPaint) msPaint(); }, { passive: true }); /* v0.17.3 (4) */
 function msScrollInit(pg) { /* v0.17.2 (5): first time = one week before today at the left edge · after that the place you scrolled to survives the 30-second redraws */
   const sc = pg.querySelector('.tl-scroll'); if (!sc) return; const nowEl = sc.querySelector('.tl-wk .tl-lane span.now'); const lbl = sc.querySelector('.tl-lbl');
   const home = nowEl ? Math.min(Math.max(0, sc.scrollWidth - sc.clientWidth), Math.max(0, Math.round(nowEl.getBoundingClientRect().left - sc.getBoundingClientRect().left + sc.scrollLeft - (lbl ? lbl.getBoundingClientRect().width : 0) - nowEl.getBoundingClientRect().width))) : 0; /* a wide screen may not scroll that far */
-  sc.dataset.home = String(home); sc.scrollLeft = Number.isFinite(S.msScrollX) ? S.msScrollX : home;
-  sc.addEventListener('scroll', () => { S.msScrollX = sc.scrollLeft; }, { passive: true });
+  const c0 = sc.querySelector('.tl-wk .tl-lane span'); const cw = c0 ? c0.getBoundingClientRect().width || 100 : 100; const lo = Number(sc.dataset.lo) || 0; /* v0.17.3 (4): the place is kept as a week, not pixels — an import that adds earlier weeks used to jump the view */
+  sc.dataset.home = String(home); sc.scrollLeft = Number.isFinite(S.msScrollW) ? Math.round((S.msScrollW - lo) * cw) : home;
+  /* v0.17.3 (4) Jun 10/4 "가로 스크롤바 어디있노? 안보이는데": a Mac hides scroll bars until you scroll (and Chrome skipped the styled one) → our own bar under the strip, always there: drag it, or click where to go */
+  const sb = pg.querySelector('.tl-sbar'); const th = sb && sb.querySelector('i');
+  const paint = () => { if (!sb || !sb.isConnected) return; const max = sc.scrollWidth - sc.clientWidth; sb.classList.toggle('off', max <= 0); const tw = sb.clientWidth; const w = Math.max(48, Math.round(tw * sc.clientWidth / Math.max(1, sc.scrollWidth))); th.style.width = w + 'px'; th.style.transform = `translateX(${max > 0 ? Math.round((tw - w) * sc.scrollLeft / max) : 0}px)`; };
+  sc.addEventListener('scroll', () => { S.msScrollW = lo + sc.scrollLeft / cw; paint(); }, { passive: true });
+  if (sb && th) { msPaint = paint; paint();
+    th.addEventListener('pointerdown', (ev) => { ev.preventDefault(); ev.stopPropagation(); try { th.setPointerCapture(ev.pointerId); } catch (e) {} const x0 = ev.clientX, s0 = sc.scrollLeft, max = sc.scrollWidth - sc.clientWidth, room = Math.max(1, sb.clientWidth - th.offsetWidth); th.classList.add('drag');
+      const mv = (e) => { sc.scrollLeft = s0 + (e.clientX - x0) * max / room; }; const up = () => { th.classList.remove('drag'); th.removeEventListener('pointermove', mv); th.removeEventListener('pointerup', up); th.removeEventListener('pointercancel', up); };
+      th.addEventListener('pointermove', mv); th.addEventListener('pointerup', up); th.addEventListener('pointercancel', up); });
+    sb.addEventListener('pointerdown', (ev) => { if (ev.target === th) return; const r = sb.getBoundingClientRect(); const max = sc.scrollWidth - sc.clientWidth; const to = Math.max(0, Math.min(max, ((ev.clientX - r.left) / r.width) * sc.scrollWidth - sc.clientWidth / 2)); sc.scrollTo({ left: to, behavior: 'smooth' }); S.msScrollW = lo + to / cw; }); }
 }
 function msTimeline(m, all, boards) {
   const t = m.t; /* v0.17.2 (5) Jun 10/4 "타임라인 밑에 바 넣어줘서 12월,내년도 쭉 이어지는거라면 볼수있게": every week the items touch (at least 12) in a strip that scrolls sideways · ‹ 4 weeks › and Today scroll it */
@@ -1258,6 +1268,7 @@ function msTimeline(m, all, boards) {
     const d = R.isDate(x.due) ? x.due : t; return [wf(d), wf(d)];
   };
   let lo = -4, hi = 7; for (const x of all) { const [a, b] = spanW(x, (d) => Math.floor(R.daysBetween(base, d) / 7), 0); lo = Math.min(lo, a); hi = Math.max(hi, b + 1); }
+  hi = Math.max(hi, Math.floor(R.daysBetween(base, `${Number(t.slice(0, 4)) + 1}-12-31`) / 7) + 1); /* v0.17.3 (4) Jun 10/4 "가로 스크롤바 어디있노? 안보이는데": the strip ended at the last item — on a wide screen it all fit and there was nothing to scroll → it always runs to the end of next year */
   lo = Math.max(lo, -52); hi = Math.min(hi, 104); const N = hi - lo + 1;
   const w0 = R.addDays(base, 7 * lo); const weeks = Array.from({ length: N }, (_, i) => R.addDays(w0, 7 * i));
   const wi = (d) => Math.floor(R.daysBetween(w0, d) / 7); const nowI = wi(t);
@@ -1275,13 +1286,14 @@ function msTimeline(m, all, boards) {
   const frac = (nowI + (R.daysBetween(weeks[Math.max(0, Math.min(N - 1, nowI))], t) + 0.5) / 7) / N;
   const rows = boards.map((bd) => { const xs = all.filter((x) => (x.board || 'Board') === bd).sort((p1, q1) => span(p1)[0] - span(q1)[0] || (Number(p1.order) || 0) - (Number(q1.order) || 0)); const open = xs.filter((x) => x.state !== 'Done').length;
     return `<div class="tl-row"><div class="tl-lbl"><b data-noi18n>${esc(bd)}</b><span>${open} open · ${xs.length - open} done</span></div><div class="tl-lane">${xs.map(bar).join('') || '<span class="muted tl-none">—</span>'}</div></div>`; }).join('');
-  return `<div class="tl-scroll"><div class="tl" style="--n:${N}">
+  return `<div class="tl-scroll" data-lo="${lo}"><div class="tl" style="--n:${N}">
     <div class="tl-bg">${weeks.map((w, i) => `<i class="${i === nowI ? 'now' : ''}${dead[i] ? ' dead' : ''}"></i>`).join('')}</div>
-    <div class="tl-row tl-head"><div class="tl-lbl">Board</div><div class="tl-lane tl-months">${months.map((x) => `<b style="grid-column:span ${x.n}">${MON[Number(x.k.slice(5)) - 1]} ${x.k.slice(0, 4)}</b>`).join('')}</div></div>
+    <div class="tl-row tl-head"><div class="tl-lbl">Board</div><div class="tl-lane tl-months">${months.map((x) => `<b style="grid-column:span ${x.n}"><span>${MON[Number(x.k.slice(5)) - 1]} ${x.k.slice(0, 4)}</span></b>`).join('')}</div></div>
     <div class="tl-row tl-head tl-wk"><div class="tl-lbl"> </div><div class="tl-lane">${weeks.map((w, i) => `<span class="${i === nowI ? 'now' : ''}">${w.slice(5)}</span>`).join('')}</div></div>
     ${rows || '<div class="empty">No boards yet — ＋ Board</div>'}
     ${nowI >= 0 && nowI < N ? `<div class="tl-now" style="--f:${frac.toFixed(4)}"><span>today</span></div>` : ''}
   </div></div>
+  <div class="tl-sbar"><i></i></div>
   <div class="glegend"><span><i class="lg s-ok"></i>done</span><span><i class="lg s-acc"></i>to do</span><span><i class="lg s-wait"></i>with them — from the day they got it</span><span><i class="lg s-risk"></i>blocked or past due</span><span><i class="lg dead"></i>office closed most of the week</span><span><i class="dot g"></i><i class="dot y"></i><i class="dot r"></i> how sure the date is</span></div>`;
 }
 function pageBoard(m) {
@@ -1316,7 +1328,7 @@ function pageBoard(m) {
     return `<div class="cc board">
     <div class="panel s12 wt-bar" style="--i:0">${vseg}<span class="muted" style="margin-left:6px">all boards · weeks from Monday</span><span class="sp"></span>
       <button class="btn small ghost" data-msscroll="-4">‹ 4 weeks</button><button class="btn small ghost" data-msscroll="0">Today</button><button class="btn small ghost" data-msscroll="4">4 weeks ›</button>
-      <button class="btn small" data-go-form="milestone" data-board="${esc(boards[0] || '')}">＋ Item</button><button class="btn small ghost" data-go-form="milestone" data-board="__new__">＋ Board</button></div>
+      <button class="btn small" data-go-form="milestone" data-board="${esc(boards[0] || '')}">＋ Item</button><button class="btn small ghost" data-go-form="milestone" data-board="__new__">＋ Board</button><label class="btn small ghost" style="margin:0">📥 Import JSON<input type="file" id="msImport" accept=".json,application/json" hidden></label>${/* v0.17.3 (3) Jun 10/4 "이건 어케하란거임 나보고?": the import was only on ☰ List */ ''}</div>
     ${panel('s3 kpi', 1, '<b>Waiting on others</b>', `<div class="v" style="color:${waitA.length ? 'var(--warn)' : 'inherit'}">${waitA.length}</div><div class="sub">${Object.entries(whoA).sort((a1, b1) => b1[1] - a1[1]).map(([k, n]) => `<span><span>${esc(k)}</span> ${n}</span>`).join('') || '<span>nobody</span>'}</div>`)}
     ${panel('s3 kpi', 2, '<b>Longest wait</b>', `<div class="v" style="color:${longA && days(longA) > 14 ? 'var(--bad)' : 'inherit'}">${longA ? days(longA) + ' d' : '—'}</div><div class="sub">${longA ? `<span data-noi18n>${esc(longA.title)}</span>` : '<span>nothing waiting</span>'}</div>`)}
     ${panel('s3 kpi', 3, '<b>Due in 14 days</b>', `<div class="v" style="color:${lateA.length ? 'var(--bad)' : soonA.length ? 'var(--warn)' : 'inherit'}">${soonA.length}</div><div class="sub">${lateA.length ? `<span style="color:var(--bad)">${lateA.length} past due</span>` : '<span>none past due</span>'}</div>`)}
@@ -1359,7 +1371,7 @@ document.addEventListener('click', (ev) => {
   const box = document.getElementById('deskSearchRes'); if (box && !ev.target.closest('#deskSearchRes') && ev.target.id !== 'deskSearch') box.classList.add('hidden');
   const mb = ev.target.closest('[data-msboard]'); if (mb) { S.route.params.b = mb.dataset.msboard; reDesk(); return; } /* v0.15 board tabs */
   const mv = ev.target.closest('[data-msview]'); if (mv) { S.route.params.v = mv.dataset.msview; try { localStorage.setItem('kfp_msview', mv.dataset.msview); } catch (e) {} reDesk(); return; } /* v0.17.0 (7) */
-  const mw = ev.target.closest('[data-msscroll]'); if (mw) { const sc = document.querySelector('#deskPage .tl-scroll'); if (sc) { const n = Number(mw.dataset.msscroll) || 0; const c = sc.querySelector('.tl-wk .tl-lane span'); const cw = c ? c.getBoundingClientRect().width : 100; const to = n ? sc.scrollLeft + n * cw : Number(sc.dataset.home) || 0; sc.scrollTo({ left: to, behavior: 'smooth' }); S.msScrollX = to; } return; } /* v0.17.2 (5): the strip scrolls (it used to redraw a 12-week window) */
+  const mw = ev.target.closest('[data-msscroll]'); if (mw) { const sc = document.querySelector('#deskPage .tl-scroll'); if (sc) { const n = Number(mw.dataset.msscroll) || 0; const c = sc.querySelector('.tl-wk .tl-lane span'); const cw = c ? c.getBoundingClientRect().width : 100; const to = n ? sc.scrollLeft + n * cw : Number(sc.dataset.home) || 0; sc.scrollTo({ left: to, behavior: 'smooth' }); S.msScrollW = (Number(sc.dataset.lo) || 0) + to / cw; } return; } /* v0.17.2 (5): the strip scrolls (it used to redraw a 12-week window) */
   const tg = ev.target.closest('[data-tolego]'); if (tg) { ev.preventDefault(); go('customers', 'customers', { tole: tg.dataset.tolego }); return; } /* v0.17.1 ① */
   const wt = ev.target.closest('[data-act="wardsToggle"]'); if (wt) { ev.preventDefault(); wardsToggle(); return; } /* v0.17.0 (6) */
   const cn = ev.target.closest('[data-act="chartNotes"]'); if (cn) { ev.preventDefault(); const wq = cn.closest('.chartw'); if (wq) wq.classList.toggle('notes-on'); return; } /* v0.15 */
@@ -1675,10 +1687,19 @@ document.addEventListener('click', (ev) => {
   if (box && !ev.target.closest('#bellBox')) box.classList.add('hidden');
 });
 let tip = null;
+// v0.17.3 (2) Jun 10/4 "이렇게 스크린 너머로 나오는데 내가 어케읽냐? (예치금)": the box always opened to the right of the pointer (cut off at the screen's right
+// edge) and the browser's grey tooltip came on top → the text moves out of <title> / title="" (no grey box) and the box flips to stay on the screen
+export function chartTips(root) { if (!root || !root.querySelectorAll) return; if (tip) tip.style.opacity = '0'; /* a new page: no box left over from the last one */
+  root.querySelectorAll('svg title').forEach((t) => { const p = t.parentNode; if (p && p.setAttribute) { p.setAttribute('data-tip', t.textContent); p.setAttribute('aria-label', t.textContent); } t.remove(); });
+  root.querySelectorAll('.funnel.hb .st[title]').forEach((el) => { el.setAttribute('data-tip', el.getAttribute('title')); el.removeAttribute('title'); }); }
 document.addEventListener('mousemove', (ev) => {
-  if (!S.desk) return; const r = ev.target.closest && ev.target.closest('rect.barr, .chart circle');
+  if (!S.desk || !ev.target.closest) return; const sv = ev.target.closest('svg'); if (sv && sv.querySelector('title')) chartTips(sv); /* charts drawn outside the page (the customer window) */
+  const r = ev.target.closest('svg [data-tip], .funnel.hb .st[data-tip]');
   if (!r) { if (tip) tip.style.opacity = '0'; return; }
-  const t = r.querySelector('title'); if (!t) return;
   if (!tip) { tip = document.createElement('div'); tip.className = 'ctip'; document.body.appendChild(tip); }
-  tip.textContent = t.textContent; tip.style.left = ev.clientX + 14 + 'px'; tip.style.top = ev.clientY - 10 + 'px'; tip.style.opacity = '1';
+  tip.textContent = r.getAttribute('data-tip'); const w = tip.offsetWidth, h = tip.offsetHeight, M = 8;
+  let x = ev.clientX + 14; if (x + w > innerWidth - M) x = Math.max(M, ev.clientX - 14 - w);
+  let y = ev.clientY - 10; if (y + h > innerHeight - M) y = innerHeight - M - h; if (y < M) y = M;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px'; tip.style.opacity = '1';
 }, { passive: true });
+document.addEventListener('scroll', () => { if (tip) tip.style.opacity = '0'; }, { passive: true, capture: true }); /* v0.17.3 (2): a scrolled chart leaves no box behind */

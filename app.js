@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.17.0 (2026-10-03)';
+export const APP_VERSION = 'kf-v0.17.1 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -1806,17 +1806,23 @@ export function openDrawer(screen, params, mode = 'push') {
   if (mode === 'push') pushNav();
   paintDrawer(first ? '' : 'fwd', 0);
 }
+function deskTidy(dr) { /* v0.17.1 ④ Jun 10/4 "가로로 쭉 눌린거 하지말랬는데 새 이사는 아직도 이런데?": a list window's "＋ New …" goes to the top right at normal size (it was a 1,066-px bar under the list — v0.17.0 sized buttons on the page, not in the window) */
+  if (!S.desk || !dr) return; const pg = dr.querySelector('.dpage'); if (!pg || !/\bscr-(list|report)\b/.test(pg.className)) return;
+  const nb = [...pg.children].filter((e) => e.matches('.btn[data-go-form]') && !e.classList.contains('ghost') && !e.classList.contains('small')); if (!nb.length) return;
+  const h = pg.querySelector(':scope > h1'); if (!h) return; const bar = document.createElement('div'); bar.className = 'dp-acts';
+  const sub = h.nextElementSibling && h.nextElementSibling.classList.contains('muted') ? h.nextElementSibling : h; sub.after(bar); for (const b of nb) { b.classList.add('small'); bar.appendChild(b); }
+}
 function drawerHead() { return `<button class="x" data-act="closeDrawer" title="Close (Esc)">✕</button><button class="fx" data-act="drawerFull" title="Full width">⤢</button>${S.drawerStack.length ? `<div class="crumbs">${S.drawerStack.slice(-3).map((d) => `<span>${esc(crumbOf(d))}</span>`).join('<i>›</i>')}<i>›</i></div>` : ''}`; }
 function crumbOf(d) { if (d.screen === 'detail') { const c = S.D.customers.get(d.params.id); return c ? c.name : 'Customer'; } if (d.screen === 'form') return (FORMS[d.params.form] || {}).title || 'Form'; if (d.screen === 'list') return d.params.list || 'List'; return d.params.r || d.screen; }
 function paintDrawer(dir, scroll) {
   let dr = $('#drawer');
   if (!dr) { const bg = document.createElement('div'); bg.id = 'drawerBg'; bg.className = 'drawer-bg'; document.body.appendChild(bg); dr = document.createElement('div'); dr.id = 'drawer'; dr.className = 'drawer'; document.body.appendChild(dr); }
   dr.classList.toggle('wide', ['list', 'report'].includes(S.drawer.screen) && !dr.classList.contains('full')); /* v0.15: centred modal — lists and reports get the wide one */
-  dr.innerHTML = drawerHead() + `<div class="dpage ${dir} scr-${esc(S.drawer.screen || '')}">${screenHtml(S.drawer)}</div>`;
+  dr.innerHTML = drawerHead() + `<div class="dpage ${dir} scr-${esc(S.drawer.screen || '')}">${screenHtml(S.drawer)}</div>`; deskTidy(dr);
   dr.scrollTop = scroll || 0;
   afterRender(dr, S.drawer);
 }
-function refreshDrawer() { const dr = $('#drawer'); if (!dr || !S.drawer) return; const st = dr.scrollTop; dr.innerHTML = drawerHead() + `<div class="dpage scr-${esc(S.drawer.screen || '')}">${screenHtml(S.drawer)}</div>`; dr.scrollTop = st; afterRender(dr, S.drawer); }
+function refreshDrawer() { const dr = $('#drawer'); if (!dr || !S.drawer) return; const st = dr.scrollTop; dr.innerHTML = drawerHead() + `<div class="dpage scr-${esc(S.drawer.screen || '')}">${screenHtml(S.drawer)}</div>`; deskTidy(dr); dr.scrollTop = st; afterRender(dr, S.drawer); }
 export function closeDrawer(silent) {
   if (!S.drawer) return; S.drawer = null; S.drawerStack = []; S.formPhotos = [];
   const bg = $('#drawerBg'), dr = $('#drawer'); if (bg) bg.remove(); if (dr) dr.remove();

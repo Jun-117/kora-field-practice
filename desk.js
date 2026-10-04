@@ -1342,6 +1342,7 @@ document.addEventListener('click', (ev) => {
   const mb = ev.target.closest('[data-msboard]'); if (mb) { S.route.params.b = mb.dataset.msboard; reDesk(); return; } /* v0.15 board tabs */
   const mv = ev.target.closest('[data-msview]'); if (mv) { S.route.params.v = mv.dataset.msview; try { localStorage.setItem('kfp_msview', mv.dataset.msview); } catch (e) {} reDesk(); return; } /* v0.17.0 (7) */
   const mw = ev.target.closest('[data-mswk]'); if (mw) { S.route.params.wk = Number(mw.dataset.mswk) || 0; reDesk(); return; }
+  const tg = ev.target.closest('[data-tolego]'); if (tg) { ev.preventDefault(); go('customers', 'customers', { tole: tg.dataset.tolego }); return; } /* v0.17.1 ① */
   const wt = ev.target.closest('[data-act="wardsToggle"]'); if (wt) { ev.preventDefault(); wardsToggle(); return; } /* v0.17.0 (6) */
   const cn = ev.target.closest('[data-act="chartNotes"]'); if (cn) { ev.preventDefault(); const wq = cn.closest('.chartw'); if (wq) wq.classList.toggle('notes-on'); return; } /* v0.15 */
   const s = ev.target.closest('[data-dseg]'); if (s) { S.route.params.f = s.dataset.dseg; reDesk(); return; }
@@ -1364,10 +1365,16 @@ document.addEventListener('keydown', (ev) => {
 // ---------- map (Leaflet, loaded on demand; kept alive across data refreshes) ----------
 let Lf = null, map = null, layer = null, view = null, mapEl = null, meLayer = null;
 export function showMe() { const h = hereNow(); if (map && meLayer && h) { drawMe(map, meLayer, h); map.setView([h.lat, h.lng], Math.max(map.getZoom(), 14)); } }
+function toleList(tl, cl) { /* v0.17.1 ① Jun 10/4 "누르거나 마우스 저기 갖다대면 딱 저 곳 리스트 쫙 뜨면 좋겠음 간략하게": one line a home — today's job and late money first, 8 lines + the rest on the Customers page */
+  const xs = cl.xs.slice().sort((a, b) => (b.today - a.today) || ((b.x.led.overdue || 0) - (a.x.led.overdue || 0)) || String(a.x.c.name).localeCompare(String(b.x.c.name)));
+  const row = ({ x, today, job }) => `<div class="tl-r" data-cust="${esc(x.c.id)}"><span class="dot ${x.dot}"></span><b data-noi18n>${esc(x.c.name)}</b><span class="tl-k">${job ? `<i>${job}</i>` : ''}${today ? '<em class="y">today</em>' : ''}${x.led.overdue ? `<em class="r">${fmtN(x.led.overdue)}</em>` : ''}</span></div>`;
+  return `<div class="tole-l"><div class="tl-h">📍 <b data-noi18n>${esc(tl)}</b> <span>${cl.n} homes${cl.late ? ` · <i class="r">${cl.late} late</i>` : ''}${cl.due ? ` · <i class="y">${cl.due} today</i>` : ''}</span></div>${xs.slice(0, 8).map(row).join('')}${xs.length > 8 ? `<button type="button" class="tl-more" data-tolego="${esc(tl)}">+${xs.length - 8} more → Customers</button>` : ''}</div>`;
+}
 // v0.17.0 (6) ward lines — OpenStreetMap admin_level 9 (Pokhara-01…33, ODbL, simplified ≈10 m · vendor/osm-pokhara-wards.json) 🟡 community data, not the government map
 let wardsGJ = null, wardLayer = null, wardLab = null, wardLabZoom = null;
 const wardsOn = () => { try { return localStorage.getItem('kfp_wards') !== '0'; } catch (e) { return true; } };
-function wardPoint(f) { /* label spot = centroid of the largest ring */
+function wardPoint(f) { /* v0.17.1 ②: the precomputed inside point farthest from every edge (vendor json "lp" · Ward 9 sat 5 m from its line at the centroid) */
+  const lp = f.properties && f.properties.lp; if (Array.isArray(lp) && lp.length === 2) return [lp[1], lp[0]];
   let best = null, ba = -1;
   for (const poly of f.geometry.coordinates) { const r = poly[0]; let a = 0, cx = 0, cy = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const k = r[j][0] * r[i][1] - r[i][0] * r[j][1]; a += k; cx += (r[j][0] + r[i][0]) * k; cy += (r[j][1] + r[i][1]) * k; } if (Math.abs(a) > ba) { ba = Math.abs(a); best = a ? [cy / (3 * a), cx / (3 * a)] : [r[0][1], r[0][0]]; } }
   return best;
@@ -1379,23 +1386,41 @@ async function drawWards() {
   if (!wardsGJ) { try { const r = await fetch('./vendor/osm-pokhara-wards.json'); wardsGJ = await r.json(); } catch (e) { return; } if (!map) return; }
   if (!map.getPane('kfWards')) { const pn = map.createPane('kfWards'); pn.style.zIndex = 350; pn.style.pointerEvents = 'none'; }
   if (!wardLayer) wardLayer = Lf.geoJSON(wardsGJ, { pane: 'kfWards', interactive: false, style: () => ({ color: '#9cc9ec', weight: 1.6, opacity: 0.75, dashArray: '6 5', fill: false }) }).addTo(map);
-  const z = map.getZoom(); const showLab = z >= 14;
+  const z = map.getZoom(); const showLab = z >= 12; /* v0.17.1 ② Jun "와드 n 글자 확실하게": from zoom 12 (was 14) */
+  if (!map.getPane('kfWardLab')) { const pl = map.createPane('kfWardLab'); pl.style.zIndex = 610; pl.style.pointerEvents = 'none'; } /* above the pins, never catching a click */
   if (wardLab && (!showLab || wardLabZoom !== z)) { map.removeLayer(wardLab); wardLab = null; }
-  if (showLab && !wardLab) { wardLab = Lf.layerGroup(wardsGJ.features.map((f) => Lf.marker(wardPoint(f), { pane: 'kfWards', interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', html: `<div class="wlab">Ward ${f.properties.ward}</div>`, iconSize: [70, 18], iconAnchor: [35, 9] }) }))).addTo(map); wardLabZoom = z; setTimeout(declutter, 0); }
+  if (showLab && !wardLab) { wardLab = Lf.layerGroup(wardsGJ.features.map((f) => Lf.marker(wardPoint(f), { pane: 'kfWardLab', interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', html: `<div class="wlab${z < 14 ? ' sm' : ''}" data-w="${f.properties.ward}"><span class="wl-full">Ward ${f.properties.ward}</span><span class="wl-n">${f.properties.ward}</span></div>`, iconSize: [70, 18], iconAnchor: [35, 9] }) }))).addTo(map); wardLabZoom = z; setTimeout(declutter, 0); }
 }
-function declutter() { /* labels that overlap step up / down / sideways; ward names give way to the tole badges */
+function inWard(f, lng, lat) { /* ray casting on the ward's own rings (GeoJSON lng/lat) */
+  let inside = false; for (const poly of f.geometry.coordinates) { const r = poly[0]; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside; } } return inside;
+}
+function declutter() { /* v0.17.1 ②: tole badges stay near their homes (a short ring), then each ward name takes the first free spot INSIDE its own ward — and stays on top if none is free */
   if (!mapEl) return; /* layout sizes + Leaflet positions — getBoundingClientRect read the page-in animation (scaled) and missed overlaps */
   const box = (el) => { const p = el.parentElement && el.parentElement._leaflet_pos; if (!p) return null; const w = el.offsetWidth, h = el.offsetHeight; return { left: p.x - w / 2, right: p.x + w / 2, top: p.y - h / 2, bottom: p.y + h / 2, width: w, height: h }; };
   const placed = []; const hit = (r) => placed.some((p) => r.left < p.right + 2 && r.right > p.left - 2 && r.top < p.bottom + 2 && r.bottom > p.top - 2);
+  const at = (r0, dx, dy) => ({ left: r0.left + dx, right: r0.right + dx, top: r0.top + dy, bottom: r0.bottom + dy });
+  const wl = [...mapEl.querySelectorAll('.wlab')]; const soft = []; /* each ward name's own spot — a badge keeps off it when it can */
+  for (const el of wl) { el.style.transform = ''; el.classList.remove('tiny'); const f = wardsGJ && wardsGJ.features.find((q) => String(q.properties.ward) === el.dataset.w); const r0 = box(el); if (!f || !r0) continue;
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const poly of f.geometry.coordinates) for (const [lng, lat] of poly[0]) { const p = map.latLngToLayerPoint([lat, lng]); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+    if (x1 - x0 < r0.width + 6 || y1 - y0 < r0.height + 6) el.classList.add('tiny'); /* too small on screen for "Ward N" → just the number (Jun "확실하게": every ward keeps its number) */
+    soft.push(box(el)); }
+  const hitSoft = (r) => soft.some((p) => r.left < p.right + 2 && r.right > p.left - 2 && r.top < p.bottom + 2 && r.bottom > p.top - 2);
   const els = [...mapEl.querySelectorAll('.mclu')].sort((a, b) => (Number(b.dataset.n) || 0) - (Number(a.dataset.n) || 0));
   for (const el of els) {
     el.style.transform = ''; const r0 = box(el); if (!r0) continue; const h = r0.height + 3, w = r0.width * 0.55;
-    const tries = [[0, 0]]; for (let k = 1; k <= 4; k++) tries.push([0, -k * h], [0, k * h], [k * w, 0], [-k * w, 0], [k * w, -k * h], [-k * w, -k * h], [k * w, k * h], [-k * w, k * h]); /* a widening ring: crowded centres (Newroad · Chipledhunga · Mahendrapul) ran out of the first 11 spots */
-    const over = (r) => placed.reduce((s, p) => s + Math.max(0, Math.min(r.right, p.right + 2) - Math.max(r.left, p.left - 2)) * Math.max(0, Math.min(r.bottom, p.bottom + 2) - Math.max(r.top, p.top - 2)), 0);
-    let pick = null, best = null; for (const [dx, dy] of tries) { const r = { left: r0.left + dx, right: r0.right + dx, top: r0.top + dy, bottom: r0.bottom + dy }; if (!hit(r)) { pick = [dx, dy, r]; break; } const o = over(r); if (!best || o < best[3]) best = [dx, dy, r, o]; }
-    const [dx, dy, r] = pick || best || [0, 0, r0]; if (dx || dy) el.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px)`; el.classList.toggle('moved', !!(dx || dy)); placed.push(r);
+    const tries = [[0, 0]]; for (let k = 1; k <= 3; k++) tries.push([0, -k * h], [0, k * h], [k * w, 0], [-k * w, 0], [k * w, -k * h], [-k * w, -k * h], [k * w, k * h], [-k * w, k * h]); /* a short ring — a badge further away points at the wrong tole */
+    const over = (r) => placed.reduce((s2, p) => s2 + Math.max(0, Math.min(r.right, p.right + 2) - Math.max(r.left, p.left - 2)) * Math.max(0, Math.min(r.bottom, p.bottom + 2) - Math.max(r.top, p.top - 2)), 0);
+    let pick = null, pick2 = null, best = null; for (const [dx, dy] of tries) { const r = at(r0, dx, dy); if (!hit(r)) { if (!hitSoft(r)) { pick = [dx, dy, r]; break; } if (!pick2) pick2 = [dx, dy, r]; } const o = over(r); if (!best || o < best[3]) best = [dx, dy, r, o]; }
+    const [dx, dy, r] = pick || pick2 || best || [0, 0, r0]; if (dx || dy) el.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px)`; el.classList.toggle('moved', !!(dx || dy)); placed.push(r);
   }
-  for (const el of mapEl.querySelectorAll('.wlab')) { el.style.visibility = ''; const r = box(el); if (!r) continue; if (hit(r)) el.style.visibility = 'hidden'; else placed.push(r); }
+  for (const el of wl) {
+    const r0 = box(el); if (!r0) continue; const f = wardsGJ && wardsGJ.features.find((q) => String(q.properties.ward) === el.dataset.w); if (!f) continue;
+    const base = el.parentElement._leaflet_pos; const h = r0.height + 2, w = r0.width * 0.6;
+    const seeds = [[0, 0], ...(f.properties.alts || []).map((a) => { const p = map.latLngToLayerPoint([a[1], a[0]]); return [p.x - base.x, p.y - base.y]; })];
+    const tries = []; for (const [sx, sy] of seeds) { tries.push([sx, sy]); for (let k = 1; k <= 3; k++) tries.push([sx, sy - k * h], [sx, sy + k * h], [sx + k * w, sy], [sx - k * w, sy]); }
+    let pick = [0, 0, r0]; for (const [dx, dy] of tries) { const ll = map.layerPointToLatLng([base.x + dx, base.y + dy]); if (!inWard(f, ll.lng, ll.lat)) continue; const r = at(r0, dx, dy); if (!hit(r)) { pick = [dx, dy, r]; break; } }
+    if (pick[0] || pick[1]) el.style.transform = `translate(${Math.round(pick[0])}px, ${Math.round(pick[1])}px)`; placed.push(pick[2]);
+  }
 }
 export const _map = () => map; /* selftest */
 export function wardsToggle() { const on = !wardsOn(); try { localStorage.setItem('kfp_wards', on ? '1' : '0'); } catch (e) {} drawWards(); for (const b of document.querySelectorAll('[data-act="wardsToggle"]')) b.classList.toggle('on', on); }
@@ -1437,11 +1462,12 @@ function drawMarkers() {
       <div class="mc-r">${x.nv ? `<span>🔧 next visit ${esc(x.nv.date)}${x.nv.date <= m.t ? ' · <b>due</b>' : ''}</span>` : '<span class="muted">🔧 no visit planned</span>'}</div>
       ${(x.fd || []).filter((q) => q.status === 'overdue').length ? `<div class="mc-r"><span class="warn">🧪 filter due: ${esc((x.fd || []).filter((q) => q.status === 'overdue').map((q) => q.type).join(', '))}</span></div>` : ''}
       <div class="mc-b"><button class="btn small" data-cust="${esc(x.c.id)}">Open</button>${x.c.phone ? `<a class="btn small ghost" href="${esc(waLink(x.c.phone, ''))}" target="_blank" rel="noopener">💬</a><a class="btn small ghost" href="https://www.google.com/maps/dir/?api=1&destination=${g.lat},${g.lng}" target="_blank" rel="noopener">🧭</a>` : ''}</div></div>`, { maxWidth: 280 });
-    layer.addLayer(mk); if (x.status !== 'Churned') (clusters[toleOf(x.c)] = clusters[toleOf(x.c)] || { n: 0, late: 0, due: 0, lat: 0, lng: 0 }).n++;
-    const cl = clusters[toleOf(x.c)]; if (cl) { cl.lat += g.lat; cl.lng += g.lng; if (x.led.overdue) cl.late++; if (today) cl.due++; }
+    layer.addLayer(mk); if (x.status !== 'Churned') (clusters[toleOf(x.c)] = clusters[toleOf(x.c)] || { n: 0, late: 0, due: 0, lat: 0, lng: 0, xs: [] }).n++;
+    const cl = clusters[toleOf(x.c)]; if (cl && x.status !== 'Churned') { cl.lat += g.lat; cl.lng += g.lng; if (x.led.overdue) cl.late++; if (today) cl.due++; cl.xs.push({ x, today, job }); }
   }
   // zoomed out → one badge per tole (homes · late · today)
-  if (map.getZoom() <= 15) for (const [tl, cl] of Object.entries(clusters)) { if (!cl.n) continue; const mk = Lf.marker([cl.lat / cl.n, cl.lng / cl.n], { icon: Lf.divIcon({ className: '', html: `<div class="mclu" data-n="${cl.n}"><b>${esc(tl)}</b><span>${cl.n}</span>${cl.late ? `<i class="r">${cl.late} late</i>` : ''}${cl.due ? `<i class="y">${cl.due} today</i>` : ''}</div>`, iconSize: [120, 34], iconAnchor: [60, 17] }), zIndexOffset: 800, interactive: false }); layer.addLayer(mk); }
+  if (map.getZoom() <= 15) for (const [tl, cl] of Object.entries(clusters)) { if (!cl.n) continue; const mk = Lf.marker([cl.lat / cl.n, cl.lng / cl.n], { icon: Lf.divIcon({ className: 'mclu-ic', html: `<div class="mclu${map.getZoom() <= 13 ? ' cmp' : ''}" data-n="${cl.n}"><b>${esc(tl)}</b><span>${cl.n}</span>${map.getZoom() <= 13 ? `${cl.late ? '<i class="r dotx" title="late"></i>' : ''}${cl.due ? '<i class="y dotx" title="today"></i>' : ''}` : `${cl.late ? `<i class="r">${cl.late} late</i>` : ''}${cl.due ? `<i class="y">${cl.due} today</i>` : ''}`}</div>`, iconSize: [120, 34], iconAnchor: [60, 17] }), zIndexOffset: 800, interactive: true, keyboard: false });
+    const tt = toleList(tl, cl); mk.bindTooltip(tt, { direction: 'top', offset: [0, -14], className: 'tole-tip', opacity: 1 }); mk.bindPopup(tt, { className: 'tole-pop', closeButton: true, autoPanPadding: [30, 30], maxWidth: 340 }); mk.on('popupopen', () => mk.closeTooltip()); layer.addLayer(mk); }
   drawWards(); setTimeout(declutter, 0); /* v0.17.0 (6) (3) Jun "조금만 확대해도 그거 바 다 사라져 · 지역 구분선" — badges up to zoom 15 (was 13), they step aside, ward lines */
   return pts;
 }

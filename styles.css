@@ -923,6 +923,11 @@ body.desk .drawer #theForm textarea { min-height:76px; } body.desk .drawer #theF
 body.desk .drawer #theForm label { font-size:13.5px; }
 body.desk .drawer #theForm .btn:not(#saveBtn) { width:auto; min-height:38px; font-size:14px; padding:0 14px; }
 body.desk .drawer #theForm > #saveBtn { grid-column:2; justify-self:end; width:auto; min-width:200px; min-height:44px; font-size:16px; }
+/* v0.17.1 ④ no page-wide buttons inside a desk window either (v0.17.0 only sized the page) · a list's "＋ New …" sits at the top right */
+body.desk .drawer .btn { width:auto; } body.desk .drawer .row .btn, body.desk .drawer .row.wrap .btn { flex:0 0 auto; }
+body.desk .drawer .rc-side .btn { width:100%; } body.desk .drawer .dpage > .btn { display:inline-flex; align-items:center; justify-content:center; margin-right:8px; }
+body.desk .drawer.wide:not(.full) { height:auto; max-height:92vh; } /* a short list window ends where its list ends (2 moves left a 700-px empty box) */
+body.desk .drawer .dp-acts { display:flex; justify-content:flex-end; gap:8px; margin:6px 0 4px; } body.desk .drawer .dp-acts .btn { margin:0; min-height:34px; font-size:13.5px; padding:0 14px; }
 /* B4 customer window: the 11 big tiles become a compact toolbar · drawer buttons at desk size */
 body.desk .drawer .links { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
 body.desk .drawer .links a, body.desk .drawer .links button { flex:0 0 auto; padding:6px 12px; min-height:32px; font-size:13px; border-radius:9px; }
@@ -941,8 +946,19 @@ body.desk .drawer.full .dpage.scr-detail { margin-right:96px; } /* (1) the ⤢ �
 .tole-side .tole-list .item { cursor:pointer; border-radius:8px; padding:7px 6px; } .tole-side .tole-list .item.sel { background:var(--brand-soft); } .tole-side .tole-list .item .s { font-size:11.5px; }
 @media (max-width: 1480px) { .panel.cust-main { grid-column: span 8; } .panel.tole-side { grid-column: span 4; } } /* 1440: s3 → span 6 pushed the areas under the list */
 /* v0.17.0 (6) map: ward names (zoom 14+) · a badge that stepped aside gets a dashed edge · the ward-lines switch */
-.wlab { position:absolute; left:50%; top:50%; translate:-50% -50%; width:max-content; font:700 10.5px var(--sans); color:#cfe6f8; text-shadow:0 0 3px #000, 0 0 6px #000; letter-spacing:.06em; white-space:nowrap; text-align:center; opacity:.85; }
-.mclu.moved { border-style:dashed; } .mclu { position:absolute; left:50%; top:50%; width:max-content; translate:-50% -50%; } /* the badge was a 120-px block: wider names spilled out (overlap not seen) and short ones left an empty tail */ .btn.tgl-w.on { border-color:var(--brand); color:var(--ink); background:var(--brand-soft); }
+/* v0.17.1 ① tole badge = the visible label is the hit area (not its invisible 120-px box) · hover list · click pins it */
+.leaflet-marker-icon.mclu-ic { pointer-events:none !important; } .mclu-ic .mclu { pointer-events:auto; cursor:pointer; } .mclu-ic .mclu:hover { border-color:var(--brand); box-shadow:0 0 0 2px color-mix(in srgb, var(--brand) 45%, transparent), 0 2px 10px rgba(0,0,0,.4); }
+.leaflet-tooltip.tole-tip { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:12px; padding:8px 10px; box-shadow:0 10px 30px rgba(0,0,0,.45); white-space:normal; }
+.leaflet-tooltip.tole-tip::before { display:none; }
+.tole-l { min-width:240px; max-width:320px; font-size:12.5px; } .tole-l .tl-h { font-size:12px; margin-bottom:6px; color:var(--muted); } .tole-l .tl-h b { color:var(--ink); font-size:13.5px; }
+.tole-l .tl-r { display:flex; align-items:center; gap:7px; padding:4px 2px; border-top:1px solid color-mix(in srgb, var(--line) 70%, transparent); cursor:pointer; border-radius:6px; } .tole-l .tl-r:hover { background:var(--card2); }
+.tole-l .tl-r .dot { width:8px; height:8px; } .tole-l .tl-r b { flex:1 1 auto; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tole-l .tl-k { display:flex; gap:5px; align-items:center; flex:none; font:600 11px var(--mono); } .tole-l .tl-k i { font-style:normal; } .tole-l .tl-k em { font-style:normal; padding:1px 6px; border-radius:99px; }
+.tole-l em.y, .tole-l i.y { color:#1a1300; background:var(--warn); font-style:normal; } .tole-l em.r, .tole-l i.r { color:#fff; background:var(--bad); font-style:normal; } .tole-l .tl-h i { padding:0 6px; border-radius:99px; font-size:11px; }
+.tole-l .tl-more { margin-top:6px; width:100%; border:1px dashed var(--line); background:transparent; color:var(--brand); border-radius:8px; padding:5px; font:600 12px var(--sans); cursor:pointer; }
+.wlab { position:absolute; left:50%; top:50%; translate:-50% -50%; width:max-content; font:800 11px var(--sans); color:#e3f2fd; text-shadow:0 0 2px #000; letter-spacing:.05em; white-space:nowrap; text-align:center; background:rgba(8,16,26,.62); border:1px solid rgba(156,201,236,.55); border-radius:6px; padding:1px 6px; } /* v0.17.1 ②: a clear tag, not faint text */
+.wlab.sm { font-size:9.5px; padding:0 4px; } .wlab .wl-n { display:none; } .wlab.tiny .wl-full { display:none; } .wlab.tiny .wl-n { display:inline; } .wlab.tiny { padding:0 5px; border-radius:99px; min-width:18px; }
+.mclu.moved { border-style:dashed; } .mclu.cmp { padding:2px 7px; gap:5px; font-size:10.5px; } .mclu .dotx { width:8px; height:8px; padding:0; border-radius:50%; display:inline-block; } /* v0.17.1: zoomed out = name · count · two dots (the list on hover has the rest) */ .mclu { position:absolute; left:50%; top:50%; width:max-content; translate:-50% -50%; } /* the badge was a 120-px block: wider names spilled out (overlap not seen) and short ones left an empty tail */ .btn.tgl-w.on { border-color:var(--brand); color:var(--ink); background:var(--brand-soft); }
 /* v0.17.0 (7) Milestones timeline — tracks × weeks (like the 「네팔 착지 행정 지도」 page) */
 .tl { position:relative; --lbl:170px; margin-top:4px; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:color-mix(in srgb, var(--card) 70%, transparent); }
 .tl-row { display:grid; grid-template-columns:var(--lbl) minmax(0, 1fr); border-bottom:1px solid var(--line); position:relative; }

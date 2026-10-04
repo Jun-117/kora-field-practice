@@ -17,7 +17,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.18.0 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.18.1 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -412,6 +412,12 @@ async function reconcile(manual) {
 // ---------- data: phone cache first, then only what changed on the server ----------
 const toObj = (d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }), _pending: d.metadata.hasPendingWrites });
 const sinceKey = (col) => `kfp_since_${S.user.uid}_${col}`;
+export const AUDIT_DAYS = 90;
+export async function auditOlder() { /* v0.18.1 (B4): one more 90-day slice of the change log from the server (into memory for this session) */
+  const to = S.auditFloor || Date.now() - AUDIT_DAYS * 864e5; const from = to - AUDIT_DAYS * 864e5;
+  const snap = await getDocs(query(collection(db, 'audit'), where('updatedAt', '>', Timestamp.fromMillis(from)), where('updatedAt', '<=', Timestamp.fromMillis(to))));
+  snap.forEach((d) => S.D.audit.set(d.id, toObj(d))); S.auditFloor = from; bump(); return snap.size;
+}
 async function startData(full) {
   S.unsub.forEach((u) => u()); S.unsub = [];
   await Promise.all(colsForMe().map(async (col) => {
@@ -420,7 +426,8 @@ async function startData(full) {
   bump(); scheduleRender();
   for (const col of colsForMe()) {
     const sinceMs = full ? 0 : lsGet(sinceKey(col), 0);
-    const q = query(collection(db, col), where('updatedAt', '>', Timestamp.fromMillis(sinceMs)));
+    const floor = col === 'audit' ? Date.now() - AUDIT_DAYS * 864e5 : 0; /* v0.18.1 (B4): the change log is append-only and grows for ever → the desk follows the last 90 days; older = "Load older" on the Change log page */
+    const q = query(collection(db, col), where('updatedAt', '>', Timestamp.fromMillis(Math.max(sinceMs, floor))));
     const un = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
       let changed = false;
       snap.docChanges({ includeMetadataChanges: true }).forEach((ch) => { if (ch.type !== 'removed') { S.D[col].set(ch.doc.id, toObj(ch.doc)); changed = true; } });
@@ -447,9 +454,16 @@ const WATCH_OK = 'kfp_watch_ok';
 export function watchCheck(cid, score) { const z = lsGet(WATCH_OK, {}); const t = today(); for (const k of Object.keys(z)) if (z[k].until < t) delete z[k]; z[cid] = { until: R.addDays(t, 6), score }; lsSet(WATCH_OK, z); bump(); }
 export function watchUncheckAll() { lsSet(WATCH_OK, {}); bump(); }
 let modelCache = { ver: -1, day: '', m: null };
+// v0.18.1 (B2) Jun 10/4 "1000가구,2000가구여도 끄떡없게": per-customer results are kept between redraws and only recomputed for a customer whose own
+// records changed (🟢 1,494 homes: ledger 68 ms + filter learning 82 ms of a 207 ms model() → cached). A record's stamp = its server time + local save time.
+const stampOf = (x) => `${x.id}:${x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : 0}:${x._localT || 0}:${x._pending ? 1 : 0}`;
+const stampList = (l) => (l && l.length ? l.map(stampOf).join(',') : '');
+export const stampSum = (l) => { let n = l.length; for (const x of l) n += (x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : 0) + (x._localT || 0); return n; };
+let custCache = new Map(); let learnCache = { key: '', FM: null, learning: null }; let modelSeq = 0; export const modelStamp = () => `${modelSeq}:${today()}`;
 export function model() {
   const t = today();
   if (modelCache.ver === S.ver && modelCache.day === t) return modelCache.m;
+  modelSeq++; /* v0.18.1: a cheap "the data changed" counter for the desk's page-level caches */
   const D = Object.fromEntries(COLS.map((c) => [c, arr(c)]));
   // Area switch: a staff member without "see every customer" only gets the toles ticked for them (screen tidy-up).
   const areas = !can('seeAll') && S.profile && Array.isArray(S.profile.toles) && S.profile.toles.length ? new Set(S.profile.toles) : null;
@@ -457,21 +471,30 @@ export function model() {
   const byCust = (list) => { const m = new Map(); for (const x of list) { if (!m.has(x.customerId)) m.set(x.customerId, []); m.get(x.customerId).push(x); } return m; };
   const payBy = byCust(D.payments), visBy = byCust(D.visits), chkBy = byCust(D.checkins);
   const ledgers = new Map(); const cust = new Map();
-  const FM = R.learnedMonths(D.customers, D.visits, S.settings.learnFilters !== 'No'); /* v0.14 (#3): observed intervals once 5+ changes */
+  const learnKey = `${D.customers.length}:${stampSum(D.customers)}:${D.visits.length}:${stampSum(D.visits)}:${S.settings.learnFilters}`;
+  if (learnCache.key !== learnKey) learnCache = { key: learnKey, FM: R.learnedMonths(D.customers, D.visits, S.settings.learnFilters !== 'No'), learning: R.filterLearning(D.customers.filter((c) => c.status !== 'Churned'), D.visits) }; /* v0.14 (#3): observed intervals once 5+ changes · v0.18.1: kept until a customer or visit changes */
+  const FM = learnCache.FM;
+  const nextCache = new Map(); const perKey = `${t}|${learnKey}|${S.settings.filterMode}`;
   for (const c of D.customers) {
-    const led = R.ledger(c, payBy.get(c.id) || [], t);
+    const pays = payBy.get(c.id) || [], viss = visBy.get(c.id) || [], chks = chkBy.get(c.id) || [];
+    const key = `${perKey}|${stampOf(c)}|${stampList(pays)}|${stampList(viss)}|${stampList(chks)}`;
+    const hit = custCache.get(c.id);
+    if (hit && hit.key === key) { nextCache.set(c.id, hit); ledgers.set(c.id, hit.v.led); cust.set(c.id, hit.v); continue; }
+    const led = R.ledger(c, pays, t);
     ledgers.set(c.id, led);
-    const vs = (visBy.get(c.id) || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const vs = viss.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const status = c.status || 'Active';
     const dn = status === 'Active' ? R.dunning(led, t) : null;
     const nv = status === 'Active' ? R.nextVisit(c, vs) : null;
     const fd = status === 'Active' ? R.filterDues(c, vs, t, FM) : [];
     const fb = status === 'Active' && S.settings.filterMode !== 'Separate' ? R.filterBatch(fd, FM) : null; /* v0.15: filters go together */
-    const ob = status === 'Active' ? R.onboarding(c, chkBy.get(c.id) || [], t) : [];
-    const chases = R.chaseLog(chkBy.get(c.id)); const pr = status === 'Active' && led.overdue > 0 ? R.promiseOf(chases, payBy.get(c.id), t) : null; /* v0.9 #1 */
+    const ob = status === 'Active' ? R.onboarding(c, chks, t) : [];
+    const chases = R.chaseLog(chks); const pr = status === 'Active' && led.overdue > 0 ? R.promiseOf(chases, pays, t) : null; /* v0.9 #1 */
     const dot = status === 'Churned' ? 'k' : status === 'Paused' ? 'b' : led.daysOverdue >= 7 ? 'r' : led.overdue > 0 ? 'y' : 'g';
-    cust.set(c.id, { c, led, dn, nv, fd, fb, ob, vs, dot, status, chases, pr });
+    const v = { c, led, dn, nv, fd, fb, ob, vs, dot, status, chases, pr };
+    cust.set(c.id, v); nextCache.set(c.id, { key, v });
   }
+  custCache = nextCache; /* customers that left the data drop out of the cache */
   const act = [...cust.values()].filter((x) => x.status === 'Active');
   // Dispatch: once Jun gives a staff member their own homes, their field lists show those + the unassigned ones.
   const me = isBoss() ? '' : myName();
@@ -496,7 +519,7 @@ export function model() {
   const deposits = R.depositBook(D.customers, ledgers, D.recoveries);
   const vat = R.vatByMonth(D.payments, ledgers, D.recoveries);
   const referrals = R.referralRewards(D.customers, D.payments, ledgers, t, referralOn()); /* v0.15: off unless the campaign is switched on */
-  const learning = R.filterLearning(D.customers.filter((c) => c.status !== 'Churned'), D.visits);
+  const learning = learnCache.learning;
   const filtersAll = act.flatMap((x) => x.fd.filter((f) => f.status !== 'none').map((f) => ({ ...f, x })));
   // Alerts: things that need a person today (each links to its list)
   const alerts = [];
@@ -2363,7 +2386,8 @@ function csLayout() { /* v0.16.0 (7): 8 rows on screen, the rest behind "+N more
   const L = document.querySelector('.cs-list'); if (!L) return;
   const rows = [...L.querySelectorAll('.cs-i')]; const open = L.classList.contains('cs-open');
   rows.forEach((r, i) => r.classList.toggle('hidden', !open && i >= 8));
-  const mb = document.querySelector('[data-act="cardsMore"]'); if (mb) { if (!open && rows.length > 8) mb.textContent = `+${rows.length - 8} more`; else mb.remove(); }
+  const total = Number(L.dataset.csTotal) || rows.length; /* v0.18.1 (B5): only 8 rows are in the DOM until "+N more" */
+  const mb = document.querySelector('[data-act="cardsMore"]'); if (mb) { if (!open && total > 8) mb.textContent = `+${total - 8} more`; else mb.remove(); }
   const n = document.querySelector('[data-cards-todo]'); if (n) { n.textContent = `${rows.length} to send`; n.classList.toggle('warn', rows.length > 0); n.classList.toggle('ok', !rows.length); }
   if (!rows.length && !L.querySelector('.empty')) L.insertAdjacentHTML('beforeend', '<div class="empty">Nothing to send</div>');
 }
@@ -3378,7 +3402,7 @@ document.addEventListener('click', async (ev) => {
     if (!copied) { const dl = document.createElement('a'); dl.href = S.rcUrl; dl.download = S.rcName || 'kora-card.png'; document.body.appendChild(dl); dl.click(); dl.remove(); }
     toast(!w ? 'Pop-up blocked — allow pop-ups for this site, then tap again' : DEMO ? 'Practice: made-up numbers, so no chat was opened' : copied ? '📋 Copied · in the chat press ⌘V, then send' : '⬇️ Saved · drag the picture into the chat'); }
   else if (act === 'cardOpen') { ev.preventDefault(); const k = a.dataset.kind, id = a.dataset.id, cid = a.dataset.cid; if (!k || !id || !cid) return; nav('customers', 'detail', k === 'receipt' ? { id: cid, receipt: id } : k === 'visit' ? { id: cid, vrep: id } : { id: cid, inst: cid }); setTimeout(() => imageCard(k, id), 450); } /* ⑥ from the desk list: the home opens with the card drawn */
-  else if (act === 'cardsMore') { ev.preventDefault(); const L = document.querySelector('.cs-list'); if (L) { L.classList.add('cs-open'); csLayout(); } } /* v0.16.0 (7) */
+  else if (act === 'cardsMore') { ev.preventDefault(); const L = document.querySelector('.cs-list'); if (L) { if (deskMod && deskMod.cardsToSend) { const have = new Set([...L.querySelectorAll('.cs-i')].map((r) => r.dataset.cardrow)); const more = deskMod.cardsToSend(model(), 1).filter((e) => !e.sent && !have.has(e.key)); L.insertAdjacentHTML('beforeend', more.map((e, i) => deskMod.cardRowHtml(e, i + have.size)).join('')); } L.classList.add('cs-open'); csLayout(); } } /* v0.16.0 (7) · v0.18.1 (B5): the rows beyond 8 are built only now */
   else if (act === 'cardSent') { ev.preventDefault(); const k = a.dataset.key; if (!k) return; const on = markCardSent(k, !cardsSent()[k]); syncSentUi(k, on); toast(on ? '✓ Marked as sent' : 'Marked as not sent'); } /* ⑥ */
   else if (act === 'demoWho') { if (DEMO) demoWho(); }
   else if (act === 'demoAs') { if (DEMO) demoAs(a.dataset.as || ''); }

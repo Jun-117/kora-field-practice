@@ -4,7 +4,7 @@ import * as R from './logic.js';
 import * as B from './bs.js';
 import { langSegHtml, fmtDate, fmtTime, getLang, setLang } from './i18n.js';
 import { loadLeaflet, MAP_OPTS, TILE, POKHARA, addLocate, hereIfAllowed, drawMe, hereNow } from './geo.js';
-import { MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem, cardsSent, fieldLabel } from './app.js';
+import { modelStamp, AUDIT_DAYS, auditOlder, MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem, cardsSent, fieldLabel } from './app.js';
 import * as CA from './capack.js';
 import * as CAL from './cal.js';
 import * as SIM from './sim.js';
@@ -13,6 +13,8 @@ export { loadLeaflet };
 
 const NPT = 'Asia/Kathmandu';
 const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN');
+// v0.18.1 (B5) Jun 10/4 "2000가구여도 끄떡없게": heavy page helpers are kept until the data changes (🟢 1,494 homes: historyModel 397 ms + activity 58 + aging 60 of a 522 ms page build)
+const memoBox = new Map(); const memo = (name, key, fn) => { const h = memoBox.get(name); if (h && h.key === key) return h.v; const v = fn(); memoBox.set(name, { key, v }); return v; };
 // v0.17.2 (5) Jun 10/4 "그게 얼마인지 한화로 보여주면 좋을듯 … npr로도 나오고 (마우스 갖다대면)": money bars say the exact NPR and ≈ ₩ (Settings → NPR per KRW 100, Nepal Rastra Bank; empty = 11.30, 2 Oct 2026)
 export const FX_DEFAULT = 11.3;
 const fxRate = () => { const r = Number(S.settings && S.settings.fxKrw100); return r > 0 ? r : FX_DEFAULT; };
@@ -36,7 +38,7 @@ export const DESK_PAGES = [...SIDE.map((x) => x[0]), 'report'];
 const sideOk = (x) => (!x[3] || (x[3] === 'admin' ? isBoss() : x[3] === 'owner' ? !!S.isAdmin : can(x[3]))) && (x[0] !== 'network' || referralOn()); /* owner = Jun only (boards) */ /* v0.15: the referral tree only during a campaign */
 let last = { side: '', tick: '', bell: '' };
 export function renderDesk(root, fresh) {
-  const m = model(); const scr = S.route.screen; NOTES = chartNotes(m);
+  const T0 = performance.now(); const m = model(); const T1 = performance.now(); const scr = S.route.screen; NOTES = chartNotes(m); /* v0.18.1: timings for the load test (S._rt) */
   let shell = root.querySelector('.shell');
   const rebuild = !shell || shell.dataset.shellLang !== getLang();
   const keepMap = map && mapEl && mapEl.isConnected ? mapEl : null;
@@ -87,7 +89,7 @@ export function renderDesk(root, fresh) {
   const pg = root.querySelector('#deskPage');
   pg.className = `deskpage ${fresh ? 'page-in' : 'calm'}`; /* v0.17.0 (3): Settings was held to 820 px (now two columns across the page) */
   if (fresh) { void pg.offsetWidth; }
-  pg.innerHTML = page(scr, m); chartTips(pg); /* v0.17.3 (2) */
+  const T2 = performance.now(); const pageKey = `${modelStamp()}|${scr}|${JSON.stringify(S.route.params || {})}|${getLang()}|${S.mapKind || ''}|${(S.mapHide || []).join()}|${S.swWaiting ? 1 : 0}|${S.auditFloor || 0}|${Math.floor(Date.now() / 60000)}`; const html = fresh || scr === 'live' || scr === 'phones' ? page(scr, m) : memo('page', `${pageKey}|${uiSeq}`, () => page(scr, m)); const T3 = performance.now(); /* v0.18.1 (B5): the same page with the same data is not rebuilt (a redraw every 30 s) — at most once a minute */ pg.innerHTML = html; chartTips(pg); /* v0.17.3 (2) */ const T4 = performance.now();
   tickClock(); ensureClock();
   animateCounts(root);
   const box = pg.querySelector('#mapBox');
@@ -99,6 +101,7 @@ export function renderDesk(root, fresh) {
   if (scr === 'report') afterRender(pg, { screen: 'report', params: S.route.params || {} });
   if (scr === 'backup') afterRender(pg, { screen: 'report', params: { r: 'backup' } });
   if (scr === 'board') msScrollInit(pg);
+  S._rt = { model: Math.round(T1 - T0), shell: Math.round(T2 - T1), html: Math.round(T3 - T2), dom: Math.round(T4 - T3), after: Math.round(performance.now() - T4) };
   if (isBoss() && (!S.fleetAt || Date.now() - S.fleetAt > (scr === 'phones' ? 60e3 : 600e3))) loadFleet(scr === 'phones'); // phones page: once a minute · elsewhere every 10 min (the 📱 alerts use it) — a load re-renders
   refreshLocBtn();
 }
@@ -298,7 +301,8 @@ const legend = () => `<div class="legend" style="margin:0"><span><i class="dot g
 
 // ---------- pages ----------
 function monthsBack(t, n) { const out = []; for (let i = n - 1; i >= 0; i--) out.push(R.monthKey(R.addMonths(t.slice(0, 7) + '-01', -i))); return out; }
-function activity(m, n = 12) {
+function activity(m, n = 12) { return memo('activity', modelStamp(), () => activity0(m, 40)).slice(0, n); }
+function activity0(m, n = 12) {
   const ev = [];
   const ts = (x) => (x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : x._localT || (x.date ? R.parseD(x.date).getTime() + 12 * 3600e3 : 0));
   const cn = (id) => { const c = S.D.customers.get(id); return c ? c.name : ''; };
@@ -334,6 +338,7 @@ function anomalyChips(m) {
 }
 // ---- v0.16.0 (5) · Jun 10/3 "요원은 밖에서 할거 ㅈㄴ많을탠데 … 일단 내가 하는거로. 맥으로": cards to send from the desk —
 // receipts (credit notes too), visit notes and installed cards of the last 14 days, not-yet-sent first. "Sent" lives on this computer (app.js cardsSent).
+export const cardRowHtml = (e, i) => `<div class="item cs-i${i >= 8 ? ' hidden' : ''}" data-cardrow="${esc(e.key)}"><span class="dot y"></span><div class="main"><div class="t">${esc(e.what)}</div><div class="s" data-noi18n>${esc(e.date)} · ${esc(e.c.name || '')} (${esc(e.c.code || '')})</div></div><button class="btn small" data-act="cardOpen" data-kind="${e.kind}" data-id="${esc(e.id)}" data-cid="${esc(e.c.id)}">🖼 Card</button><button class="btn small ghost" data-act="cardSent" data-key="${esc(e.key)}">✓ Sent</button></div>`; /* v0.18.1 (B5): one row builder, used by the panel (8 rows) and by "+N more" */
 export function cardsToSend(m, days = 1) { /* v0.16.0 (7) Jun 10/3 "보낼 카드 줄여, 50개 뭐야": today + yesterday (was 14 days) */
   const from = R.addDays(m.t, -days), sent = cardsSent(), out = [];
   const inWin = (d) => R.isDate(d) && d >= from && d <= m.t;
@@ -345,8 +350,8 @@ export function cardsToSend(m, days = 1) { /* v0.16.0 (7) Jun 10/3 "보낼 카�
 }
 function cardsPanel(m) { /* v0.16.0 (7): only what is still to send · sent ones = a count · 8 rows, the rest behind "+N more" */
   const xs = cardsToSend(m, 1), todo = xs.filter((e) => !e.sent), sentN = xs.length - todo.length;
-  const row = (e, i) => `<div class="item cs-i${i >= 8 ? ' hidden' : ''}" data-cardrow="${esc(e.key)}"><span class="dot y"></span><div class="main"><div class="t">${esc(e.what)}</div><div class="s" data-noi18n>${esc(e.date)} · ${esc(e.c.name || '')} (${esc(e.c.code || '')})</div></div><button class="btn small" data-act="cardOpen" data-kind="${e.kind}" data-id="${esc(e.id)}" data-cid="${esc(e.c.id)}">🖼 Card</button><button class="btn small ghost" data-act="cardSent" data-key="${esc(e.key)}">✓ Sent</button></div>`;
-  return panel('s12', 6, '<b>📨 Cards to send</b> · today + yesterday', `<div class="mini-list cs-list">${todo.map(row).join('') || '<div class="empty">Nothing to send</div>'}</div>${todo.length > 8 ? `<button class="btn small ghost cs-morebtn" data-act="cardsMore">+${todo.length - 8} more</button>` : ''}<div class="sub muted" style="margin-top:6px">Sent marks are kept on this computer only</div>`, `<span class="pill ${todo.length ? 'warn' : 'ok'}" data-cards-todo>${todo.length} to send</span> <span class="pill grey" data-cards-sent="${sentN}">${sentN} sent</span>`);
+  const row = cardRowHtml;
+  return panel('s12', 6, '<b>📨 Cards to send</b> · today + yesterday', `<div class="mini-list cs-list" data-cs-total="${todo.length}">${todo.slice(0, 8).map(row).join('') || '<div class="empty">Nothing to send</div>'}</div>${todo.length > 8 ? `<button class="btn small ghost cs-morebtn" data-act="cardsMore">+${todo.length - 8} more</button>` : ''}<div class="sub muted" style="margin-top:6px">Sent marks are kept on this computer only</div>`, `<span class="pill ${todo.length ? 'warn' : 'ok'}" data-cards-todo>${todo.length} to send</span> <span class="pill grey" data-cards-sent="${sentN}">${sentN} sent</span>`);
 }
 function pageCommand(m) {
   const M = m.metrics, t = m.t;
@@ -355,7 +360,7 @@ function pageCommand(m) {
   const cashBy = Object.fromEntries(mk.map((k) => [k, 0]));
   for (const p of m.D.payments) if (!R.isNonCash(p) && cashBy[R.monthKey(p.date)] !== undefined) cashBy[R.monthKey(p.date)] += Number(p.amount) || 0;
   const cashVals = mk.map((k) => cashBy[k]);
-  const H = historyModel(m); const prevMk = mk[mk.length - 2]; const prev = H.byMonth[prevMk];
+  const P0 = performance.now(); const H = historyModel(m); const P1 = performance.now(); const prevMk = mk[mk.length - 2]; const prev = H.byMonth[prevMk];
   const fStat = { overdue: 0, soon: 0, ok: 0 }; for (const f of m.filtersAll) fStat[f.status] = (fStat[f.status] || 0) + 1;
   const stages = R.DUNNING.map((d) => ({ d, n: m.collections.filter((x) => x.dn.stage === d.stage).length }));
   const maxSt = Math.max(1, ...stages.map((s) => s.n));
@@ -365,13 +370,13 @@ function pageCommand(m) {
   const maxL = Math.max(1, ...leadSt.map((x) => x.n));
   const F = M.fcl; const G = M.gate;
   const vatNow = m.vat.find((r) => r.month === R.monthKey(t));
-  const act = activity(m);
+  const P2 = performance.now(); const act = activity(m); const P3 = performance.now();
   const obDone = [...m.cust.values()].filter((x) => x.status === 'Active');
   const obPct = ['D7'].map((k) => { const elig = obDone.filter((x) => x.ob.find((o) => o.k === k && o.status !== 'future')); const done = elig.filter((x) => x.ob.find((o) => o.k === k && o.status === 'done')); return { k, n: elig.length, d: done.length }; });
-  const ag = R.agingBuckets(m.ledgers, activeIds(m), t); const out = R.cashOutlook(m.D.customers, m.ledgers, t, 28);
-  const dq = dataQuality(m);
+  const { ag, out } = memo('aging', modelStamp(), () => ({ ag: R.agingBuckets(m.ledgers, activeIds(m), t), out: R.cashOutlook(m.D.customers, m.ledgers, t, 28) }));
+  const P4 = performance.now(); const dq = dataQuality(m); const P5 = performance.now(); const anom = anomalyChips(m); const P6 = performance.now(); S._pc = { history: Math.round(P1 - P0), mid: Math.round(P2 - P1), activity: Math.round(P3 - P2), aging: Math.round(P4 - P3), dq: Math.round(P5 - P4), anomaly: Math.round(P6 - P5) };
   return `<div class="cc">
-    ${anomalyChips(m)}
+    ${anom}
     ${panel('s3 kpi', 0, '<b>Households</b> · active', `<div class="v">${counter('act', M.active)}<small>/ ${M.installed} installed</small></div><div class="sub"><span>⏸ ${M.paused} paused</span><span>⚫ ${M.churned} left</span><span>${M.avg4w.toFixed(1)}/wk installs</span>${prev ? `<span>vs ${esc(monLabel(prevMk))} end ${delta(M.active, prev.M.active)}</span>` : ''}</div>${spark(weeks, 'var(--brand)')}`)}
     ${panel('s3 kpi', 1, '<b>Monthly recurring</b> · NPR', `<div class="v">${counter('mrr', M.mrr)}</div><div class="sub"><span>cash this month <b class="num">${fmtN(M.cashThisMonth)}</b></span>${prev ? `<span>last month ${fmtN(prev.A.cash)}</span>` : ''}<span>VAT ${vatNow ? fmtN(vatNow.vat) : 0}</span></div>${spark(cashVals, 'var(--ok)')}`)}
     ${panel('s3 kpi', 2, '<b>Collection</b> · bills paid', `<div class="v" style="color:${M.collection === null ? 'inherit' : M.collection < 0.5 ? 'var(--bad)' : M.collection < 0.8 ? 'var(--warn)' : 'var(--ok)'}">${M.collection === null ? '—' : counter('col', M.collection, 'pct')}</div><div class="sub"><span>${M.billsPaid}/${M.billsDue} bills</span><span>on time ${M.billsDue ? Math.round((M.onTime / M.billsDue) * 100) : 0}%</span><span style="color:var(--bad)">overdue ${fmtN(M.overdueAmt)}</span></div><div class="bar" style="margin-top:14px"><i style="width:${(M.collection || 0) * 100}%;background:var(--ok)"></i></div>`)}
@@ -446,7 +451,7 @@ function pageMoney(m) {
   const cashBy = Object.fromEntries(mk.map((k) => [k, 0])); const depBy = Object.fromEntries(mk.map((k) => [k, 0]));
   for (const r of m.vat) { if (cashBy[r.month] !== undefined) { cashBy[r.month] = r.cash; depBy[r.month] = r.deposit; } }
   const groups = collectionGroups(m.collections); const cs = R.chaseStats(m.D.checkins, m.D.payments, R.addDays(m.t, -90), m.t);
-  const ag = R.agingBuckets(m.ledgers, activeIds(m), m.t); const out = R.cashOutlook(m.D.customers, m.ledgers, m.t, 28);
+  const { ag, out } = memo('aging', modelStamp(), () => ({ ag: R.agingBuckets(m.ledgers, activeIds(m), m.t), out: R.cashOutlook(m.D.customers, m.ledgers, m.t, 28) }));
   const cam = caMonths(m, 6);
   return `<div class="cc">
     ${panel('s3 kpi', 0, '<b>Cash in</b> · this month', `<div class="v">${counter('m_cash', M.cashThisMonth)}</div>`)}
@@ -674,15 +679,25 @@ function repVisual(k, m, p) {
 
 // ---------- 📅 History: any past month, as it stood at the end of that month ----------
 let histCache = { ver: -1, day: '', H: null };
-function historyModel(m) {
+const monthCache = new Map(); /* v0.18.1 (B5): closed months of the history model */
+function historyModel(m) { return memo('history', modelStamp(), () => historyModel0(m)); }
+function historyModel0(m) {
   if (histCache.ver === S.ver && histCache.day === m.t && histCache.H) return histCache.H;
   const firsts = [...m.D.customers.map((c) => c.installDate), ...m.D.payments.map((p) => p.date)].filter(R.isDate).sort();
   const start = firsts.length ? R.monthKey(firsts[0]) : R.monthKey(m.t);
   const months = []; for (let k = start; k <= R.monthKey(m.t); k = R.monthKey(R.addMonths(k + '-01', 1))) months.push(k);
   const payBy = new Map(); for (const p of m.D.payments) { if (!payBy.has(p.customerId)) payBy.set(p.customerId, []); payBy.get(p.customerId).push(p); }
   const byMonth = {};
+  /* v0.18.1 (B5): a closed month is recomputed only when a record dated up to its end changed (🟢 1,494 homes: every month was redone on every data change = 400 ms;
+     now one month at most). Per collection: records sorted by date, a running count + stamp sum up to each month end = that month's key. */
+  const stampNum = (x) => (x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : 0) + (x._localT || 0) + String(x.id || '').length;
+  const sorted = (list, dateOf) => list.filter((x) => R.isDate(dateOf(x))).map((x) => [dateOf(x), stampNum(x)]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  const srcs = [sorted(m.D.payments, (p) => p.date), sorted(m.D.customers, (c) => c.installDate), sorted(m.D.customers, (c) => c.churnDate), sorted(m.D.recoveries, (r) => r.startedDate), sorted(m.D.visits, (v) => v.date), sorted(m.D.requests, (r) => r.receivedDate || String(r.receivedAt || '').slice(0, 10))];
+  const ptr = srcs.map(() => ({ i: 0, n: 0, sum: 0 })); const setStamp = JSON.stringify([S.settings.leadTimeWeeks, S.settings.capPeople, S.settings.filterMode]);
   for (const mk of months) {
     const end = mk === R.monthKey(m.t) ? m.t : monthEnd(mk);
+    const key = srcs.map((xs, k) => { const q = ptr[k]; while (q.i < xs.length && xs[q.i][0] <= end) { q.n++; q.sum += xs[q.i][1]; q.i++; } return `${q.n}:${q.sum}`; }).join('|') + '|' + setStamp;
+    if (end !== m.t) { const hit = monthCache.get(mk); if (hit && hit.key === key) { byMonth[mk] = hit.v; continue; } }
     let M, dep;
     if (end === m.t) { M = m.metrics; dep = m.deposits.total; }
     else {
@@ -690,7 +705,7 @@ function historyModel(m) {
       M = R.metrics(snap, led, end, S.settings); dep = R.depositBook(snap.customers, led, snap.recoveries).total;
     }
     const A = R.periodActivity(m.D, mk + '-01', end); const vat = m.vat.find((r) => r.month === mk);
-    byMonth[mk] = { mk, end, M, dep, A, vat };
+    byMonth[mk] = { mk, end, M, dep, A, vat }; if (end !== m.t) monthCache.set(mk, { key, v: byMonth[mk] });
   }
   const H = { months, byMonth, cohorts: R.cohortRetention(m.D.customers, m.t, 12) };
   histCache = { ver: S.ver, day: m.t, H };
@@ -1173,7 +1188,7 @@ function pageChanges(m) {
     ${panel('s3 kpi', 1, '<b>Money & status</b>', `<div class="v" style="color:${money ? 'var(--warn)' : 'inherit'}">${money}</div><div class="sub"><span>amount · discount · refund · status · rights</span></div>`)}
     ${panel('s3 kpi', 2, '<b>People</b>', `<div class="v">${who.length}</div>`)}
     ${panel('s3 kpi', 3, '<b>Last change</b>', `<div class="v" style="font-size:20px">${esc(String((all[0] || {}).at || '—').slice(0, 16).replace('T', ' '))}</div>`)}
-    ${panel('s12', 4, `<b>Change log</b> · ${xs.length}`, `<div class="seg">${seg('ac', '', 'Everything', all.length)}${cols.map((c) => seg('ac', c, (AUDIT_COL[c] || c).replace(/^\S+ /, ''), all.filter((a) => a.col === c).length)).join('')}</div>
+    ${panel('s12', 4, `<b>Change log</b> · ${xs.length} <span class="muted">· since ${esc(new Date(S.auditFloor || Date.now() - AUDIT_DAYS * 864e5).toISOString().slice(0, 10))}</span> <button class="btn small ghost" data-act="auditOlder" style="margin-left:8px">⏮ Load 90 days more</button>`, `<div class="seg">${seg('ac', '', 'Everything', all.length)}${cols.map((c) => seg('ac', c, (AUDIT_COL[c] || c).replace(/^\S+ /, ''), all.filter((a) => a.col === c).length)).join('')}</div>
       <div class="seg">${seg('aw', '', 'Everyone')}${who.map((w) => seg('aw', w, w)).join('')}</div>
       <div class="scroll-x"><table class="tbl chg"><tr><th>When</th><th>Who</th><th>What</th><th>Changed</th></tr>
       ${xs.slice(0, 300).map((a) => `<tr${a.customerId ? ` data-cust="${esc(a.customerId)}" style="cursor:pointer"` : ''}><td class="mono">${esc(String(a.at || '').slice(0, 16).replace('T', ' '))}</td><td>${esc(a.by || '—')}</td><td>${esc(AUDIT_COL[a.col] || a.col)}${a.customerId ? `<div class="muted">${esc(cn(a.customerId))}</div>` : ''}</td>
@@ -1376,11 +1391,12 @@ export function onSearch(q) {
   box.innerHTML = hits.map((x) => cItem(x)).join('') || '<div class="empty">No match</div>';
   box.classList.remove('hidden');
 }
-const reDesk = () => renderDesk(document.getElementById('view'), false);
+let uiSeq = 0; const reDesk = () => { uiSeq++; renderDesk(document.getElementById('view'), false); }; /* v0.18.1: a UI change (filters, ticks, knobs) always rebuilds the page — only the 30-second data redraw may reuse it */
 document.addEventListener('click', (ev) => {
   if (!S.desk) return;
   const box = document.getElementById('deskSearchRes'); if (box && !ev.target.closest('#deskSearchRes') && ev.target.id !== 'deskSearch') box.classList.add('hidden');
   const mb = ev.target.closest('[data-msboard]'); if (mb) { S.route.params.b = mb.dataset.msboard; reDesk(); return; } /* v0.15 board tabs */
+  const ao = ev.target.closest('[data-act="auditOlder"]'); if (ao) { ev.preventDefault(); ao.disabled = true; auditOlder().then((n) => { toast(`⏮ ${n} older change(s) loaded`); reDesk(); }).catch((e) => { toast('Could not load: ' + (e.code || e.message)); ao.disabled = false; }); return; } /* v0.18.1 (B4) */
   const mk2 = ev.target.closest('[data-mkind]'); if (mk2) { const k = mk2.dataset.mkind; S.mapKind = S.mapKind === k && k !== 'all' ? 'all' : k; reDesk(); return; } /* v0.17.4 (B) */
   const mh = ev.target.closest('[data-mhide]'); if (mh) { const h = new Set(S.mapHide || []); if (h.has(mh.dataset.mhide)) h.delete(mh.dataset.mhide); else h.add(mh.dataset.mhide); S.mapHide = [...h]; reDesk(); return; }
   const mv = ev.target.closest('[data-msview]'); if (mv) { S.route.params.v = mv.dataset.msview; try { localStorage.setItem('kfp_msview', mv.dataset.msview); } catch (e) {} reDesk(); return; } /* v0.17.0 (7) */
@@ -1486,15 +1502,20 @@ export async function mountMap(box) {
 }
 function drawMarkers() {
   if (!map || replay) return [];
-  if (!map._kfZoomHook) { map._kfZoomHook = true; map.on('zoomend', () => { if (['map', 'command'].includes(S.route.screen) && !replay) drawMarkers(); }); }
+  if (!map._kfZoomHook) { map._kfZoomHook = true; map.on('zoomend', () => { if (['map', 'command'].includes(S.route.screen) && !replay) drawMarkers(); }); map.on('moveend', () => { if (map._kfDense && ['map', 'command'].includes(S.route.screen) && !replay) drawMarkers(); }); } /* v0.18.1 (B5): dense = redraw as the map moves */
   if (S.route.screen === 'live') { layer.clearLayers(); return drawLive(); }
   if (S.route.screen === 'watch') { layer.clearLayers(); return drawWatch(); }
   const m = model(); layer.clearLayers(); const pts = []; const clusters = {};
   const onMap = S.route.screen === 'map'; const mk0 = onMap ? S.mapKind || 'all' : 'all'; const mIds = mk0 === 'all' ? null : new Set(stopsFor(m).all.filter((s0) => s0.kinds.includes(mk0)).map((s0) => s0.id)); const mHide = new Set(onMap ? S.mapHide || [] : []); /* v0.17.4 (B) */
+  /* v0.18.1 (B5) Jun 10/4 "2000가구여도 끄떡없게": 🟢 1,494 homes = 1,539 pins = 4,787 DOM nodes = 730 ms a redraw → over 300 homes the map draws
+     tole badges only until zoom 15, and from zoom 15 only the pins inside the view (plus a margin) — the standard "cluster + viewport" approach */
+  let withGps = 0; for (const x of m.cust.values()) if (x.c.gps && Number.isFinite(x.c.gps.lat)) withGps++;
+  const dense = withGps > 300; map._kfDense = dense; const z0 = map.getZoom(); const pinsOn = !dense || z0 >= 15; const vb = dense && pinsOn ? map.getBounds().pad(0.25) : null;
   for (const x of m.cust.values()) {
     const g = x.c.gps; if (!g || !Number.isFinite(g.lat) || !Number.isFinite(g.lng)) continue;
     if ((mIds && !mIds.has(x.c.id)) || mHide.has(x.dot)) continue;
-    pts.push([g.lat, g.lng]);
+    if (dense) { pts.push([g.lat, g.lng]); if (!pinsOn || !vb.contains([g.lat, g.lng])) { if (x.status !== 'Churned') { const cl0 = (clusters[toleOf(x.c)] = clusters[toleOf(x.c)] || { n: 0, late: 0, due: 0, lat: 0, lng: 0, xs: [] }); cl0.n++; cl0.lat += g.lat; cl0.lng += g.lng; if (x.led.overdue) cl0.late++; const td0 = m.visitsDue.some((y) => y.c.id === x.c.id) || m.collections.some((y) => y.c.id === x.c.id && y.dn.stage === 'visit'); if (td0) cl0.due++; cl0.xs.push({ x, today: td0, job: '' }); } continue; } }
+    if (!dense) pts.push([g.lat, g.lng]);
     const col = HEX[x.dot] || HEX.g;
     /* v0.14 (#2 · Jun 10/2 "점이랑 텍스트만이잖아"): a pin that says what is going on — colour = money, icon = the job */
     const job = (m.openReq.some((o) => o.c && o.c.c.id === x.c.id)) ? '🛠' : (x.nv && x.nv.date <= m.t) ? '🔧' : (x.fd || []).some((q) => q.status === 'overdue') ? '🧪' : x.led.overdue ? '💰' : '';

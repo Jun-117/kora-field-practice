@@ -18,7 +18,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.19.0 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.19.1 (2026-10-04)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -2588,7 +2588,7 @@ function backupHtml() {
   return `<div class="sumgrid"><div><span>Last backup</span><b class="num">${last ? esc(last) : '—'}</b></div><div><span>Days ago</span><b class="num" style="color:${age === null || age > 7 ? 'var(--bad)' : 'var(--ok)'}">${age === null ? 'never' : age}</b></div><div><span>Records now</span><b class="num">${COLS.reduce((n, c) => n + S.D[c].size, 0)}</b></div><div><span>Done by</span><b>${esc(S.settings.lastBackupBy || '—')}</b></div></div>
     <div class="card"><div class="status" style="font-size:15px">💾 Back up everything now</div><div class="muted" style="margin:6px 0 10px">One Excel file (a sheet per table, easy to read) + one JSON file (the complete copy). Both go to the Downloads folder of this computer — keep them in the vault / Google Drive. The bell reminds you after 7 days.</div>
       <label class="chk-line"><input type="checkbox" id="bkPhotos"> <span>include photos (bigger file)</span></label><button class="btn" data-act="backupNow">💾 Back up now</button></div>
-    <div class="card"><div class="status" style="font-size:15px">📂 Check a backup file</div><div class="muted" style="margin:6px 0 10px">Opens a JSON backup and compares its record counts with today — nothing is written back.</div><input type="file" accept=".json,application/json" id="bkCheck"><div id="bkCheckBox"></div></div>
+    <div class="card"><div class="status" style="font-size:15px">📂 Check a backup file</div><div class="muted" style="margin:6px 0 10px">Opens a JSON backup and compares its record counts with today — nothing is written back.</div><label class="btn small ghost" style="display:inline-flex;align-items:center;cursor:pointer">📂 Choose a backup file (.json)<input type="file" accept=".json,application/json" id="bkCheck" hidden></label><div id="bkCheckBox"></div></div>
     <div class="card"><div class="status" style="font-size:15px">🛡️ Server-side backup (recommended too)</div><div class="muted" style="margin-top:6px">Firestore can take its own scheduled backups (daily or weekly, kept up to 14 weeks) and point-in-time recovery for 7 days — this needs the Blaze plan and is switched on in the Firebase console (Firestore → Disaster recovery / Backups). The file backup above works on any plan.</div></div>`;
 }
 function checkBackupFile(file) {

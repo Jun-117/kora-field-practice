@@ -330,7 +330,7 @@ body.routing #banner { position:fixed; top:0; left:0; right:0; z-index:50; margi
 .route .rbot { position:absolute; left:10px; right:10px; bottom:calc(84px + env(safe-area-inset-bottom)); z-index:500; display:flex; gap:8px; }
 .route .rbot button { flex:1; min-height:54px; border:0; border-radius:16px; background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color:var(--ink); font-weight:800; font-size:15px; font-family:inherit; box-shadow: 0 10px 26px rgba(16,24,40,.18); display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer; }
 .route .rbot button.primary { background: linear-gradient(135deg, var(--grad-a), var(--grad-b)); color:#fff; flex:1.4; }
-.route .rbot button.round { flex:none; width:54px; }
+.route .rbot button.round { flex:none; width:54px; } .route .rbot button.round.sm { width:46px; font-size:17px; } /* v0.19.1: the two icon buttons stay narrow so "✋ Order" keeps its word */
 .stop-pin { position:relative; }
 .stop-pin .b { width:34px; height:34px; border-radius:50% 50% 50% 4px; transform: rotate(-45deg); display:grid; place-items:center; box-shadow: 0 6px 14px rgba(0,0,0,.28); border:2px solid #fff; }
 .stop-pin .b span { transform: rotate(45deg); color:#fff; font-weight:900; font-size:14px; font-family:var(--mono); }
@@ -448,7 +448,7 @@ body.desk .kpi::before { content:""; position:absolute; inset:-1px; border-radiu
 .now-i { display:flex; align-items:center; gap:10px; padding:10px 0 0; margin-top:10px; border-top:1px solid var(--line2); }
 .now-i .ic { font-size:20px; width:28px; text-align:center; flex:none; } .now-i .main { flex:1; min-width:0; }
 .now-i .t { font-weight:700; } .now-i .s { font-size:12px; color:var(--muted); }
-body:not(.desk) .now-i { flex-wrap:wrap; } body:not(.desk) .now-i .acts { flex-basis:100%; display:flex; gap:8px; margin:8px 0 0 38px; } body:not(.desk) .now-i .acts > * { flex:1; min-height:44px; white-space:nowrap; font-size:13px; } /* v0.11.2 (#8): buttons under the text instead of squeezing it */
+body:not(.desk) .now-i { flex-wrap:wrap; } body:not(.desk) .now-i .acts { flex:1 1 100%; max-width:calc(100% - 38px); min-width:0; display:flex; gap:8px; margin:8px 0 0 38px; } /* v0.19.1: 100% + the 38px indent ran off the card (the "Visit" button was cut) */ body:not(.desk) .now-i .acts > * { flex:1; min-height:44px; white-space:nowrap; font-size:13px; } /* v0.11.2 (#8): buttons under the text instead of squeezing it */
 .now-i.lv-bad .t { color:var(--bad); } .now-i.lv-warn .t { color: color-mix(in srgb, var(--warn) 70%, var(--ink)); }
 .now-i .acts { display:flex; gap:6px; flex:none; } .now-i .btn.small { margin:0; min-height:36px; padding:0 12px; text-decoration:none; display:inline-flex; align-items:center; }
 .minimap { height:230px; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:#0a1119; }
@@ -940,7 +940,7 @@ body.desk .drawer .btn { min-height:40px; font-size:15px; border-radius:10px; } 
 body.desk .drawer.full .dpage.scr-detail { column-count:2; column-gap:28px; }
 body.desk .drawer.full .dpage.scr-detail > * { break-inside:avoid; } body.desk .drawer.full .dpage.scr-detail > .sec { break-after:avoid; }
 body.desk .drawer #theForm .photo-btn { min-height:46px; padding:6px 10px; font-size:14px; } body.desk .drawer #theForm .photo-btn br { display:none; }
-.sg-row { gap:8px; align-items:center; margin-top:6px; } .sg-row input[type=number] { width:84px; } .sg-row input[type=text] { flex:1 1 auto; } /* v0.17.2 (6) */
+.sg-row { gap:8px; align-items:center; margin-top:6px; } .sg-row input[type=number] { width:84px; } .sg-row input[type=text] { flex:1 1 auto; min-width:0; } .sg-row .btn { flex:none; white-space:nowrap; } /* v0.17.2 (6) · v0.19.1: the "Next number" button no longer squashed */
 .photo-btn:only-child { flex:0 1 auto; padding-left:22px; padding-right:22px; } /* v0.17.2 (3): the computer's single "Choose photos" button is not stretched across the window */
 body.desk .drawer #theForm .hint { font-size:12px; }
 body.desk .drawer #theForm label { margin:10px 0 5px; } body.desk .drawer .dpage.scr-form > h1 { font-size:22px; margin:2px 0 2px; }
@@ -1032,3 +1032,6 @@ body.desk .drawer.full .dpage.scr-detail { margin-right:96px; } /* (1) the ⤢ �
 .pcal .pc-leg { margin:8px 0 4px; font-size:11.5px; } .pcal .pc-leg .sw { display:inline-block; width:14px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; border:1px solid var(--line); }
 .pcal .pc-leg .sw.off { background:repeating-linear-gradient(135deg, transparent, transparent 2px, color-mix(in srgb, var(--bad) 40%, transparent) 2px, color-mix(in srgb, var(--bad) 40%, transparent) 4px); }
 .pcal .pc-day { margin-top:12px; } .pcal .pc-dh { margin:2px 0 8px; font-size:17px; } .pcal .item.late .t { color:var(--bad); }
+
+/* v0.19.1: the customers table at 1440 px — one size down so every column fits without a sideways scroll */
+.cust-main .tbl { font-size:13px; } .cust-main .tbl td.mono { font-size:12px; } .cust-main .tbl td, .cust-main .tbl th { padding:8px 5px; }

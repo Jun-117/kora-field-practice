@@ -88,7 +88,7 @@ export function routeHtml() {
       <div class="rmode">${routeMode() === 'auto' ? `<span class="on">📡 Auto order · from where you are${me ? '' : ' (finding you…)'}</span><button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '✋ Your own order · tap the pins'}</button>` : `<span class="man">✋ Your own order</span><button data-act="rAuto">📡 Back to auto</button><button data-act="rPick" class="${picking ? 'on' : ''}">${picking ? `👆 ${picked.length} picked · done` : '👆 Tap pins to re-order'}</button>`}</div>
       ${st.noGps.length ? `<div class="rsum" style="font-size:12px;color:var(--muted)">📍 ${st.noGps.length} stop(s) without GPS — open the customer and tap “Get location” next visit</div>` : ''}
     </div>
-    <div class="rbot"><button data-act="rWards" class="${wardsR() ? 'on' : ''}" title="Ward lines and tole totals">▦</button><button data-act="rTomorrow" title="Tomorrow's homes — send the notice">📅</button><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext"><span class="nx">🧭 Next</span></button><button class="round" data-act="rMe" title="My location">📍</button></div>
+    <div class="rbot"><button data-act="rWards" class="round sm${wardsR() ? ' on' : ''}" title="Ward lines and tole totals">▦</button><button data-act="rTomorrow" class="round sm" title="Tomorrow's homes — send the notice">📅</button><button data-act="rList">✋ Order</button><button class="primary" data-act="rNext" id="rNext"><span class="nx">🧭 Next</span></button><button class="round" data-act="rMe" title="My location">📍</button></div>
   </div>`;
 }
 export async function mountRoute(root) {

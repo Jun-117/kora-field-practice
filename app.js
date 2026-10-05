@@ -9,7 +9,7 @@ import {
   serverTimestamp, Timestamp, waitForPendingWrites, terminate, clearIndexedDbPersistence,
   limit as qLimit, writeBatch, connectFirestoreEmulator, disableNetwork, enableNetwork } from './vendor/firebase-firestore.js';
 import { getStorage, ref as sRef, uploadString, getDownloadURL, deleteObject, getMetadata, connectStorageEmulator } from './vendor/firebase-storage.js';
-import { initializeAppCheck, ReCaptchaV3Provider } from './vendor/firebase-app-check.js'; /* v0.20.0 (C1) App Check */
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from './vendor/firebase-app-check.js'; /* v0.20.0 (C1) App Check · reCAPTCHA classic is deprecated in the console (10/5) → Fraud Defense (Enterprise) */
 import * as R from './logic.js';
 import { initLang, setLang, getLang, locale, langSegHtml, fmtDate, fmtTime } from './i18n.js';
 import * as G from './geo.js';
@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.20.0 (2026-10-05)';
+export const APP_VERSION = 'kf-v0.20.1 (2026-10-05)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -133,11 +133,11 @@ const storage = getStorage(app);
 // "this came from the real app on koracarenepal.com", so the public web key alone is no longer enough to talk to the project. The site key is
 // public by design (it is in the page anyway). Empty key = off (nothing changes) · demo / practice / emulator = off · the Firebase console decides
 // whether the token is ENFORCED (Jun flips it after the Phones page shows every device sending tokens — "unenforced" first, so nobody is locked out).
-export const APP_CHECK_SITE_KEY = ''; /* ← paste the reCAPTCHA v3 site key here (Firebase console → App Check → Web app → reCAPTCHA v3) */
+export const APP_CHECK_SITE_KEY = '6Leest8tAAAAACBZbfdQe7HysRtGkyWBuMOjNlpJ'; /* ← the reCAPTCHA (Fraud Defense / Enterprise) site key — Firebase console → App Check → Web app → Fraud Defense · public by design */
 export let appCheckState = 'off';
 if (APP_CHECK_SITE_KEY && !DEMO && !EMU) {
   try { if (['127.0.0.1', 'localhost'].includes(location.hostname)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; /* dev on this computer: a debug token (printed in the console once — register it in App Check → Manage debug tokens) */
-    initializeAppCheck(app, { provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY), isTokenAutoRefreshEnabled: true }); appCheckState = 'on'; }
+    initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY), isTokenAutoRefreshEnabled: true }); appCheckState = 'on'; }
   catch (e) { appCheckState = 'error:' + (e.code || e.message); }
 }
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); connectStorageEmulator(storage, '127.0.0.1', 9199); }

@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.20.1 (2026-10-05)';
+export const APP_VERSION = 'kf-v0.20.2 (2026-10-05)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -3305,7 +3305,7 @@ async function fillDiag() {
   const j = myJournal();
   el.textContent = [`version: ${APP_VERSION}${DEMO ? ' · DEMO' : ''}`, `user: ${S.user.email}${S.isAdmin ? ` · role ${S.role}` : ''} · name ${myName()}`,
     `standalone: ${!!(navigator.standalone || matchMedia('(display-mode: standalone)').matches)} · desk: ${S.desk}`,
-    `online: ${navigator.onLine} · persisted: ${persisted} · storage: ${est}`, `firestore cache db: ${fsIdb} · journal ok: ${S.storageOk}`,
+    `online: ${navigator.onLine} · persisted: ${persisted} · storage: ${est}`, `firestore cache db: ${fsIdb} · journal ok: ${S.storageOk}`, `appCheck: ${appCheckState} · perf: model ${S.perfModel || 0} ms · draw ${S.perfRender || 0} ms`, /* v0.20.2 Jun 10/5 "appcheck 열 어디서 캡쳐": here, no desk needed */
     COLS.map((c) => `${c} ${S.D[c].size}`).join(' · '), `journal: pending ${j.filter((e) => e.state === 'pending').length} · refused ${j.filter((e) => e.state === 'rejected').length} · done ${j.filter((e) => e.state === 'done').length}`,
     `last server: ${S.lastServer ? new Date(S.lastServer).toISOString() : '-'} · listen error: ${S.listenErr || '-'}`, `ua: ${navigator.userAgent}`].join('\n');
 }

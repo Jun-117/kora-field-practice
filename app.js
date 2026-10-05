@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.20.7 (2026-10-05)';
+export const APP_VERSION = 'kf-v0.20.8 (2026-10-05)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -393,8 +393,20 @@ export function auditDiff(prev, data) {
   return fields.length ? { fields: fields.slice(0, 60), before, after } : null;
 }
 function auditLog(col, docId, prev, data) {
-  if (col === 'audit' || col === 'photos') return; const d = auditDiff(prev || {}, data); if (!d) return;
-  save(`audit/${newId('audit')}`, { col, docId, customerId: (prev && prev.customerId) || data.customerId || (col === 'customers' ? docId : ''), ...d, by: myName(), at: new Date().toISOString() }, true);
+  if (col === 'audit' || col === 'photos' || col === 'devices') return; const d = auditDiff(prev || {}, data); if (!d) return;
+  const kind = d.fields.includes('approval') && data.approval && data.approval !== 'Pending' ? 'approve' : 'edit'; /* v0.20.8 (7b): an OK / a refusal of money is its own kind */
+  save(`audit/${newId('audit')}`, { col, docId, customerId: (prev && prev.customerId) || data.customerId || (col === 'customers' ? docId : ''), ...d, kind, by: myName(), at: new Date().toISOString() }, true);
+}
+// v0.20.8 (7b) Jun 10/5 "변경기록 모든 사항들 다 넣게": a new record leaves one entry too (what was made, in one line), a sign-in one per session
+const AUDIT_SUM = ['code', 'name', 'serial', 'amount', 'type', 'visitType', 'kind', 'status', 'outcome', 'category', 'title', 'date'];
+export const auditSummary = (col, data) => AUDIT_SUM.filter((k) => data[k] !== undefined && data[k] !== null && data[k] !== '').map((k) => k === 'amount' ? R.npr(data[k]) : String(data[k])).join(' · ').slice(0, 120);
+function auditNew(col, docId, data) {
+  if (!data || ['audit', 'photos', 'devices', 'settings', 'milestones'].includes(col)) return;
+  save(`audit/${newId('audit')}`, { col, docId, customerId: data.customerId || (col === 'customers' ? docId : ''), fields: ['created'], before: {}, after: { created: auditSummary(col, data) || col }, kind: 'new', by: myName(), at: new Date().toISOString() }, true);
+}
+function auditLogin() {
+  if (DEMO || EMU || !S.user || !(S.role === 'staff' || S.role === 'admin')) return; const k = 'kfp_login_logged_' + S.user.uid; try { if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, '1'); } catch (e) { return; }
+  save(`audit/${newId('audit')}`, { col: 'login', docId: S.user.uid, customerId: '', fields: ['login'], before: {}, after: { login: `${myName()} · ${S.desk ? 'desk' : 'phone'} · ${APP_VERSION}` }, kind: 'login', by: myName(), at: new Date().toISOString() }, true);
 }
 // v0.18.2 (B1) Jun 10/4 "1000가구,2000가구여도 끄떡없게": every record that belongs to a customer carries live:true; once the customer has left AND the
 // recovery case is closed (or 60 days passed), the desk flips them to live:false → staff phones stop downloading them (their query = live == true).
@@ -404,7 +416,7 @@ export function save(path, data, isNew, img) {
   const parts = path.split('/'); const id = parts[parts.length - 1]; const col = parts[0];
   if (isNew && parts.length === 2) data = stampPlace(col, data);
   if (parts.length === 2 && LIVE_COLS.has(col) && data && !('live' in data)) { const cid = data.customerId || (S.D[col].get(id) || {}).customerId; const c = cid && S.D.customers.get(cid); data = { ...data, live: !(c && c.status === 'Churned' && col !== 'recoveries') }; } /* a recovery case of a churned home stays live until it is closed */
-  if (!isNew && parts.length === 2 && S.D[col] && S.D[col].has(id)) auditLog(col, id, S.D[col].get(id), data);
+  if (!isNew && parts.length === 2 && S.D[col] && S.D[col].has(id)) auditLog(col, id, S.D[col].get(id), data); else if (isNew && parts.length === 2 && S.D[col]) auditNew(col, id, data);
   const e = { key: path, path, id, data, isNew, uid: S.user.uid, state: 'practice', t: Date.now(), err: '', photo: !!img };
   const ok = jPut(e);
   if (img) photoPut(id, img);
@@ -471,6 +483,9 @@ export async function liveSweep(force) {
 const toObj = (d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }), _pending: d.metadata.hasPendingWrites });
 const sinceKey = (col) => `kfp_since_${S.user.uid}_${col}`;
 export const AUDIT_DAYS = 90;
+export async function auditAll() { /* v0.20.8 (7b): every slice back to the first entry (2026-09) — for the search box */
+  let n = 0; for (let i = 0; i < 24; i++) { const got = await auditOlder(); n += got; if (S.auditFloor < Date.parse('2026-09-01')) break; } return n;
+}
 export async function auditOlder() { /* v0.18.1 (B4): one more 90-day slice of the change log from the server (into memory for this session) */
   const to = S.auditFloor || Date.now() - AUDIT_DAYS * 864e5; const from = to - AUDIT_DAYS * 864e5;
   const snap = await getDocs(query(collection(db, 'audit'), where('updatedAt', '>', Timestamp.fromMillis(from)), where('updatedAt', '<=', Timestamp.fromMillis(to))));
@@ -650,7 +665,7 @@ onAuthStateChanged(auth, async (user) => {
   S.profile = lsGet('kfp_prof_' + user.uid, {}); S.isDeputy = !S.isAdmin && !!(S.profile && S.profile.role === 'staff' && S.profile.deputy === true);
   render();
   await refreshRole();
-  if (S.role === 'staff' || S.role === 'admin') { await startData(false); reconcile(false); startHeartbeat(); }
+  if (S.role === 'staff' || S.role === 'admin') { await startData(false); reconcile(false); startHeartbeat(); auditLogin(); }
   render();
 });
 async function refreshRole() {
@@ -2417,7 +2432,7 @@ export async function deleteCustomer(id) {
   }
   for (const p of refs) { const [col, did] = p.split('/'); if (S.D[col]) S.D[col].delete(did); }
   const keep = []; for (const e of jLoad()) { const d = e.data || {}; if (d.customerId === id || e.path === `customers/${id}` || String(e.path || '').startsWith(`customers/${id}/`)) { if (e.photo) photoDel(e.id); } else keep.push(e); } jSave(keep); /* a copy still waiting to be sent would bring them back */
-  save(`audit/${newId('audit')}`, { col: 'customers', docId: id, customerId: '', fields: ['deleted'], before: { deleted: `${x.code || ''} ${x.name || ''}`.trim() }, after: { deleted: `${refs.length} records` }, by: myName(), at: new Date().toISOString() }, true);
+  save(`audit/${newId('audit')}`, { col: 'customers', docId: id, customerId: '', fields: ['deleted'], before: { deleted: `${x.code || ''} ${x.name || ''}`.trim() }, after: { deleted: `${refs.length} records` }, kind: 'delete', by: myName(), at: new Date().toISOString() }, true);
   bump(); return { ok: true, n: refs.length };
 }
 function delAsk(id) {
@@ -2460,7 +2475,7 @@ export const rcCacheKeys = () => [...RC_CACHE.keys()];
 const CARDS_SENT = 'kfp_cards_sent';
 export function cardsSent() { try { const v = JSON.parse(localStorage.getItem(CARDS_SENT) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } }
 export function markCardSent(key, on) {
-  const s = cardsSent(); if (on) s[key] = today(); else delete s[key];
+  const s = cardsSent(); if (on) s[key] = today(); else delete s[key]; /* the value = the day it was marked (v0.20.8: shown in the "N sent" list) */
   const cut = R.addDays(today(), -60); for (const k of Object.keys(s)) if (!R.isDate(s[k]) || s[k] < cut) delete s[k];
   try { localStorage.setItem(CARDS_SENT, JSON.stringify(s)); } catch (e) {}
   return !!s[key];
@@ -2489,9 +2504,10 @@ function syncSentUi(key, on) { /* in place — re-rendering the modal would drop
   for (const b of document.querySelectorAll('#rcBox [data-act="cardSent"]')) if (b.dataset.key === key) { b.textContent = sentLabel(on); b.classList.toggle('on', !!on); }
   if (on) {
     let gone = 0; for (const r of document.querySelectorAll('[data-cardrow]')) if (r.dataset.cardrow === key) { r.remove(); gone++; }
-    const sp = document.querySelector('[data-cards-sent]'); if (gone && sp) { const k = (Number(sp.dataset.cardsSent) || 0) + 1; sp.dataset.cardsSent = String(k); sp.textContent = `${k} sent`; }
+    const sp = document.querySelector('[data-cards-sent]'); if (gone && sp) { const k = (Number(sp.dataset.cardsSent) || 0) + 1; sp.dataset.cardsSent = String(k); sp.textContent = `${k} sent${sp.tagName === 'BUTTON' ? ' ▾' : ''}`; }
     csLayout();
-  } else S.staleDesk = true; /* un-marked in the card window: the row comes back when the window closes and the desk redraws */
+  } else if (document.querySelector('.cs-sentlist:not(.hidden)') && !document.querySelector('#rcBox')) render(false); /* v0.20.8 (5): un-marked in the "N sent" list → the desk redraws now (the row is back in "to send") */
+  else S.staleDesk = true; /* un-marked in the card window: the row comes back when the window closes and the desk redraws */
 }
 async function cardSpec(kind, id) {
   const co = { name: S.settings.coName || 'Kora Care Private Limited', nameNe: S.settings.coNameNe || '', pan: S.settings.coPan || '', ward: S.settings.coAddress || 'Pokhara-13', phone: S.settings.coPhone || '', bankLine: S.settings.coBankLine || '' };
@@ -3072,7 +3088,7 @@ export function viewReport(p) {
 // Missing data that breaks reports or slows the field (plan: data you can trust before PoC numbers are read).
 export function dataQuality(m) {
   const since = R.addDays(m.t, -120);
-  const live = [...m.cust.values()].filter((x) => x.status !== 'Churned');
+  const live = [...m.cust.values()].filter((x) => x.status !== 'Churned' && (x.c.name || x.c.code)); /* v0.20.8 (6) Jun 10/5 "고객없는데 버그": a record with neither name nor code is a broken stub, not a home to fix */
   return [
     { k: 'gps', ic: '📍', t: 'Houses without GPS', why: 'no pin on the map, no route, no directions', xs: live.filter((x) => !(x.c.gps && Number.isFinite(x.c.gps.lat))).map((x) => ({ id: x.c.id, t: x.c.name, s: toleOf(x.c) })) },
     { k: 'house', ic: '🏠', t: 'No “how to find the house”', why: 'new technicians get lost', xs: live.filter((x) => !String(x.c.houseDetail || '').trim()).map((x) => ({ id: x.c.id, t: x.c.name, s: toleOf(x.c) })) },
@@ -3102,16 +3118,16 @@ const DEV_PILL = { 'In stock': 'ok', 'At a customer': 'blue', 'Back — check it
 export function devicesHtml(m, p) {
   const f = p.f || 'all'; const q = String(p.q || '').toUpperCase();
   const counts = Object.fromEntries(R.DEVICE_STATES.map((st) => [st, m.devices.filter((d) => d.status === st).length]));
-  let list = m.devices; if (f !== 'all') list = list.filter((d) => d.status === f); if (q) list = list.filter((d) => d.serial.includes(q));
+  let list = m.devices; if (f === 'check') list = list.filter((d) => d.checkDue); else if (f !== 'all') list = list.filter((d) => d.status === f); if (q) list = list.filter((d) => d.serial.includes(q)); /* v0.20.8 (7a): "check" = the ones not inspected yet */
   const cname = (id) => { const c = S.D.customers.get(id); return c ? c.name : ''; };
   const checks = m.devices.filter((d) => d.checkDue); const doa = m.devices.filter((d) => d.doaUntil && d.doaUntil >= m.t && d.status === 'At a customer');
   return `<div class="bs-chips"><button data-devf="all" class="${f === 'all' ? 'on' : ''}">All ${m.devices.length}</button>${R.DEVICE_STATES.map((st) => `<button data-devf="${esc(st)}" class="${f === st ? 'on' : ''}">${esc(st)} ${counts[st]}</button>`).join('')}</div>
-    ${checks.length ? `<div class="warn">📦 ${checks.length} device(s) not checked yet — PI terms: inspect within 14 days of arrival (${esc(checks.map((d) => d.checkDue).sort()[0])} is the first deadline).</div>` : ''}
+    ${checks.length ? `<button type="button" class="warn link" data-devf="check">📦 ${checks.length} device(s) not checked yet — PI terms: inspect within 14 days of arrival (${esc(checks.map((d) => d.checkDue).sort()[0])} is the first deadline). <b>${f === 'check' ? '▾ shown below' : '› show them'}</b></button>` : ''}
     ${doa.length ? `<div class="muted">🛡️ ${doa.length} installed device(s) still inside the 30-day dead-on-arrival claim window.</div>` : ''}
     <div class="muted"><span>Stock by count (stock movements):</span> <b>${m.metrics.stock.Device ?? 0}</b> · <span>In stock by serial:</span> <b>${counts['In stock']}</b>${(m.metrics.stock.Device ?? 0) !== counts['In stock'] ? ' <span>— different: register the serials of the shipment (Device event → Received).</span>' : ''}</div>
     ${can('stock') ? '<button class="btn" data-go-form="device">📦 Device event (arrival · check · refurbish)</button>' : ''}
-    <div class="card scroll-x"><table class="tbl"><tr><th>Serial</th><th>Now</th><th>Location</th><th>Last</th><th class="n">Installs</th><th>Batch</th></tr>
-      ${list.slice(0, 400).map((d) => `<tr data-report="device" data-serial="${esc(d.serial)}" style="cursor:pointer"><td class="mono"><b>${esc(d.serial)}</b></td><td><span class="pill ${DEV_PILL[d.status] || 'grey'}">${esc(d.status)}</span></td><td>${d.customerId ? esc(cname(d.customerId)) : '—'}</td><td>${esc(d.last.event)} · ${esc(d.last.date || '')}</td><td class="n">${d.installs}</td><td class="mono">${esc(d.batch)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No devices yet</td></tr>'}</table></div>`;
+    <div class="card scroll-x"><table class="tbl"><tr><th>Serial</th><th>Now</th><th>Location</th><th>Last</th>${f === 'check' ? '<th>Check by</th><th></th>' : ''}<th class="n">Installs</th><th>Batch</th></tr>
+      ${list.slice(0, 400).map((d) => `<tr data-report="device" data-serial="${esc(d.serial)}" style="cursor:pointer"><td class="mono"><b>${esc(d.serial)}</b></td><td><span class="pill ${DEV_PILL[d.status] || 'grey'}">${esc(d.status)}</span></td><td>${d.customerId ? esc(cname(d.customerId)) : '—'}</td><td>${esc(d.last.event)} · ${esc(d.last.date || '')}</td>${f === 'check' ? `<td class="mono"${d.checkDue < m.t ? ' style="color:var(--bad)"' : ''}>${esc(d.checkDue || '')}</td><td>${can('stock') ? `<button class="btn small" data-go-form="device" data-serial="${esc(d.serial)}" data-kind="Arrival check OK">🔍 Check</button>` : ''}</td>` : ''}<td class="n">${d.installs}</td><td class="mono">${esc(d.batch)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No devices yet</td></tr>'}</table></div>`;
 }
 export function deviceHtml(m, p) {
   const s2 = R.normSerial(p.serial); const d = m.devices.find((x) => x.serial === s2);
@@ -3502,6 +3518,9 @@ document.addEventListener('click', async (ev) => {
     if (!copied) { const dl = document.createElement('a'); dl.href = S.rcUrl; dl.download = S.rcName || 'kora-card.png'; document.body.appendChild(dl); dl.click(); dl.remove(); }
     toast(!w ? 'Pop-up blocked — allow pop-ups for this site, then tap again' : DEMO ? 'Practice: made-up numbers, so no chat was opened' : copied ? '📋 Copied · in the chat press ⌘V, then send' : '⬇️ Saved · drag the picture into the chat'); }
   else if (act === 'cardOpen') { ev.preventDefault(); const k = a.dataset.kind, id = a.dataset.id, cid = a.dataset.cid; if (!k || !id || !cid) return; nav('customers', 'detail', k === 'receipt' ? { id: cid, receipt: id } : k === 'visit' ? { id: cid, vrep: id } : { id: cid, inst: cid }); setTimeout(() => imageCard(k, id), 450); } /* ⑥ from the desk list: the home opens with the card drawn */
+  else if (act === 'cardsSentList') { ev.preventDefault(); const L = document.querySelector('.cs-sentlist'); if (!L) return; if (!L.classList.contains('hidden')) { L.classList.add('hidden'); return; } /* v0.20.8 (5) Jun 10/5 "[보냄 1] 누르면 보낸거 나오게": the sent ones, newest first, each with the day + a button to un-mark */
+    const sent = cardsSent(); const xs = deskMod && deskMod.cardsToSend ? deskMod.cardsToSend(model(), 1).filter((e) => e.sent).sort((a2, b2) => String(sent[b2.key] || '').localeCompare(String(sent[a2.key] || ''))) : [];
+    L.innerHTML = xs.length ? `<div class="muted" style="margin-bottom:6px">✓ <span>Sent from this computer</span> · ${xs.length}</div>` + xs.map((e, i) => deskMod.cardRowHtml({ ...e, what: `${e.what} · ✓ ${sent[e.key] === today() ? 'today' : sent[e.key] || ''}` }, i).replace('class="item cs-i', 'class="item cs-s').replace('✓ Sent</button>', '↩ Not sent</button>')).join('') : '<div class="empty">Nothing marked as sent yet</div>'; L.classList.remove('hidden'); }
   else if (act === 'cardsMore') { ev.preventDefault(); const L = document.querySelector('.cs-list'); if (L) { if (deskMod && deskMod.cardsToSend) { const have = new Set([...L.querySelectorAll('.cs-i')].map((r) => r.dataset.cardrow)); const more = deskMod.cardsToSend(model(), 1).filter((e) => !e.sent && !have.has(e.key)); L.insertAdjacentHTML('beforeend', more.map((e, i) => deskMod.cardRowHtml(e, i + have.size)).join('')); } L.classList.add('cs-open'); csLayout(); } } /* v0.16.0 (7) · v0.18.1 (B5): the rows beyond 8 are built only now */
   else if (act === 'cardSent') { ev.preventDefault(); const k = a.dataset.key; if (!k) return; const on = markCardSent(k, !cardsSent()[k]); syncSentUi(k, on); toast(on ? '✓ Marked as sent' : 'Marked as not sent'); } /* ⑥ */
   else if (act === 'demoWho') { if (DEMO) demoWho(); }
@@ -3719,7 +3738,7 @@ function practiceReplay() {
   for (const e of jLoad().slice().sort((a, b) => a.t - b.t)) {
     const parts = String(e.path || '').split('/'); if (parts.length !== 2) continue; const [col, id] = parts;
     if (col === 'settings') { S.settings = { ...S.settings, ...e.data }; if (e.data.bsOverride) B.setOverrides(S.settings.bsOverride); continue; }
-    if (!S.D[col]) continue; const prev = S.D[col].get(id) || {};
+    if (!S.D[col]) continue; if (!e.isNew && !S.D[col].has(id)) continue; /* v0.20.8 (6): an edit of a record that is not in this world any more would make a nameless stub */ const prev = S.D[col].get(id) || {};
     S.D[col].set(id, { ...prev, ...e.data, id, createdBy: prev.createdBy || e.uid, updatedBy: e.uid, _localT: e.t });
   }
 }

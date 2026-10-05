@@ -4,7 +4,7 @@ import * as R from './logic.js';
 import * as B from './bs.js';
 import { langSegHtml, fmtDate, fmtTime, getLang, setLang } from './i18n.js';
 import { loadLeaflet, MAP_OPTS, TILE, POKHARA, addLocate, hereIfAllowed, drawMe, hereNow } from './geo.js';
-import { modelStamp, AUDIT_DAYS, auditOlder, MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem, cardsSent, fieldLabel } from './app.js';
+import { modelStamp, AUDIT_DAYS, auditOlder, auditAll, MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem, cardsSent, fieldLabel } from './app.js';
 import * as CA from './capack.js';
 import * as CAL from './cal.js';
 import * as SIM from './sim.js';
@@ -352,7 +352,7 @@ export function cardsToSend(m, days = 1) { /* v0.16.0 (7) Jun 10/3 "보낼 카�
 function cardsPanel(m) { /* v0.16.0 (7): only what is still to send · sent ones = a count · 8 rows, the rest behind "+N more" */
   const xs = cardsToSend(m, 1), todo = xs.filter((e) => !e.sent), sentN = xs.length - todo.length;
   const row = cardRowHtml;
-  return panel('s12', 6, '<b>📨 Cards to send</b> · today + yesterday', `<div class="mini-list cs-list" data-cs-total="${todo.length}">${todo.slice(0, 8).map(row).join('') || '<div class="empty">Nothing to send</div>'}</div>${todo.length > 8 ? `<button class="btn small ghost cs-morebtn" data-act="cardsMore">+${todo.length - 8} more</button>` : ''}<div class="sub muted" style="margin-top:6px">Sent marks are kept on this computer only</div>`, `<span class="pill ${todo.length ? 'warn' : 'ok'}" data-cards-todo>${todo.length} to send</span> <span class="pill grey" data-cards-sent="${sentN}">${sentN} sent</span>`);
+  return panel('s12', 6, '<b>📨 Cards to send</b> · today + yesterday', `<div class="mini-list cs-list" data-cs-total="${todo.length}">${todo.slice(0, 8).map(row).join('') || '<div class="empty">Nothing to send</div>'}</div>${todo.length > 8 ? `<button class="btn small ghost cs-morebtn" data-act="cardsMore">+${todo.length - 8} more</button>` : ''}<div class="cs-sentlist hidden"></div><div class="sub muted" style="margin-top:6px">Sent marks are kept on this computer only</div>`, `<span class="pill ${todo.length ? 'warn' : 'ok'}" data-cards-todo>${todo.length} to send</span> <button type="button" class="pill grey" data-cards-sent="${sentN}" data-act="cardsSentList" title="Show the sent ones" style="cursor:pointer">${sentN} sent ▾</button>`);
 }
 function pageCommand(m) {
   const M = m.metrics, t = m.t;
@@ -962,7 +962,8 @@ document.addEventListener('change', (ev) => {
   if (ev.target.id === 'dUntil') { duntil = ev.target.value || duntil; return; }
   const ho = ev.target.closest('[data-handover]'); if (ho && ho.value) { const m = model(); const from = ho.dataset.handover; const ids = [...m.cust.values()].filter((x) => R.assigneeOf(x.c, m.t) === from && (m.visitsDue.some((y) => y.c.id === x.c.id) || m.calls.some((y) => y.c.id === x.c.id) || m.openReq.some((o) => o.c && o.c.c.id === x.c.id) || (x.dn && x.dn.stage === 'visit'))).map((x) => x.c.id); dispatchApply(ids, ho.value, 'today'); reDesk(); }
 });
-document.addEventListener('input', (ev) => {
+document.addEventListener('input', (ev) => { /* v0.20.8 (7b): the change-log search filters the rows in place */
+  if (ev.target && ev.target.id === 'chgQ') { const q = ev.target.value.trim().toLowerCase(); const rows = [...document.querySelectorAll('#deskPage tr[data-chg]')]; let n = 0; for (const r of rows) { const hit = !q || q.split(/\s+/).every((w) => r.dataset.s.includes(w)); r.classList.toggle('hidden', !hit); if (hit) n++; } const c = document.getElementById('chgQn'); if (c) c.textContent = q ? `${n} / ${rows.length}` : ''; if (S.route.params) S.route.params.q = q; return; }
   const k = ev.target.dataset && ev.target.dataset.wi; if (!k || !S.desk || !wi) return;
   wi[k] = Number(ev.target.value); const v = document.getElementById('wiv_' + k); if (v) v.textContent = wiFmt(wi[k]);
   clearTimeout(wiOut._t); wiOut._t = setTimeout(() => { const o = document.getElementById('wiOut'); if (o) o.innerHTML = wiOut(model()); }, 60);
@@ -1173,7 +1174,8 @@ function stockLines(plan, t, weeks = 39, w = 900, h = 250) {
 }
 
 // ---------- 🕵️ change log (v0.8 security): who changed what — append-only, admin only ----------
-const AUDIT_COL = { customers: '👤 Customer', payments: '💵 Payment', visits: '🔧 Visit', recoveries: '📦 Recovery', requests: '📋 Request', leads: '🧲 Lead', relocations: '🚚 Relocation', expenses: '🧾 Expense', checkins: '📞 Call', stockMoves: '📦 Stock', deviceEvents: '📦 Device', contractEvents: '📜 Contract', screenings: '🔎 Screening', claims: '📮 Claim', tools: '🧰 Tool', payroll: '💼 Payroll', waterTests: '🧫 Vial', events: '🗓️ Event', trainings: '🎓 Training', settings: '⚙️ Settings' };
+const AUDIT_KIND = { new: ['🆕', 'New'], edit: ['✏️', 'Edit'], delete: ['🗑️', 'Deleted'], approve: ['✅', 'Approval'], login: ['🔑', 'Sign-in'] }; /* v0.20.8 (7b) */
+const AUDIT_COL = { login: '🔑 Sign-in', customers: '👤 Customer', payments: '💵 Payment', visits: '🔧 Visit', recoveries: '📦 Recovery', requests: '📋 Request', leads: '🧲 Lead', relocations: '🚚 Relocation', expenses: '🧾 Expense', checkins: '📞 Call', stockMoves: '📦 Stock', deviceEvents: '📦 Device', contractEvents: '📜 Contract', screenings: '🔎 Screening', claims: '📮 Claim', tools: '🧰 Tool', payroll: '💼 Payroll', waterTests: '🧫 Vial', events: '🗓️ Event', trainings: '🎓 Training', settings: '⚙️ Settings' };
 const MONEY_FIELDS = new Set(['amount', 'discount', 'depositRefunded', 'depositForfeited', 'approval', 'status', 'churnDate', 'type', 'customerId', 'perms', 'apprDiscountOver', 'apprRefundOver', 'apprWho']);
 const auditAt = (a) => (a.createdAt && a.createdAt.toMillis ? new Date(a.createdAt.toMillis()).toISOString() : String(a.at || '')); // server time; own unsent entries: the phone's
 const auditBy = (a) => userName(a.createdBy, a.createdBy ? '' : a.by); // the account that wrote it — the "by" text inside is not trusted
@@ -1181,22 +1183,25 @@ const chgV = (f, v) => { const s = String(v ?? ''); if (!s) return '—'; const 
 function pageChanges(m) {
   ensureUsers(() => reDesk());
   const p = S.route.params || {}; const all = (m.D.audit || []).map((a) => ({ ...a, by: auditBy(a), at: auditAt(a) })).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
-  const xs = all.filter((a) => (!p.ac || a.col === p.ac) && (!p.aw || a.by === p.aw));
+  const xs = all.filter((a) => (!p.ac || a.col === p.ac) && (!p.aw || a.by === p.aw) && (!p.ak || kindOf(a) === p.ak));
   const cols = [...new Set(all.map((a) => a.col))]; const who = [...new Set(all.map((a) => a.by || '—'))];
   const seg = (key, val, label, n) => `<button data-${key}="${esc(val)}" class="${(p[key] || '') === val ? 'on' : ''}">${esc(label)}${n !== undefined ? ` <b>${n}</b>` : ''}</button>`;
-  const cn = (id) => { const c = S.D.customers.get(id); return c ? `${c.name} (${c.code})` : ''; };
+  const cn = (id) => { const c = S.D.customers.get(id); return c ? [c.name, c.code ? `(${c.code})` : ''].filter(Boolean).join(' ') || `home ${String(id).slice(-6)}` : 'home no longer here'; }; /* v0.20.8: never "undefined (undefined)" */
+  const kindOf = (a) => a.kind || ((a.fields || [])[0] === 'deleted' ? 'delete' : 'edit'); const kinds = ['new', 'edit', 'approve', 'delete', 'login'].filter((k) => all.some((a) => kindOf(a) === k));
   const money = all.filter((a) => (a.fields || []).some((f) => MONEY_FIELDS.has(f))).length;
   return `<div class="cc">
-    ${panel('s3 kpi', 0, '<b>Changes</b> · all', `<div class="v">${all.length}</div><div class="sub"><span>edits of saved records</span></div>`)}
+    ${panel('s3 kpi', 0, '<b>Changes</b> · all', `<div class="v">${all.length}</div><div class="sub"><span>new · edits · deletions · approvals · sign-ins</span></div>`)}
     ${panel('s3 kpi', 1, '<b>Money & status</b>', `<div class="v" style="color:${money ? 'var(--warn)' : 'inherit'}">${money}</div><div class="sub"><span>amount · discount · refund · status · rights</span></div>`)}
     ${panel('s3 kpi', 2, '<b>People</b>', `<div class="v">${who.length}</div>`)}
     ${panel('s3 kpi', 3, '<b>Last change</b>', `<div class="v" style="font-size:20px">${esc(String((all[0] || {}).at || '—').slice(0, 16).replace('T', ' '))}</div>`)}
-    ${panel('s12', 4, `<b>Change log</b> · ${xs.length} <span class="muted">· since ${esc(new Date(S.auditFloor || Date.now() - AUDIT_DAYS * 864e5).toISOString().slice(0, 10))}</span> <button class="btn small ghost" data-act="auditOlder" style="margin-left:8px">⏮ Load 90 days more</button>`, `<div class="seg">${seg('ac', '', 'Everything', all.length)}${cols.map((c) => seg('ac', c, (AUDIT_COL[c] || c).replace(/^\S+ /, ''), all.filter((a) => a.col === c).length)).join('')}</div>
+    ${panel('s12', 4, `<b>Change log</b> · ${xs.length} <span class="muted">· since ${esc(new Date(S.auditFloor || Date.now() - AUDIT_DAYS * 864e5).toISOString().slice(0, 10))}</span> <button class="btn small ghost" data-act="auditOlder" style="margin-left:8px">⏮ Load 90 days more</button> <button class="btn small ghost" data-act="auditAll">⏮⏮ Load everything</button>`, `<div class="chg-q">🔎 <input id="chgQ" type="search" placeholder="Search: name · code · field · value · who" value="${esc(p.q || '')}" autocomplete="off"><span class="muted" id="chgQn"></span></div>
+      <div class="seg">${seg('ak', '', 'All kinds')}${kinds.map((k) => seg('ak', k, `${AUDIT_KIND[k][0]} ${AUDIT_KIND[k][1]}`, all.filter((a) => kindOf(a) === k).length)).join('')}</div>
+      <div class="seg">${seg('ac', '', 'Everything', all.length)}${cols.map((c) => seg('ac', c, (AUDIT_COL[c] || c).replace(/^\S+ /, ''), all.filter((a) => a.col === c).length)).join('')}</div>
       <div class="seg">${seg('aw', '', 'Everyone')}${who.map((w) => seg('aw', w, w)).join('')}</div>
       <div class="scroll-x"><table class="tbl chg"><tr><th>When</th><th>Who</th><th>What</th><th>Changed</th></tr>
-      ${xs.slice(0, 300).map((a) => `<tr${a.customerId ? ` data-cust="${esc(a.customerId)}" style="cursor:pointer"` : ''}><td class="mono">${esc(String(a.at || '').slice(0, 16).replace('T', ' '))}</td><td>${esc(a.by || '—')}</td><td>${esc(AUDIT_COL[a.col] || a.col)}${a.customerId ? `<div class="muted">${esc(cn(a.customerId))}</div>` : ''}</td>
-        <td>${(a.fields || []).map((f) => `<div class="${MONEY_FIELDS.has(f) ? 'chg-money' : ''}"><b>${esc(fieldLabel(a.col, f))}</b>: <span data-noi18n><span class="muted">${esc(chgV(f, (a.before || {})[f]))}</span> → ${esc(chgV(f, (a.after || {})[f]))}</span></div>`).join('')}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No edits yet — new records are not listed, only changes to saved ones.</td></tr>'}</table></div>`)}
-    <div class="panel s12 muted" style="--i:5">Every edit of a saved record (and of Settings) writes one entry: who, when, and each field before → after. Entries cannot be changed or deleted (rules v0.8), and only you can read them. New records are not listed — they carry who made them.</div>
+      ${xs.slice(0, 500).map((a) => `<tr data-chg="1" data-s="${esc([a.at, a.by, AUDIT_COL[a.col] || a.col, a.customerId ? cn(a.customerId) : '', AUDIT_KIND[kindOf(a)] ? AUDIT_KIND[kindOf(a)][1] : '', ...(a.fields || []).flatMap((f) => [fieldLabel(a.col, f), (a.before || {})[f], (a.after || {})[f]])].join(' ').toLowerCase())}"${a.customerId ? ` data-cust="${esc(a.customerId)}" style="cursor:pointer"` : ''}><td class="mono">${esc(String(a.at || '').slice(0, 16).replace('T', ' '))}</td><td>${esc(a.by || '—')}</td><td><span class="chg-kind" title="${esc((AUDIT_KIND[kindOf(a)] || [])[1] || '')}">${(AUDIT_KIND[kindOf(a)] || ['✏️'])[0]}</span> ${esc(AUDIT_COL[a.col] || a.col)}${a.customerId ? `<div class="muted">${esc(cn(a.customerId))}</div>` : ''}</td>
+        <td>${(a.fields || []).map((f) => `<div class="${MONEY_FIELDS.has(f) ? 'chg-money' : ''}"><b>${esc(fieldLabel(a.col, f))}</b>: <span data-noi18n>${kindOf(a) === 'new' || kindOf(a) === 'login' ? esc(chgV(f, (a.after || {})[f])) : `<span class="muted">${esc(chgV(f, (a.before || {})[f]))}</span> → ${esc(chgV(f, (a.after || {})[f]))}`}</span></div>`).join('')}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nothing in this period yet.</td></tr>'}</table></div>`)}
+    <div class="panel s12 muted" style="--i:5">Every new record, every edit of a saved one (each field before → after), every deletion, every money approval and every sign-in writes one entry: who and when. Entries cannot be changed or deleted (rules v0.8), and only you can read them. Records made before v0.20.8 (2026-10-05) have no “new” entry — only their edits.</div>
   </div>`;
 }
 
@@ -1410,6 +1415,7 @@ document.addEventListener('click', (ev) => {
   if (!S.desk) return;
   const box = document.getElementById('deskSearchRes'); if (box && !ev.target.closest('#deskSearchRes') && ev.target.id !== 'deskSearch') box.classList.add('hidden');
   const mb = ev.target.closest('[data-msboard]'); if (mb) { S.route.params.b = mb.dataset.msboard; reDesk(); return; } /* v0.15 board tabs */
+  const aa = ev.target.closest('[data-act="auditAll"]'); if (aa) { ev.preventDefault(); aa.disabled = true; aa.textContent = '⏳ loading…'; auditAll().then((n) => { toast(`⏮⏮ ${n} older change(s) loaded — everything is here now`); reDesk(); }).catch((e) => { toast('Could not load: ' + (e.code || e.message)); reDesk(); }); return; }
   const ao = ev.target.closest('[data-act="auditOlder"]'); if (ao) { ev.preventDefault(); ao.disabled = true; auditOlder().then((n) => { toast(`⏮ ${n} older change(s) loaded`); reDesk(); }).catch((e) => { toast('Could not load: ' + (e.code || e.message)); ao.disabled = false; }); return; } /* v0.18.1 (B4) */
   const mk2 = ev.target.closest('[data-mkind]'); if (mk2) { const k = mk2.dataset.mkind; S.mapKind = S.mapKind === k && k !== 'all' ? 'all' : k; reDesk(); return; } /* v0.17.4 (B) */
   const mh = ev.target.closest('[data-mhide]'); if (mh) { const h = new Set(S.mapHide || []); if (h.has(mh.dataset.mhide)) h.delete(mh.dataset.mhide); else h.add(mh.dataset.mhide); S.mapHide = [...h]; reDesk(); return; }

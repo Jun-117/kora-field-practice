@@ -228,10 +228,10 @@ body.desk nav.tabs { display:none; }
 .feed .ev { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line2); font-size:13px; animation: fadeUp .4s ease both; }
 .feed .ev:last-child { border-bottom:0; }
 .feed .ev .when { margin-left:auto; color:var(--muted); font-family:var(--mono); font-size:11px; flex:none; }
-.mapbox { height:420px; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:#0a1119; }
+.mapbox { height:420px; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:#dde3e8; }
 .mapbox.tall { height: calc(100vh - 180px); min-height:480px; }
-[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.6); }
-.leaflet-container { background:#0a1119 !important; font-family:var(--sans) !important; }
+/* v0.20.8 (1) Jun 10/5 "관제실 테마 검정이어도 지도는 항상 밝은거로": no dark filter on the tiles any more */
+.leaflet-container { background:#dde3e8 !important; font-family:var(--sans) !important; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:var(--card) !important; color:var(--ink) !important; border:1px solid var(--line); }
 .legend { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:10px; } .legend span { display:inline-flex; align-items:center; gap:6px; }
 .bigstat { display:flex; align-items:baseline; gap:8px; } .bigstat .v { font-family:var(--mono); font-size:22px; font-weight:800; }
@@ -1062,3 +1062,9 @@ body.desk .drawer.full .dpage.scr-detail { margin-right:96px; } /* (1) the ⤢ �
 .fl-h .avatar { width:36px; height:36px; border-radius:11px; display:grid; place-items:center; font:800 15px var(--sans); color:#fff; background:linear-gradient(135deg, var(--grad-a), var(--grad-b)); flex:none; }
 .fl-kv { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px 10px; } .fl-kv > div { display:flex; flex-direction:column; gap:1px; } .fl-kv .k { font:700 10px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--muted); } .fl-kv b { font-family:var(--mono); font-size:14px; } .fl-kv b.warn { color:var(--warn); } .fl-kv b.bad { color:var(--bad); }
 .fl-pills { display:flex; flex-wrap:wrap; gap:6px; } .fl-needs .now-i { padding:6px 0 0; margin-top:6px; } .fl-needs .now-i .ic { font-size:13px; width:20px; } .fl-needs .now-i .t { font-size:13px; } .fl-ok { font-size:13px; color:var(--ok); font-weight:700; }
+
+/* v0.20.8 (5) sent cards list · (7a) clickable device banner · (7b) change-log search */
+.cs-sentlist { margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; } .cs-sentlist .item .t { opacity:.75; }
+button.warn.link { display:block; width:100%; text-align:left; cursor:pointer; font:inherit; } button.warn.link:hover { filter:brightness(1.08); }
+.chg-q { display:flex; gap:8px; align-items:center; margin:6px 0 8px; } .chg-q input { flex:1; min-width:160px; max-width:420px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); font:inherit; }
+.chg-kind { display:inline-block; min-width:1.4em; }

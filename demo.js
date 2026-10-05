@@ -59,7 +59,7 @@ export function loadDemo(S, today) {
       const delay = k === 1 ? 0 : kind < 0.88 ? int(-2, 4) : kind < 0.96 ? int(4, 18) : int(0, 6);
       const date = R.addDays(due, delay); if (date > today) continue;
       const b = R.billAmount(k);
-      put('payments', { customerId: c.id, date, type: k === 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: b.amount, method: pick(['Khalti', 'eSewa', 'Fonepay QR', 'Fonepay QR', k === 1 ? 'Khalti' : 'Cash']), ref: 'TXN' + int(100000, 999999), billNo: r() < 0.05 ? '' : String(1000 + (++billN)), point: pick(['Field visit', 'Digital', 'Digital']), by: 'Tara', updatedAt: { toMillis: () => R.parseD(date).getTime() + 14 * 3600e3 } });
+      put('payments', { customerId: c.id, date, type: k === 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: b.amount, method: pick(['Khalti', 'eSewa', 'Fonepay QR', 'Fonepay QR', k === 1 ? 'Khalti' : 'Cash']), ref: 'TXN' + int(100000, 999999), billNo: r() < 0.05 ? '' : String(1000 + (++billN)), point: pick(['Field visit', 'Digital', 'Digital']), by: billN % 3 === 0 ? 'Laxmi' : 'Tara', /* v0.21.0: two cash holders — without touching the seeded random sequence (it would change the whole demo world) */ updatedAt: { toMillis: () => R.parseD(date).getTime() + 14 * 3600e3 } });
     }
   }
   // visits: monthly for 6 months, then quarterly; filters by E-2 booking; some visits missed

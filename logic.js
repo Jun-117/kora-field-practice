@@ -582,6 +582,101 @@ export function requestSla(receivedMs, isHoliday = (d) => d.getDay() === 6) {
   return { replyBy: receivedMs + 2 * 3600e3, visitBy: endOf(t, 1), rule: 'office hours' };
 }
 
+// ---------- v0.21.0 (A1·A2) one catalogue of lists & reports — the phone "Status" page and the desk "Reports" page read it ----------
+// need: money · expense · stock · admin · boss · referral · export · approvals · capacity · (none)  · dyn: a subtitle that carries a live number
+// desk: 'side' = the desk sidebar already has it (hidden on the desk Reports grid) · 'status' = the desk Sync & settings page shows it instead
+export const REPORT_CATALOG = [
+  { title: 'Money', tone: 'tone-money', rows: [
+    { r: 'payments', ic: '💵', l: 'Payments', s: 'all money in', need: 'money' }, { r: 'vat', ic: '🧾', l: 'VAT by month', s: 'export CSV', need: 'money' },
+    { r: 'capack', ic: '🧾', l: 'CA pack', s: 'IRD sales book · Excel', need: 'money' }, { r: 'expenses', ic: '🧾', l: 'Expenses', s: 'bills · input VAT', need: 'expense' },
+    { r: 'deposits', ic: '🏦', l: 'Deposit book', s: 'what we hold', need: 'money' }, { r: 'billing', ic: '🌊', l: 'Billing moves', s: 'new · left · month 14', need: 'money' },
+    { r: 'approvals', list: 1, ic: '✋', l: 'Money approvals', s: 'discounts · refunds', dyn: 'approvals', need: 'approvals' },
+    { r: 'cash', ic: '💵', l: 'Cash in hand', s: 'who holds cash · hand it over', need: 'pay' },
+    { r: 'tomorrow', list: 1, ic: '📅', l: 'Bills tomorrow', s: 'reminders' },
+    { r: 'bank', ic: '🏧', l: 'Bank statement match', s: 'nBank PDF → payments', need: 'admin' }] },
+  { title: 'Customers', tone: 'tone-field', rows: [
+    { r: 'map', list: 1, ic: '🗺️', l: 'Map', s: 'all customers' }, { r: 'leads', list: 1, ic: '🧲', l: 'Leads', s: 'pipeline' },
+    { r: 'screenings', list: 1, ic: '🔎', l: 'Screenings', s: 'sign-up checks' }, { r: 'contract', list: 1, ic: '📜', l: 'Contract events', s: 'notice · transfer · lost', dyn: 'contract' },
+    { r: 'relocations', list: 1, ic: '🚚', l: 'Relocations', s: 'moving house' }, { r: 'recoveries', list: 1, ic: '📦', l: 'Recoveries', s: 'devices back' },
+    { r: 'paused', list: 1, ic: '⏸️', l: 'Paused', s: 'customers' },
+    { r: 'referrals', ic: '🎁', l: 'Referrals', s: 'rewards due', need: 'referral' }, { r: 'leavers', ic: '🚪', l: 'Leavers', s: 'why homes left', desk: 'side' }] },
+  { title: 'Field work', tone: 'tone-call', rows: [
+    { r: 'myday', ic: '🧾', l: 'My day', s: 'visits · cash · parts', need: 'field' },
+    { r: 'calendar', ic: '🗓️', l: 'Calendar', s: 'days off · the homes of each day', desk: 'side' }, { r: 'filters', list: 1, ic: '🧪', l: 'Filter status', s: 'due & overdue' },
+    { r: 'proof', list: 1, ic: '✍️', l: 'Proof of visit', s: 'signatures · 30 days' }, { r: 'callbacks', ic: '🔁', l: 'Callbacks', s: 'problems soon after a job · service promise' },
+    { r: 'noshows', ic: '🚪', l: 'Wasted trips', s: 'nobody home' }, { r: 'capacity', ic: '👷', l: 'Field capacity', s: 'jobs vs hands', need: 'capacity', desk: 'side' },
+    { r: 'water', list: 1, ic: '🧫', l: 'Raw-water vials', s: 'E. coli · PoC', dyn: 'vials' }, { r: 'learning', ic: '🧪', l: 'Filter learning', s: 'real intervals' }] },
+  { title: 'Devices & stock', tone: 'tone-dev', rows: [
+    { r: 'devices', ic: '📦', l: 'Devices', s: 'every serial', desk: 'side' }, { r: 'stock', ic: '📦', l: 'Stock & FCL', s: 'order signal', need: 'stock' },
+    { r: 'techstock', ic: '🎒', l: 'Parts with each person', s: 'issued − returned − used', need: 'stock' },
+    { r: 'claims', list: 1, ic: '📮', l: 'Supplier claims', s: 'defects → PI', dyn: 'claims', need: 'stock' }] },
+  { title: 'Reports', tone: 'tone-rep', rows: [
+    { r: 'gate', ic: '🧭', l: 'Direction gate', s: 'churn · retention · collection', need: 'money' }, { r: 'funnel', ic: '⏳', l: 'Sales stage days', s: 'lead → first payment' },
+    { r: 'perform', ic: '📑', l: 'Grant KPIs', s: 'PAYGo PERFORM', need: 'money' }, { r: 'quality', ic: '🩺', l: 'Data to fix', s: 'missing GPS · bill no.' }] },
+  { title: 'Company', tone: 'tone-co', rows: [
+    { r: 'users', ic: '🪪', l: 'Staff & permissions', s: 'who can do what', need: 'admin', desk: 'status' }, { r: 'settings', ic: '⚙️', l: 'Settings', s: 'company · calendar · techs', need: 'admin', desk: 'status' },
+    { r: 'payroll', ic: '💼', l: 'Payroll', s: 'SSF · TDS · payslips', need: 'boss', desk: 'status' }, { r: 'handover', ic: '🆘', l: 'If Jun cannot work', s: 'handover page', need: 'boss', desk: 'status' },
+    { r: 'trainings', ic: '🎓', l: 'Trainings', s: 'records', need: 'admin', desk: 'status' }, { r: 'export', ic: '💾', l: 'Export all data', s: 'backup', need: 'export', desk: 'status' }] },
+  { title: 'Help', tone: 'tone-co', rows: [{ r: 'help', ic: '❓', l: 'How to use', s: 'one page for staff' }] },
+];
+// ctx = { money, expense, stock, admin, boss, referral, exportOk, approvalsOk, pay, field, capacity, n: { approvals, contract, claims, vials } }
+export function reportGroups(ctx) {
+  const ok = (need) => !need || ({ money: ctx.money, expense: ctx.expense || ctx.money, stock: ctx.stock, admin: ctx.admin, boss: ctx.boss, referral: ctx.referral, export: ctx.exportOk, approvals: ctx.approvalsOk, pay: ctx.pay || ctx.money, field: ctx.field, capacity: ctx.capacity })[need];
+  const n = ctx.n || {};
+  const sub = (row) => row.dyn === 'approvals' ? (n.approvals ? `${n.approvals} waiting` : row.s) : row.dyn === 'contract' ? (n.contract ? `${n.contract} to do` : row.s) : row.dyn === 'claims' ? (n.claims ? `${n.claims} open` : row.s) : row.dyn === 'vials' ? `${n.vials || 0} filled · PoC` : row.s;
+  return REPORT_CATALOG.map((g) => ({ title: g.title, tone: g.tone, rows: g.rows.filter((row) => ok(row.need)).map((row) => ({ ...row, s: sub(row) })) })).filter((g) => g.rows.length);
+}
+
+// ---------- v0.21.0 (B2) cash in hand: Cash payments a person took in − what they handed over (collection cashHandovers) ----------
+export function cashInHand(D, name) {
+  const paid = (D.payments || []).filter((p) => p.method === 'Cash' && (p.by || '') === name && (Number(p.amount) || 0) > 0);
+  const given = (D.cashHandovers || []).filter((h) => (h.from || '') === name);
+  const got = (D.cashHandovers || []).filter((h) => (h.to || '') === name && h.confirmed);
+  const sum = (xs) => xs.reduce((s2, x) => s2 + (Number(x.amount) || 0), 0);
+  const lastGiven = given.map((h) => h.date).filter(isDate).sort().reverse()[0] || '';
+  return { name, collected: sum(paid), handedOver: sum(given), received: sum(got), inHand: sum(paid) - sum(given) + sum(got), lastHandover: lastGiven, pending: given.filter((h) => !h.confirmed).length };
+}
+export function cashByPerson(D, names) {
+  const all = new Set([...(names || []), ...(D.payments || []).filter((p) => p.method === 'Cash').map((p) => p.by || ''), ...(D.cashHandovers || []).flatMap((h) => [h.from, h.to])].filter(Boolean));
+  return [...all].map((n) => cashInHand(D, n)).filter((r) => r.collected || r.handedOver || r.received).sort((a, b) => b.inHand - a.inHand);
+}
+
+// ---------- v0.21.0 (B6) parts with each person: Issue − Return − parts used "from my bag" on completed visits ----------
+export function techStock(D) {
+  const by = {}; const add = (who, item, k, q) => { if (!who || !item) return; const w = (by[who] = by[who] || {}); const it = (w[item] = w[item] || { issued: 0, returned: 0, used: 0 }); it[k] += q; };
+  for (const s2 of D.stockMoves || []) { const q = Number(s2.qty) || 0; if (s2.type === 'Issue') add(s2.person, s2.item, 'issued', q); else if (s2.type === 'Return') add(s2.person, s2.item, 'returned', q); }
+  for (const v of D.visits || []) if (v.issuedFrom !== 'shelf' && String(v.status || '').includes('Completed')) for (const p of v.parts || []) add(v.technician, 'Part: ' + p, 'used', 1);
+  return Object.entries(by).map(([name, items]) => ({ name, items: Object.entries(items).map(([item, x]) => ({ item, ...x, balance: x.issued - x.returned - x.used })).sort((a, b) => a.item.localeCompare(b.item)) }))
+    .map((p) => ({ ...p, balance: p.items.reduce((s2, x) => s2 + x.balance, 0) })).sort((a, b) => b.balance - a.balance);
+}
+
+// ---------- v0.21.0 (B3) return check → deposit refund suggestion (deductions are set in Settings; 0 = no deduction) ----------
+export const RETURN_CHECKS = ['Body & casing OK', 'Filters & UV in place', 'No leak / damage', 'All parts returned (hose, adaptor, stand)'];
+export const RETURN_DEDUCT_KEYS = ['dedCosmetic', 'dedFilter', 'dedLeak', 'dedParts'];
+export function refundSuggest(settings, checks, held) {
+  const st = settings || {}; const ok = new Set(checks || []); let ded = 0; const items = [];
+  RETURN_CHECKS.forEach((c, i) => { if (!ok.has(c)) { const d = Math.max(0, Number(st[RETURN_DEDUCT_KEYS[i]]) || 0); ded += d; items.push({ check: c, deduct: d }); } });
+  const h = Math.max(0, Number(held) || 0); const refund = Math.max(0, h - ded);
+  return { held: h, deduct: Math.min(ded, h), refund, forfeit: h - refund, failed: items };
+}
+
+// ---------- v0.21.0 (B5) the service promise we print in Help: reply within 2 h · visit same or next day (requestSla) ----------
+export function promiseStats(requests, from, to, isHol) {
+  const done = (requests || []).filter((r) => r.status === 'Done' && isDate(r.doneDate) && r.doneDate >= from && r.doneDate <= to);
+  const rows = done.map((r) => { const ms = r.receivedAtMs || Date.parse(r.receivedAt || ''); if (!Number.isFinite(ms)) return null; const sla = requestSla(ms, isHol); const due = new Date(sla.visitBy); const dueD = `${due.getFullYear()}-${pad(due.getMonth() + 1)}-${pad(due.getDate())}`; return { r, dueD, kept: r.doneDate <= dueD, late: kept_(r.doneDate, dueD) }; }).filter(Boolean);
+  const kept = rows.filter((x) => x.kept).length;
+  return { n: rows.length, kept, rate: rows.length ? kept / rows.length : null, rows };
+}
+const kept_ = (doneD, dueD) => Math.max(0, daysBetween(dueD, doneD));
+
+// ---------- v0.21.0 (C1) the same phone number already in the book (customers + leads) ----------
+export function dupPhone(customers, leads, phone, selfId) {
+  const d = String(phone || '').replace(/\D/g, '').slice(-10); if (d.length < 7) return [];
+  const hit = (x) => x && x.id !== selfId && String(x.phone || '').replace(/\D/g, '').slice(-10) === d;
+  return [...[...(customers || [])].filter(hit).map((c) => ({ kind: 'customer', id: c.id, name: c.name || '', code: c.code || '', status: c.status || '' })),
+    ...[...(leads || [])].filter(hit).map((l) => ({ kind: 'lead', id: l.id, name: l.name || '', code: '', status: l.outcome || '' }))];
+}
+
 // ---------- referrals: G-1 §4 ----------
 // v0.15 (Jun 10/3): only during a campaign, only the referrer — half a month off a bill, 3 months after the new home signed up,
 // and only once that home is installed and its install fee is paid (§4-2). The new home gets nothing (G-1 §4 to update).

@@ -102,6 +102,7 @@ export function ownEvents(events, from, to) {
     const hit = (d) => { for (let i = 0; i <= len; i++) { const x = R.addDays(d, i); if (x >= from && x <= to) out.push({ d: x, ev: e, first: i === 0 }); } };
     if (e.repeat === 'Every month') { for (let k = 0; k < 240; k++) { const d = R.addMonths(e.date, k); if (d > to) break; if (R.addDays(d, len) >= from) hit(d); } }
     else if (e.repeat === 'Every Nepali month') { const b = B.adToBs(e.date); if (!b) continue; for (let k = 0; k < 240; k++) { const q = B.addBsMonths(b.y, b.m, k); if (!B.inRange(q.y)) break; const d = bsDay(q.y, q.m, b.d); if (!d || d > to) break; if (R.addDays(d, len) >= from) hit(d); } }
+    else if (e.repeat === 'Every week') { for (let k = 0; k < 520; k++) { const d = R.addDays(e.date, 7 * k); if (d > to) break; if (R.addDays(d, len) >= from) hit(d); } } /* v0.21.0 (B7): weekly routines (Monday: statement PDF · chase calls · vials) */
     else if (e.repeat === 'Every year') { for (let k = 0; k < 30; k++) { const d = R.addMonths(e.date, 12 * k); if (d > to) break; if (R.addDays(d, len) >= from) hit(d); } }
     else hit(e.date);
   }

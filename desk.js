@@ -4,7 +4,7 @@ import * as R from './logic.js';
 import * as B from './bs.js';
 import { langSegHtml, fmtDate, fmtTime, getLang, setLang } from './i18n.js';
 import { loadLeaflet, MAP_OPTS, TILE, POKHARA, addLocate, hereIfAllowed, drawMe, hereNow } from './geo.js';
-import { modelStamp, AUDIT_DAYS, auditOlder, auditAll, MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem, cardsSent, fieldLabel } from './app.js';
+import { modelStamp, AUDIT_DAYS, auditOlder, auditAll, reportCtx, MS_WHO, MS_STATE, MS_GRADE, msBoards, referralOn, isBoss, fetchDevices, deviceIssues, heartbeat, deviceId, performPeriod, userName, ensureUsers, S, model, esc, custLabel, toleOf, screenHtml, afterRender, dunItem, collectionGroups, chaseStatsLine, reqItem, gateCards, fclCard, syncState, cItem, APP_VERSION, waLink, dunText, arr, DEMO, custListHtml, routeLink, alertsHtml, liveAlerts, go, nav, render, toast, dataQuality, can, locHelp, refreshLocBtn, peek, closePeek, openDrawer, techNames, save, OPT, today, watchItem, cardsSent, fieldLabel } from './app.js';
 import * as CA from './capack.js';
 import * as CAL from './cal.js';
 import * as SIM from './sim.js';
@@ -782,16 +782,11 @@ export function historyCsv(kind, mk) {
   return '';
 }
 
-function pageReports() {
-  const t = (r, ic, l, s, list, ok = true) => (ok ? `<button class="tile" ${list ? `data-list="${r}"` : `data-report="${r}"`}><span class="ic">${ic}</span><span>${l}</span><span class="s">${s}</span></button>` : '');
-  const money = can('money');
-  return `<div class="panel" style="--i:0"><div class="ph"><span class="t"><b>Reports</b> · open in the middle · click outside to go back</span></div><div class="heat" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
-    ${t('capack', '🧾', 'CA pack', 'sales + purchase book · Excel', 0, money)}${t('expenses', '🧾', 'Expenses', 'bills · input VAT', 0, can('expense') || money)}${t('payments', '💵', 'Payments', 'all money in', 0, money)}${t('vat', '🧾', 'VAT by month', 'AD months · CSV', 0, money)}${t('deposits', '🏦', 'Deposit book', 'liability per home', 0, money)}
-    ${t('devices', '📦', 'Devices', 'every serial')}${t('relocations', '🚚', 'Relocations', 'moving house', 1)}${t('contract', '📜', 'Contract events', 'notice · transfer · lost', 1)}${t('screenings', '🔎', 'Screenings', 'sign-up checks', 1)}${t('proof', '✍️', 'Proof of visit', 'signatures · 30 days', 1)}${t('water', '🧫', 'Raw-water vials', 'E. coli · PoC', 1)}${t('claims', '📮', 'Supplier claims', 'defects → PI', 1, can('stock'))}${t('quality', '🩺', 'Data to fix', 'missing GPS · bill no.')}${t('gate', '🧭', 'Direction gate', 'with sample sizes', 0, money)}${t('stock', '📦', 'Stock & FCL', 'order signal', 0, can('stock'))}${t('learning', '🧪', 'Filter learning', 'real intervals')}
-    ${t('referrals', '🎁', 'Referrals', 'G-1 §4 rewards', 0, referralOn())}${t('leavers', '🚪', 'Leavers', 'why homes left')}${t('capacity', '👷', 'Field capacity', 'jobs vs hands')}${t('funnel', '⏳', 'Sales stage days', 'lead → first payment')}${t('perform', '📑', 'Grant KPIs', 'PAYGo PERFORM', 0, money)}${t('billing', '🌊', 'Billing moves', 'new · left · month 14', 0, money)}${t('noshows', '🚪', 'Wasted trips', 'nobody home')}${t('callbacks', '🔁', 'Callbacks', 'problems soon after a job')}${t('trainings', '🎓', 'Trainings', 'records', 0, !!S.isAdmin)}${t('leads', '🧲', 'Leads', 'pipeline', 1)}
-    ${t('help', '❓', 'How to use', 'staff one-pager')}${t('recoveries', '📦', 'Recoveries', 'cases', 1)}${t('paused', '⏸️', 'Paused', 'customers', 1)}${t('tomorrow', '📅', 'Bills tomorrow', 'reminders', 1)}
-    ${isBoss() ? t('handover', '🆘', 'If Jun cannot work', 'handover page') + t('payroll', '💼', 'Payroll', 'SSF · TDS · payslips') : ''}${isBoss() ? t('users', '🪪', 'Staff & permissions', 'who can do what') + t('bank', '🏧', 'Bank CSV match', 'plan #2') + t('settings', '⚙️', 'Settings', 'company · calendar · techs') : ''}${t('export', '💾', 'Export all data', 'backup', 0, can('export'))}
-  </div></div>`;
+function pageReports() { /* v0.21.0 (A1): the catalogue (logic.REPORT_CATALOG) · what the sidebar or the Sync & settings page already has is left out */
+  const m = model(); const groups = R.reportGroups(reportCtx(m)).map((g) => ({ ...g, rows: g.rows.filter((row) => !row.desk) })).filter((g) => g.rows.length);
+  const tile = (row) => `<button class="tile" ${row.list ? `data-list="${row.r}"` : `data-report="${row.r}"`}><span class="ic">${row.ic}</span><span>${esc(row.l)}</span><span class="s">${esc(row.s)}</span></button>`;
+  return groups.map((g, i) => `<div class="panel" style="--i:${i}"><div class="ph"><span class="t"><b>${esc(g.title)}</b> · ${g.rows.length}${i === 0 ? ' <span class="muted">· open in the middle · click outside to go back</span>' : ''}</span></div><div class="heat" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">${g.rows.map(tile).join('')}</div></div>`).join('') +
+    `<div class="panel muted" style="--i:${groups.length}">Devices · Leavers · Capacity are in the sidebar · Staff · Settings · Payroll · Handover · Trainings · Export are under Sync & settings.</div>`;
 }
 
 // ---------- 🗓️ calendar: company days + customer days on one month ----------
@@ -1175,7 +1170,7 @@ function stockLines(plan, t, weeks = 39, w = 900, h = 250) {
 
 // ---------- 🕵️ change log (v0.8 security): who changed what — append-only, admin only ----------
 const AUDIT_KIND = { new: ['🆕', 'New'], edit: ['✏️', 'Edit'], delete: ['🗑️', 'Deleted'], approve: ['✅', 'Approval'], login: ['🔑', 'Sign-in'] }; /* v0.20.8 (7b) */
-const AUDIT_COL = { login: '🔑 Sign-in', customers: '👤 Customer', payments: '💵 Payment', visits: '🔧 Visit', recoveries: '📦 Recovery', requests: '📋 Request', leads: '🧲 Lead', relocations: '🚚 Relocation', expenses: '🧾 Expense', checkins: '📞 Call', stockMoves: '📦 Stock', deviceEvents: '📦 Device', contractEvents: '📜 Contract', screenings: '🔎 Screening', claims: '📮 Claim', tools: '🧰 Tool', payroll: '💼 Payroll', waterTests: '🧫 Vial', events: '🗓️ Event', trainings: '🎓 Training', settings: '⚙️ Settings' };
+const AUDIT_COL = { login: '🔑 Sign-in', cashHandovers: '💵 Cash handover', customers: '👤 Customer', payments: '💵 Payment', visits: '🔧 Visit', recoveries: '📦 Recovery', requests: '📋 Request', leads: '🧲 Lead', relocations: '🚚 Relocation', expenses: '🧾 Expense', checkins: '📞 Call', stockMoves: '📦 Stock', deviceEvents: '📦 Device', contractEvents: '📜 Contract', screenings: '🔎 Screening', claims: '📮 Claim', tools: '🧰 Tool', payroll: '💼 Payroll', waterTests: '🧫 Vial', events: '🗓️ Event', trainings: '🎓 Training', settings: '⚙️ Settings' };
 const MONEY_FIELDS = new Set(['amount', 'discount', 'depositRefunded', 'depositForfeited', 'approval', 'status', 'churnDate', 'type', 'customerId', 'perms', 'apprDiscountOver', 'apprRefundOver', 'apprWho']);
 const auditAt = (a) => (a.createdAt && a.createdAt.toMillis ? new Date(a.createdAt.toMillis()).toISOString() : String(a.at || '')); // server time; own unsent entries: the phone's
 const auditBy = (a) => userName(a.createdBy, a.createdBy ? '' : a.by); // the account that wrote it — the "by" text inside is not trusted

@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.21.0 (2026-10-05)';
+export const APP_VERSION = 'kf-v0.21.1 (2026-10-05)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -732,8 +732,8 @@ function field(f, v) {
       const list = arr('customers').filter((c) => c.status !== 'Churned' || c.id === val).sort((a, b) => String(a.name).localeCompare(String(b.name)));
       input = `${list.length > 12 ? `<input type="search" class="custpick" data-for="f_${f.k}" placeholder="Search name · KC code · phone" autocomplete="off">` : ''}<select id="f_${f.k}" name="${f.k}"><option value="">— choose customer —</option>${list.map((c) => `<option value="${esc(c.id)}"${c.id === val ? ' selected' : ''}>${esc(custLabel(c))} · ${esc(toleOf(c))}</option>`).join('')}</select>`; break; /* v0.11.1 (#8): 750 homes are not a wheel */
     }
-    case 'textarea': input = `<textarea id="f_${f.k}" name="${f.k}" placeholder="${esc(f.ph || '')}">${esc(val)}</textarea>` + (f.gen ? `<div class="row sg-row"><input type="number" id="sgN" min="1" max="500" value="1" aria-label="how many" data-noi18n><button type="button" class="btn small ghost" data-act="serialGen" data-for="${f.k}">🏷️ New KORA numbers</button></div>` : ''); break; /* v0.17.2 (6) */
-    case 'serial': { const st = stockSerials(); input = `<div class="row sg-row"><input id="f_${f.k}" name="${f.k}" type="text" value="${esc(val)}" list="dl_${f.k}" placeholder="${esc(f.ph || '')}" autocomplete="off" data-noi18n><button type="button" class="btn small ghost" data-act="serialNext" data-for="${f.k}">🏷️ Next number</button></div><datalist id="dl_${f.k}">${st.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>`; break; } /* v0.17.2 (6): pick the sticker's number from stock */
+    case 'textarea': input = `<textarea id="f_${f.k}" name="${f.k}" placeholder="${esc(f.ph || '')}">${esc(val)}</textarea>` + (f.gen ? `<div class="row sg-row"><input type="number" id="sgN" min="1" max="500" value="1" aria-label="how many" data-noi18n><button type="button" class="btn small ghost" data-act="serialGen" data-for="${f.k}">🏷️ New KORA numbers</button><button type="button" class="btn small" data-scan="f_${f.k}" data-multi="1" title="Scan stickers one after another">📷 Scan</button></div>` : ''); break; /* v0.17.2 (6) · v0.21.1: scan */
+    case 'serial': { const st = stockSerials(); input = `<div class="row sg-row"><input id="f_${f.k}" name="${f.k}" type="text" value="${esc(val)}" list="dl_${f.k}" placeholder="${esc(f.ph || '')}" autocomplete="off" inputmode="numeric" data-serialmask="1" data-noi18n><button type="button" class="btn small" data-scan="f_${f.k}" title="Scan the sticker">📷</button><button type="button" class="btn small ghost" data-act="serialNext" data-for="${f.k}">🏷️ Next number</button></div><datalist id="dl_${f.k}">${st.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>`; break; } /* v0.17.2 (6): pick the sticker's number from stock */
     case 'gps': {
       const g = val && val.lat ? val : null;
       input = `<button type="button" class="btn ghost" data-act="gps">📍 Get location now</button><div class="hint" id="gpsOut">${g ? `✅ ${g.lat.toFixed(5)}, ${g.lng.toFixed(5)}${g.acc ? ` (±${esc(Math.round(Number(g.acc) || 0))} m)` : ''}` : 'Not captured yet'}</div>
@@ -753,6 +753,7 @@ function field(f, v) {
       input = `<input id="f_${f.k}" name="${f.k}" type="number" inputmode="${f.step ? 'decimal' : 'numeric'}" step="${f.step || 1}" value="${esc(val)}" placeholder="${esc(f.ph || '')}">`; break;
     default:
       input = `<input id="f_${f.k}" name="${f.k}" type="${f.t}" value="${esc(val)}" placeholder="${esc(f.ph || '')}" ${f.t === 'tel' ? 'inputmode="tel"' : ''} autocomplete="off">`;
+    if (f.scan && !S.desk) input = `<div class="row sg-row">${input}<button type="button" class="btn small" data-scan="f_${f.k}" title="Scan the sticker">📷</button></div>`; /* v0.21.1 */
   }
   const w1 = ['text', 'tel', 'number', 'date', 'time', 'email', 'select', 'month', 'url'].includes(f.t) || (f.t === 'chips' && !f.multi && (opts || []).length <= 3 && (opts || []).every((o) => String((f.lbl && f.lbl[o]) || o).length <= 16)); /* v0.17.0 (4) B3 */
   return `<div class="fld${w1 ? ' w1' : ''}" data-k="${f.k}">${lab}${input}${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}<div class="err hidden"></div><div class="warn hidden"></div></div>`;
@@ -1212,7 +1213,7 @@ FORMS.recovery = {
     { k: 'closedDate', l: 'Closed on', t: 'date', show: (v) => v.outcome && v.outcome !== 'In progress' },
     { k: 'failReason', l: 'Why it failed', t: 'textarea', show: (v) => String(v.outcome).startsWith('Failed') || v.outcome === 'Partial', hint: 'This is the real output of the table — why recovery fails.' },
     { t: 'section', l: 'Device & deposit' },
-    { k: 'deviceSerial', l: 'Device serial', t: 'text' },
+    { k: 'deviceSerial', l: 'Device serial', t: 'text', scan: 1 },
     { k: 'refurbishable', l: 'Can it be refurbished?', t: 'chips', o: OPT.yesNoUnknown },
     { k: 'returnChecks', l: 'Return check (tick what is fine)', t: 'checks', o: R.RETURN_CHECKS, hint: 'Each unticked line takes the deduction set in Settings off the deposit — the refund below is filled in for you (you can change it).' }, /* v0.21.0 (B3) Livpure: inspect, then refund */
     { k: 'filterSerials', l: 'Filter serials', t: 'text' },
@@ -1541,7 +1542,7 @@ FORMS.claim = {
     { k: 'supplier', l: 'Supplier', t: 'text', req: 1, def: 'Frank' },
     { k: 'piNo', l: 'PI / order no.', t: 'text', def: 'TQ-PI-20260808' },
     { k: 'what', l: 'What', t: 'chips', o: ['Device', 'Part'], req: 1, def: 'Device' },
-    { k: 'serial', l: 'Device serial', t: 'text', show: (v) => v.what === 'Device' },
+    { k: 'serial', l: 'Device serial', t: 'text', show: (v) => v.what === 'Device', scan: 1 },
     { k: 'part', l: 'Part', t: 'text', ph: 'e.g. UV lamp, 1/2" to 1/4" adapter', show: (v) => v.what === 'Part' },
     { k: 'qty', l: 'How many', t: 'number', def: 1 },
     { k: 'problem', l: 'Problem', t: 'chips', o: R.CLAIM_PROBLEMS, req: 1 },
@@ -1621,7 +1622,7 @@ FORMS.tool = {
   col: 'tools', title: 'Tool', icon: '🧰', perm: 'stock',
   spec: () => [
     { k: 'name', l: 'Tool', t: 'text', req: 1, ph: 'e.g. TDS meter, drill, pipe cutter' },
-    { k: 'serial', l: 'Serial / mark', t: 'text' },
+    { k: 'serial', l: 'Serial / mark', t: 'text', scan: 1 },
     { k: 'bought', l: 'Bought on', t: 'date' },
     { k: 'cost', l: 'Cost (NPR)', t: 'number' },
     { k: 'holder', l: 'Who has it', t: 'chips', o: () => [...techNames(), 'Office'], req: 1, def: 'Office' },
@@ -3411,6 +3412,43 @@ export function csvFor(kind) {
 }
 // Excel files are converted with SheetJS (vendored, loaded only here).
 function loadXlsx() { return window.XLSX ? Promise.resolve(window.XLSX) : new Promise((res, rej) => { const s = document.createElement('script'); s.src = './vendor/xlsx.full.min.js'; s.onload = () => res(window.XLSX); s.onerror = rej; document.head.appendChild(s); }); }
+// ---------- v0.21.1 sticker QR scanner: BarcodeDetector where the phone has it (Android Chrome), else jsQR (vendor, Apache-2.0) on the video frames; no camera → a photo ----------
+let scanState = null;
+function loadJsqr() { return window.jsQR ? Promise.resolve(window.jsQR) : new Promise((res, rej) => { const el = document.createElement('script'); el.src = './vendor/jsqr.js'; el.onload = () => res(window.jsQR); el.onerror = rej; document.head.appendChild(el); }); }
+export async function decodeQrFromImage(src) { /* src = <img>/<canvas>/<video> or a data URL · returns the text or '' */
+  const img = typeof src === 'string' ? await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }) : src;
+  const w = img.videoWidth || img.naturalWidth || img.width, h = img.videoHeight || img.naturalHeight || img.height; if (!w || !h) return '';
+  if ('BarcodeDetector' in window) { try { const det = new window.BarcodeDetector({ formats: ['qr_code'] }); const hits = await det.detect(img); if (hits.length) return String(hits[0].rawValue || ''); } catch (e) { /* fall through to jsQR */ } }
+  const jsQR = await loadJsqr(); const c = document.createElement('canvas'); const ctx = c.getContext('2d', { willReadFrequently: true });
+  const tryAt = (sx, sy, sw, sh, maxPx) => try1(sx, sy, sw, sh, maxPx, 0) || try1(sx, sy, sw, sh, maxPx, 0.08); /* plain first; then with a white frame (a quiet zone when the QR touches the edge) */
+  const try1 = (sx, sy, sw, sh, maxPx, padF) => { const scale = Math.min(1, maxPx / Math.max(sw, sh)); const pad = Math.round(Math.max(sw, sh) * scale * padF); c.width = Math.round(sw * scale) + 2 * pad; c.height = Math.round(sh * scale) + 2 * pad; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, sx, sy, sw, sh, pad, pad, c.width - 2 * pad, c.height - 2 * pad); const id = ctx.getImageData(0, 0, c.width, c.height); const r = jsQR(id.data, id.width, id.height, { inversionAttempts: 'attemptBoth' }); return r ? String(r.data || '') : ''; };
+  /* jsQR wants the QR fairly clean and centred: a video frame = whole + middle · a photo = whole at full size, then a 3 × 3 grid of 60 % windows (a small QR anywhere on a big photo) */
+  const S = Math.min(w, h); const sq = (x, y, size) => tryAt(Math.max(0, Math.min(w - size, x)), Math.max(0, Math.min(h - size, y)), size, size, 1200);
+  if (img.videoWidth) return tryAt(0, 0, w, h, 1000) || sq(Math.round((w - S) / 2), Math.round((h - S) / 2), S);
+  let got = tryAt(0, 0, w, h, 1000) || tryAt(0, 0, w, h, 2600); if (got) return got;
+  for (const size of [S, Math.round(S / 2)]) for (let y = 0; y <= h - size + 1; y += Math.round(size / 2)) for (let x = 0; x <= w - size + 1; x += Math.round(size / 2)) { got = sq(x, y, size); if (got) return got; }
+  return '';
+}
+function scanApply(text) {
+  const st = scanState; if (!st) return; const sn = R.normSerial(text); if (!sn) return; const el = document.getElementById(st.target); if (!el) return;
+  if (st.multi) { const lines = el.value.split(/\n/).map((x) => x.trim()).filter(Boolean); if (lines.includes(sn)) { toast(`${sn} is already in the list`); return; } lines.push(sn); el.value = lines.join('\n'); }
+  else el.value = sn;
+  el.dispatchEvent(new Event('input', { bubbles: true })); toast(`📷 ${sn}`); if (navigator.vibrate) navigator.vibrate(60);
+  if (st.multi) { st.lastAt = Date.now(); const n = document.querySelector('#scanBox .scan-n'); if (n) n.textContent = `${el.value.split(/\n/).filter(Boolean).length} scanned · keep going or Done`; } else closeScan();
+}
+function closeScan() { const st = scanState; scanState = null; if (!st) return; if (st.stream) st.stream.getTracks().forEach((t) => t.stop()); const b = document.getElementById('scanBox'); if (b) b.remove(); }
+async function openScan(targetId, multi) {
+  closeScan(); scanState = { target: targetId, multi: !!multi, stream: null, lastAt: 0 };
+  const box = document.createElement('div'); box.id = 'scanBox'; box.innerHTML = `<div class="scan-card"><div class="status">📷 ${multi ? 'Scan stickers' : 'Scan the sticker'}</div><video playsinline muted autoplay></video><div class="muted scan-n">Point the camera at the QR on the sticker</div>
+    <div class="row"><label class="btn ghost" style="margin:0">🖼️ Take a photo instead<input type="file" accept="image/*" capture="environment" hidden id="scanPhoto"></label><button type="button" class="btn ${multi ? '' : 'ghost'}" data-act="scanClose">${multi ? '✓ Done' : 'Cancel'}</button></div></div>`;
+  document.body.appendChild(box);
+  const video = box.querySelector('video');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false }); scanState.stream = stream; video.srcObject = stream; await video.play();
+    const tick = async () => { if (!scanState || scanState.target !== targetId) return; if (video.readyState >= 2 && Date.now() - scanState.lastAt > 1200) { const txt = await decodeQrFromImage(video).catch(() => ''); if (txt && scanState) { scanApply(txt); if (!scanState) return; } } if (scanState) setTimeout(tick, 250); };
+    tick();
+  } catch (e) { const n = box.querySelector('.scan-n'); if (n) n.textContent = 'Camera not available here — take a photo of the sticker instead'; video.remove(); }
+}
 function loadPdfjs() { /* v0.20.9: pdf.js 5.7.284 (vendor, loaded only here) */
   if (window.__pdfjs) return Promise.resolve(window.__pdfjs);
   return import('./vendor/pdf.min.mjs').then((m) => { m.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs'; window.__pdfjs = m; return m; });
@@ -3498,6 +3536,7 @@ document.addEventListener('click', async (ev) => {
   }
   const qrm = t.closest('[data-coqr-remove]'); if (qrm) { ev.preventDefault(); if (!S.isAdmin) return; save('settings/app', { coQr: '' }, false); S.settings = { ...S.settings, coQr: '' }; bump(); toast('QR removed'); scheduleRender(); return; }
   const mx = t.closest('[data-msexport]'); if (mx) { ev.preventDefault(); const b = mx.dataset.msexport; const rows = arr('milestones').filter((x) => !b || (x.board || 'Board') === b).map(({ id, createdAt, updatedAt, createdBy, updatedBy, by, ...rest }) => rest); download(`kora-board-${(b || 'all').replace(/[^\w]+/g, '_')}-${today()}.json`, JSON.stringify(rows, null, 2)); return; }
+  const sb = t.closest('[data-scan]'); if (sb) { ev.preventDefault(); openScan(sb.dataset.scan, sb.dataset.multi === '1'); return; } /* v0.21.1 */
   const gf = t.closest('[data-go-form]'); if (gf && !canForm(gf.dataset.goForm)) return; // hidden rights stay hidden (no message)
   if (gf) { ev.preventDefault(); nav(S.route.tab === 'customers' || S.route.screen === 'detail' ? 'customers' : 'new', 'form', { form: gf.dataset.goForm, cid: gf.dataset.cid, id: gf.dataset.id, lead: gf.dataset.lead, kind: gf.dataset.kind, serial: gf.dataset.serial, event: gf.dataset.kind, date: gf.dataset.date, lane: gf.dataset.lane, board: gf.dataset.board, type: gf.dataset.type, amount: gf.dataset.amount ? Number(gf.dataset.amount) : undefined, lost: gf.dataset.lost }); return; }
   const cv = t.closest('[data-convert]'); if (cv) { nav('new', 'form', { form: 'install', lead: cv.dataset.convert }); return; } /* v0.11: the install form prefills itself from the lead + its screening */
@@ -3588,6 +3627,7 @@ document.addEventListener('click', async (ev) => {
     if (!copied) { const dl = document.createElement('a'); dl.href = S.rcUrl; dl.download = S.rcName || 'kora-card.png'; document.body.appendChild(dl); dl.click(); dl.remove(); }
     toast(!w ? 'Pop-up blocked — allow pop-ups for this site, then tap again' : DEMO ? 'Practice: made-up numbers, so no chat was opened' : copied ? '📋 Copied · in the chat press ⌘V, then send' : '⬇️ Saved · drag the picture into the chat'); }
   else if (act === 'cardOpen') { ev.preventDefault(); const k = a.dataset.kind, id = a.dataset.id, cid = a.dataset.cid; if (!k || !id || !cid) return; nav('customers', 'detail', k === 'receipt' ? { id: cid, receipt: id } : k === 'visit' ? { id: cid, vrep: id } : { id: cid, inst: cid }); setTimeout(() => imageCard(k, id), 450); } /* ⑥ from the desk list: the home opens with the card drawn */
+  else if (act === 'scanClose') { ev.preventDefault(); closeScan(); }
   else if (act === 'cashGot') { ev.preventDefault(); const h = S.D.cashHandovers.get(a.dataset.id); if (!h || h.to !== myName() || h.confirmed) return; save(`cashHandovers/${h.id}`, { confirmed: true, confirmedBy: myName(), confirmedAt: new Date().toISOString() }, false); toast(`✓ Received ${R.npr(h.amount)} from ${h.from}`); scheduleRender(); } /* v0.21.0 (B2) */
   else if (act === 'cardsSentList') { ev.preventDefault(); const L = document.querySelector('.cs-sentlist'); if (!L) return; if (!L.classList.contains('hidden')) { L.classList.add('hidden'); return; } /* v0.20.8 (5) Jun 10/5 "[보냄 1] 누르면 보낸거 나오게": the sent ones, newest first, each with the day + a button to un-mark */
     const sent = cardsSent(); const xs = deskMod && deskMod.cardsToSend ? deskMod.cardsToSend(model(), 1).filter((e) => e.sent).sort((a2, b2) => String(sent[b2.key] || '').localeCompare(String(sent[a2.key] || ''))) : [];
@@ -3666,8 +3706,11 @@ document.addEventListener('click', async (ev) => {
     toast(`Created ${n} payments`); closeDrawer(true); nav('status', 'report', { r: 'payments' });
   }
 });
-document.addEventListener('input', (ev) => { const f = ev.target && ev.target.closest && ev.target.closest('form#theForm'); if (f && ev.target.name && FORMS[f.dataset.form] && FORMS[f.dataset.form].onChange) refreshConditional(f, ev.target.name); }); /* v0.21.0 (C1): typed fields reach onChange too (chips already did) */
+document.addEventListener('input', (ev) => { const f = ev.target && ev.target.closest && ev.target.closest('form#theForm'); if (f && ev.target.name && FORMS[f.dataset.form] && FORMS[f.dataset.form].onChange) refreshConditional(f, ev.target.name); });
+document.addEventListener('input', (ev) => { const el = ev.target; if (!el || !el.dataset || el.dataset.serialmask !== '1') return; const v = R.serialMask(el.value); if (v !== el.value) { const atEnd = el.selectionStart === el.value.length; el.value = v; if (atEnd) el.setSelectionRange(v.length, v.length); } }); /* v0.21.1: digits → KD-26-… while typing */
+document.addEventListener('focusout', (ev) => { const el = ev.target; if (!el || !el.dataset || el.dataset.serialmask !== '1') return; const v = R.serialMask(el.value, '26', true); if (v !== el.value) { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); } }); /* pad to 4 digits when leaving the box */ /* v0.21.0 (C1): typed fields reach onChange too (chips already did) */
 document.addEventListener('change', (ev) => {
+  if (ev.target.id === 'scanPhoto' && ev.target.files[0]) { const f = ev.target.files[0]; const rd = new FileReader(); rd.onload = () => decodeQrFromImage(rd.result).then((txt) => { if (txt) scanApply(txt); else toast('No QR found in that photo — try closer, with light'); }).catch(() => toast('Could not read the photo')); rd.readAsDataURL(f); ev.target.value = ''; return; } /* v0.21.1 */
   if (ev.target.dataset && ev.target.dataset.mydaywho !== undefined) { const tgt = S.drawer || S.route; tgt.params.who = ev.target.value; if (S.drawer) refreshDrawer(); else render(false); return; } /* v0.21.0 (D4) */
   if (ev.target.classList.contains('photoIn')) { addFormPhotos([...ev.target.files]); ev.target.value = ''; return; }
   if (ev.target.dataset && ev.target.dataset.prole !== undefined) { const p = S.formPhotos[Number(ev.target.dataset.prole)]; if (p) p.role = ev.target.value; return; } /* v0.19.0 (4) */
@@ -3834,7 +3877,7 @@ if (DEMO) {
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
     S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, bankPdfRows };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, bankPdfRows, decodeQrFromImage };
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */

@@ -1068,3 +1068,10 @@ body.desk .drawer.full .dpage.scr-detail { margin-right:96px; } /* (1) the â¤¢ â
 button.warn.link { display:block; width:100%; text-align:left; cursor:pointer; font:inherit; } button.warn.link:hover { filter:brightness(1.08); }
 .chg-q { display:flex; gap:8px; align-items:center; margin:6px 0 8px; } .chg-q input { flex:1; min-width:160px; max-width:420px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); font:inherit; }
 .chg-kind { display:inline-block; min-width:1.4em; }
+
+/* v0.21.1 sticker QR scanner */
+#scanBox { position:fixed; inset:0; z-index:9000; background:rgba(0,0,0,.72); display:flex; align-items:center; justify-content:center; padding:16px; }
+#scanBox .scan-card { background:var(--card); color:var(--ink); border-radius:16px; padding:14px; width:min(420px,100%); display:flex; flex-direction:column; gap:10px; }
+#scanBox video { width:100%; aspect-ratio:3/4; max-height:60vh; object-fit:cover; border-radius:12px; background:#000; }
+#scanBox .row { gap:8px; } #scanBox label.btn input { display:none; }
+.sg-row [data-scan] { flex:none; }

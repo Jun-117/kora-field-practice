@@ -1270,6 +1270,11 @@ Object.assign(W, {
   'Real days between changes, across all households. The booking intervals are first values; PoC data decides the final ones.': ['모든 가구의 실제 교체 간격(일). 예약 주기는 첫 값이고, PoC 데이터가 최종값을 정합니다.', 'सबै घरको वास्तविक परिवर्तन अन्तराल (दिन)। बुकिङ अन्तराल पहिलो मान हो; PoC डाटाले अन्तिम तय गर्छ।'],
   'Start + new + came back + deposit starts − left − month 14 = end. Install month = 1,100 (inside the 4,900), bills 2–13 = 1,400, then 1,100. The deposit part is held, not earned.': ['시작 + 신규 + 복귀 + 보증금 시작 − 해지 − 14개월차 = 끝. 설치 달 = 1,100(4,900 안에 포함), 2–13회차 = 1,400, 그 뒤 1,100. 보증금 몫은 맡아둔 돈이지 수익이 아닙니다.', 'सुरु + नयाँ + फर्किएको + धरौटी सुरु − छोडेको − महिना १४ = अन्त्य। जडान महिना = १,१०० (४,९०० भित्र), बिल २–१३ = १,४००, त्यसपछि १,१००। धरौटी अंश राखिएको हो, कमाइ होइन।'],
   'statement → payments': ['입금내역 → 결제', 'स्टेटमेन्ट → भुक्तानी'],
+  /* v0.21.1 sticker QR scan */
+  'Scan the sticker': ['스티커 스캔', 'स्टिकर स्क्यान'], 'Scan stickers one after another': ['스티커를 차례로 스캔', 'स्टिकरहरू एकपछि अर्को स्क्यान'], '📷 Scan': ['📷 스캔', '📷 स्क्यान'],
+  '📷 Scan stickers': ['📷 스티커 스캔', '📷 स्टिकर स्क्यान'], '📷 Scan the sticker': ['📷 스티커 스캔', '📷 स्टिकर स्क्यान'], 'Point the camera at the QR on the sticker': ['스티커의 QR에 카메라를 맞추세요', 'स्टिकरको QR मा क्यामेरा फर्काउनुहोस्'],
+  '🖼️ Take a photo instead': ['🖼️ 대신 사진 찍기', '🖼️ बरु फोटो खिच्ने'], '✓ Done': ['✓ 완료', '✓ भयो'], 'Camera not available here — take a photo of the sticker instead': ['여기선 카메라를 못 씀 — 스티커 사진을 찍으세요', 'यहाँ क्यामेरा चल्दैन — स्टिकरको फोटो खिच्नुहोस्'],
+  'No QR found in that photo — try closer, with light': ['사진에서 QR을 못 찾음 — 더 가까이, 밝게', 'फोटोमा QR भेटिएन — नजिकबाट, उज्यालोमा'], 'Could not read the photo': ['사진을 읽지 못함', 'फोटो पढ्न सकिएन'],
   /* v0.21.0 (2026-10-05) cash in hand · my day · parts with each person · return check · service promise · catalogue — NE 🟡 Claude, Tara to review */
   "💵 Cash in hand": ["💵 손에 있는 현금", "💵 हातमा भएको नगद"],
   "Cash in hand": ["손에 있는 현금", "हातमा भएको नगद"],
@@ -1398,6 +1403,8 @@ P.unshift(
   [/^💵 (.+) → (.+) — they confirm on their phone$/, '💵 $1 → $2 — 상대가 폰에서 확인', '💵 $1 → $2 — उसले फोनमा पुष्टि गर्छ'],
   [/^Deduct (.+) → refund (.+) of (.+)$/, '공제 $1 → $3 중 $2 환불', 'कटौती $1 → $3 मध्ये $2 फिर्ता'],
   [/^Nothing to deduct → refund (.+)$/, '공제 없음 → $1 환불', 'कटौती छैन → $1 फिर्ता'],
+  [/^(.+) is already in the list$/, '$1 — 이미 목록에 있음', '$1 — सूचीमा छ'],
+  [/^(\d+) scanned · keep going or Done$/, '$1개 스캔 · 계속하거나 완료', '$1 स्क्यान · जारी राख्नुस् वा भयो'],
   [/^📋 (\d+) request\(s\) past the reply time$/, '📋 답 기한 지난 요청 $1건', '📋 जवाफ समय नाघेका $1 अनुरोध'],
   [/^Shelf = in − out − issued \+ returned − used from the shelf\. Order more below (\d+) \(🔴 first guess$/, '선반 = 입고 − 출고 − 지급 + 반납 − 선반에서 씀. $1 아래면 추가 주문 (🔴 첫 추정', 'शेल्फ = भित्र − बाहिर − दिइएको + फिर्ता − शेल्फबाट प्रयोग। $1 भन्दा कम भए थप अर्डर (🔴 पहिलो अनुमान'],
 );

@@ -1053,6 +1053,15 @@ export const DEVICE_EVENTS = ['Received into stock', 'Arrival check OK', 'Arriva
 const DEV_STATUS = { 'Received into stock': 'In stock', 'Arrival check OK': 'In stock', 'Arrival check — defect': 'Defect — claim', Installed: 'At a customer', Recovered: 'Back — check it', 'Sent to refurbish': 'At refurbish', 'Refurbished — ready': 'In stock', 'Swapped out': 'Back — check it', Scrapped: 'Scrapped', 'Lost / stolen': 'Lost' };
 export const DEVICE_STATES = ['In stock', 'At a customer', 'Back — check it', 'At refurbish', 'Defect — claim', 'Scrapped', 'Lost'];
 export const normSerial = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+// v0.21.1: KORA sticker numbers are KD-YY-NNNN (make_device_labels.py). Typing digits is enough: "7" → KD-26-0007 (on blur) · "260012" → KD-26-0012 · "KD-26-0012" stays.
+export function serialMask(raw, yy = '26', final = false) {
+  const t = String(raw || '').toUpperCase().trim(); if (!t) return '';
+  if (!/^[\dKD\-\s]*$/.test(t)) return t; /* a supplier serial (letters) is left alone */
+  const m = t.replace(/\s/g, '').match(/^KD-?(\d{2})-?(\d{0,4})$/); let y, n;
+  if (m) { y = m[1]; n = m[2]; } else { const d = t.replace(/\D/g, ''); if (!d) return final ? '' : t; [y, n] = d.length > 4 ? [d.slice(0, 2), d.slice(2, 6)] : [yy, d]; }
+  if (!n) return final ? '' : `KD-${y}-`;
+  return final ? `KD-${y}-${n.padStart(4, '0')}` : `KD-${y}-${n}`;
+}
 export function deviceRegistry(customers, recoveries, events, relocations, today) {
   const by = new Map();
   const add = (serial, ev) => { const k = normSerial(serial); if (!k) return; if (!by.has(k)) by.set(k, { serial: k, events: [] }); by.get(k).events.push(ev); };

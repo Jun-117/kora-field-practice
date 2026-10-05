@@ -9,6 +9,7 @@ import {
   serverTimestamp, Timestamp, waitForPendingWrites, terminate, clearIndexedDbPersistence,
   limit as qLimit, writeBatch, connectFirestoreEmulator, disableNetwork, enableNetwork } from './vendor/firebase-firestore.js';
 import { getStorage, ref as sRef, uploadString, getDownloadURL, deleteObject, getMetadata, connectStorageEmulator } from './vendor/firebase-storage.js';
+import { initializeAppCheck, ReCaptchaV3Provider } from './vendor/firebase-app-check.js'; /* v0.20.0 (C1) App Check */
 import * as R from './logic.js';
 import { initLang, setLang, getLang, locale, langSegHtml, fmtDate, fmtTime } from './i18n.js';
 import * as G from './geo.js';
@@ -18,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.19.5 (2026-10-05)';
+export const APP_VERSION = 'kf-v0.20.0 (2026-10-05)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -128,6 +129,17 @@ export const db = initializeFirestore(app, {
 // document keeps a small thumbnail (480 px · ≤ ~110 KB) for the cards and the gallery + the Storage path. Full size = a link (download URL).
 // Old documents with the whole picture inside (img) still read as before. Firebase's own guidance: files in Storage, the URL/path in Firestore.
 const storage = getStorage(app);
+// v0.20.0 (C1) Jun 10/5 "2000가구여도 끄떡없지 … 다 해봐": App Check — every request to Firestore / Storage carries a reCAPTCHA v3 token that says
+// "this came from the real app on koracarenepal.com", so the public web key alone is no longer enough to talk to the project. The site key is
+// public by design (it is in the page anyway). Empty key = off (nothing changes) · demo / practice / emulator = off · the Firebase console decides
+// whether the token is ENFORCED (Jun flips it after the Phones page shows every device sending tokens — "unenforced" first, so nobody is locked out).
+export const APP_CHECK_SITE_KEY = ''; /* ← paste the reCAPTCHA v3 site key here (Firebase console → App Check → Web app → reCAPTCHA v3) */
+export let appCheckState = 'off';
+if (APP_CHECK_SITE_KEY && !DEMO && !EMU) {
+  try { if (['127.0.0.1', 'localhost'].includes(location.hostname)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; /* dev on this computer: a debug token (printed in the console once — register it in App Check → Manage debug tokens) */
+    initializeAppCheck(app, { provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY), isTokenAutoRefreshEnabled: true }); appCheckState = 'on'; }
+  catch (e) { appCheckState = 'error:' + (e.code || e.message); }
+}
 if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8080); connectStorageEmulator(storage, '127.0.0.1', 9199); }
 const THUMB_PX = 480, THUMB_Q = 0.6, THUMB_MAX_CHARS = 110000;
 export const photoSrc = (x) => (x && (x.thumb || x.img)) || '';
@@ -507,7 +519,9 @@ const stampOf = (x) => `${x.id}:${x.updatedAt && x.updatedAt.toMillis ? x.update
 const stampList = (l) => (l && l.length ? l.map(stampOf).join(',') : '');
 export const stampSum = (l) => { let n = l.length; for (const x of l) n += (x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : 0) + (x._localT || 0); return n; };
 let custCache = new Map(); let learnCache = { key: '', FM: null, learning: null }; let modelSeq = 0; export const modelStamp = () => `${modelSeq}:${today()}`;
-export function model() {
+let __mSeq = -1;
+export function model() { const t0 = performance.now(); const r = model0(); if (modelSeq !== __mSeq) { __mSeq = modelSeq; S.perfModel = Math.round(performance.now() - t0); } return r; } /* v0.20.0 (C3): how long a fresh model took on THIS device */
+function model0() {
   const t = today();
   if (modelCache.ver === S.ver && modelCache.day === t) return modelCache.m;
   modelSeq++; /* v0.18.1: a cheap "the data changed" counter for the desk's page-level caches */
@@ -1752,6 +1766,7 @@ export function draftSave(form) {
 function formHtml(p) {
   const F = FORMS[p.form]; if (!F) return '<div class="card">Unknown form</div>';
   const existing = p.id ? S.D[F.col].get(p.id) : null;
+  S.formBase = existing ? { col: F.col, id: p.id, snap: snapOf(existing) } : null; /* v0.20.0 (C2): the record as it was when this form opened */
   const draft = !existing && !S.noDraft ? draftGet(p.form) : null;
   const pre = existing ? { ...existing } : { ...(F.prefill ? F.prefill(p) : {}), ...(draft ? draft.v : {}) };
   if (F.col === 'customers' && existing && isBoss()) pre.privateNotes = S.privCache && S.privCache[p.id] !== undefined ? S.privCache[p.id] : '';
@@ -1763,6 +1778,22 @@ function formHtml(p) {
       ${spec.map((f) => field(f, pre[f.k])).join('')}
       <button class="btn" type="submit" id="saveBtn">Save</button>
     </form>`;
+}
+// v0.20.0 (C2) Jun 10/5: two people on the same record — the second save used to win silently. Now the form knows what it opened with;
+// if the record changed under it (another phone's save arrived), the save stops once and names who changed what. "Save anyway" overwrites.
+const snapOf = (x) => { const o = {}; for (const k of Object.keys(x || {})) if (!k.startsWith('_') && !['updatedAt', 'createdAt', 'updatedBy', 'createdBy', 'live'].includes(k)) o[k] = x[k]; return JSON.stringify(o, Object.keys(o).sort()); };
+export function conflictOf(form) {
+  const b = S.formBase; const id = form && form.dataset.id; if (!b || !id || b.id !== id) return null;
+  const cur = S.D[b.col] && S.D[b.col].get(id); if (!cur) return null; const now = snapOf(cur); if (now === b.snap) return null;
+  const was = JSON.parse(b.snap), is = JSON.parse(now); const keys = [...new Set([...Object.keys(was), ...Object.keys(is)])].filter((k) => JSON.stringify(was[k]) !== JSON.stringify(is[k]));
+  const who = cur.updatedBy ? userName(cur.updatedBy, 'someone') : 'someone'; const at = cur.updatedAt && cur.updatedAt.toMillis ? new Date(cur.updatedAt.toMillis()) : cur._localT ? new Date(cur._localT) : null;
+  return { who, at: at ? at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '', keys };
+}
+export function showConflict(form) {
+  const c = conflictOf(form); let bar = form.querySelector('.conflictbar');
+  if (!c) { if (bar) bar.remove(); return false; }
+  const msg = `⚠️ ${c.who} changed this record${c.at ? ' at ' + c.at : ''} while you were editing — ${c.keys.length ? c.keys.join(', ') : 'fields'}. Saving overwrites their change.`;
+  if (!bar) { bar = document.createElement('div'); bar.className = 'conflictbar'; form.prepend(bar); } bar.textContent = msg; return true;
 }
 function refreshConditional(form, key) {
   const F = FORMS[form.dataset.form]; if (!F) return;
@@ -1779,9 +1810,10 @@ function submitForm(form) {
   if (!isNew) { v._edit = true; v._id = editId; }
   const confirmed = form.dataset.confirmed === '1';
   const { errs, warns } = F.check(v, confirmed);
+  if (!isNew && showConflict(form) && !confirmed) warns._conflict = 'changed by someone else meanwhile'; /* v0.20.0 (C2): one stop, then "Save anyway" */
   showMsgs(form, errs, warns);
   if (Object.keys(errs).length) { toast('Fix the red fields'); return; }
-  if (Object.keys(warns).length) { form.dataset.confirmed = '1'; form.querySelector('#saveBtn').textContent = 'Save anyway'; toast('Check the yellow notes, then tap Save anyway'); return; }
+  if (Object.keys(warns).length) { form.dataset.confirmed = '1'; form.querySelector('#saveBtn').textContent = 'Save anyway'; toast(warns._conflict ? 'Someone else changed this record — read the note at the top, then Save anyway' : 'Check the yellow notes, then tap Save anyway'); return; }
   delete v._edit; delete v._id;
   const id = editId || newId(F.col);
   const r = F.save(v, id, isNew);
@@ -1878,7 +1910,8 @@ export function syncState() {
 }
 
 let deskMod = null;
-export function render(fresh) {
+export function render(fresh) { const t0 = performance.now(); try { return render0(fresh); } finally { S.perfRender = Math.round(performance.now() - t0); const f = document.getElementById('theForm'); if (f && f.dataset.id) showConflict(f); } } /* v0.20.0 (C3) · (C2) live bar */
+function render0(fresh) {
   const v = $('#view'); const tabs = $('#nav');
   $('#banner').style.display = S.storageOk ? 'none' : 'block';
   if (!S.user) { tabs.classList.add('hidden'); document.body.classList.remove('desk'); v.innerHTML = viewLogin(); return; }
@@ -3234,7 +3267,8 @@ export async function heartbeat(force) {
   const data = { uid: S.user.uid, email: S.user.email || '', name: myName(), appVersion: APP_VERSION, ua: shortUa(), desk: !!S.desk, lang: getLang(),
     pending: pend.length, rejected: j.filter((e) => e.state === 'rejected').length, oldestPendingAt: pend.length ? Math.min(...pend.map((e) => e.t)) : null,
     lastServerAt: S.lastServer || null, online: navigator.onLine, storageOk: !!S.storageOk, persisted, standalone: !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches), seenAtMs: Date.now(),
-    errors: errQ.slice(-ERR_MAX), errLast: errQ.length ? errQ[errQ.length - 1].t : null }; /* v0.18.0 (A-4) */
+    errors: errQ.slice(-ERR_MAX), errLast: errQ.length ? errQ[errQ.length - 1].t : null, /* v0.18.0 (A-4) */
+    appCheck: appCheckState, perf: { model: S.perfModel || 0, render: S.perfRender || 0, homes: S.D.customers.size } }; /* v0.20.0 (C1)(C3) */
   if (DEMO) { S.demoDevices = S.demoDevices || []; const i = S.demoDevices.findIndex((d) => d.id === deviceId()); const row = { id: deviceId(), ...data, seenAt: { toMillis: () => data.seenAtMs } }; if (i >= 0) S.demoDevices[i] = row; else S.demoDevices.push(row); return row; }
   setDoc(doc(db, 'devices', deviceId()), { ...data, seenAt: serverTimestamp() }, { merge: true }).catch(() => {});
   return data;
@@ -3702,14 +3736,14 @@ if (DEMO) {
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
     S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender };
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */
   if (!location.search.includes('empty')) import('./demo.js').then((d) => { d.loadDemo(S, practiceDay()); practiceReplay(); practiceLive(d, true); setInterval(() => practiceLive(d, false), 180000); bump(); heartbeat(true); render(true); }).catch((e) => console.warn('demo', e));
 }
 if (EMU) { /* v0.18.0 (A-1): the self-test drives the real sign-in → save → server → read-back path */
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R, CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, noteError, errList, deviceIssues, heartbeat };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R, CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, noteError, errList, deviceIssues, heartbeat };
   window.__emu = {
     signUp: async (email, pw) => { const r = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emu', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw, returnSecureToken: true }) }); return (await r.json()).localId; },
     signIn: (email, pw) => signInWithEmailAndPassword(auth, email, pw), signOut: () => signOut(auth),

@@ -1050,3 +1050,6 @@ body.desk .drawer.full .dpage.scr-detail { margin-right:96px; } /* (1) the â¤¢ â
 .tile > span:nth-child(3) { font-size:15px; font-weight:700; }
 .tile.bad .ic { background:var(--bad-soft); } .tile.warn .ic { background:var(--warn-soft); } .tile.ok .ic { background:var(--ok-soft, var(--brand-soft)); }
 .hero .top.sub { align-items:center; flex-wrap:wrap; gap:6px 10px; margin-top:4px; } .hero .top.sub .right { display:flex; align-items:center; gap:6px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; } .hero .top.sub .syncpill { padding:5px 9px; font-size:12px; }
+
+/* v0.20.0 (C2): the record changed under an open form */
+.conflictbar { background:var(--warn-soft); color:var(--ink); border:1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); border-radius:12px; padding:10px 12px; font-size:13.5px; font-weight:600; margin-bottom:10px; }

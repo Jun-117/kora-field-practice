@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.21.1 (2026-10-05)';
+export const APP_VERSION = 'kf-v0.21.2 (2026-10-06)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -1377,7 +1377,7 @@ FORMS.expense = {
 FORMS.device = {
   col: 'deviceEvents', title: 'Device event', icon: '📦', perm: 'stock',
   spec: () => [
-    { k: 'event', l: 'What happened', t: 'chips', o: OPT.devEvent.filter((e) => !['Installed'].includes(e)), req: 1, def: 'Received into stock', hint: 'Installs, recoveries and relocation swaps are added automatically from those forms.' },
+    { k: 'event', l: 'What happened', t: 'chips', o: OPT.devEvent.filter((e) => !['Installed', 'Recovered'].includes(e)), req: 1, def: 'Received into stock', /* v0.21.2 (R5): Recovered comes only from the recovery case (deposit flow) · Swapped out stays = the only record of a repair swap at the same home */ hint: 'Installs, recoveries and relocation swaps are added automatically from those forms.' },
     { k: 'serials', l: 'Serial number(s)', t: 'textarea', req: 1, ph: 'one per line — several at once for a shipment', gen: 1, hint: 'New units: type how many → 🏷️ New KORA numbers (KD-26-0001 …) → same order as the stickers' },
     { k: 'date', l: 'Date', t: 'date', req: 1, def: today },
     { k: 'batch', l: 'Batch / PI', t: 'text', ph: 'e.g. TQ-PI-20260808', show: (v) => ['Received into stock', 'Arrival check OK', 'Arrival check — defect'].includes(v.event) },

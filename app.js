@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.20.8 (2026-10-05)';
+export const APP_VERSION = 'kf-v0.20.9 (2026-10-05)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -2971,8 +2971,8 @@ export function viewReport(p) {
   }
   if (k === 'referrals') return head('🎁 Referral rewards', 'Only during a campaign (Settings) · the referrer gets 50% off a bill, 3 months after the new home signed up, only after install + fee paid · the new home gets nothing · no cash') +
     `<div class="card flush">${m.referrals.map((r) => `<div class="item"><div class="main"><div class="t">${esc(r.who.name)} · ${r.role === 'referee' ? 'new customer' : 'referrer'}</div><div class="s">${R.npr(r.amount)} · ${r.done ? 'applied ✅' : r.ready ? 'ready' : esc(r.waiting)}</div></div>${!r.done && r.ready && isBoss() ? `<button class="btn small" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">Apply</button>` : ''}</div>`).join('') || '<div class="empty">No referrals yet</div>'}</div>`;
-  if (k === 'bank') return head('🏧 Bank statement match', 'Upload the bank/Fonepay CSV → match rows to customers by KC code, phone, or a unique amount → create payments. Nothing is saved until you tap Create.') +
-    `<div class="card"><input type="file" accept=".csv,text/csv,.xls,.xlsx" id="bankFile"><div id="bankBox" class="hint">The bank / Fonepay export format is not known yet — any CSV or Excel file with date, amount and description columns works. Send Jun one real file to tune the matching.</div></div>`;
+  if (k === 'bank') return head('🏧 Bank statement match', 'Upload the nBank statement PDF (or any CSV / Excel) → match rows to customers by KC code, phone, or a unique amount → create payments. Nothing is saved until you tap Create.') +
+    `<div class="card"><input type="file" accept=".pdf,application/pdf,.csv,text/csv,.xls,.xlsx" id="bankFile"><div id="bankBox" class="hint">Nabil nBank: Statement → Filter (dates) → Apply → PDF icon → save → upload that PDF here. Deposits only are matched; withdrawals are ignored.</div></div>`;
   if (k === 'backup') return head('💾 Backup', 'Everything in one go: customers, visits, payments, expenses, devices… as Excel + JSON.') + backupHtml();
   if (k === 'export') return head('💾 Export all data', 'Backup to this computer (Firestore scheduled backups need the Blaze plan).') +
     `<div class="card">${COLS.filter((c) => ((c !== 'audit' && c !== 'payroll') || isBoss()) && (c !== 'milestones' || S.isAdmin)).map((c) => `<button class="btn ghost" data-csv="col:${c}">⬇️ ${esc(c)} (${S.D[c].size}) CSV</button>`).join('')}<button class="btn" data-act="exportJson">⬇️ Everything as one JSON file</button></div>`;
@@ -3355,8 +3355,22 @@ export function csvFor(kind) {
 }
 // Excel files are converted with SheetJS (vendored, loaded only here).
 function loadXlsx() { return window.XLSX ? Promise.resolve(window.XLSX) : new Promise((res, rej) => { const s = document.createElement('script'); s.src = './vendor/xlsx.full.min.js'; s.onload = () => res(window.XLSX); s.onerror = rej; document.head.appendChild(s); }); }
+function loadPdfjs() { /* v0.20.9: pdf.js 5.7.284 (vendor, loaded only here) */
+  if (window.__pdfjs) return Promise.resolve(window.__pdfjs);
+  return import('./vendor/pdf.min.mjs').then((m) => { m.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs'; window.__pdfjs = m; return m; });
+}
+export async function bankPdfRows(buf) { /* the statement PDF → text items per page (y grows downward) → rows (logic.statementRowsFromText) */
+  const pdf = await (await loadPdfjs()).getDocument({ data: buf }).promise; const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) { const pg = await pdf.getPage(i); const vp = pg.getViewport({ scale: 1 }); const tc = await pg.getTextContent(); pages.push(tc.items.filter((it) => it.str !== undefined).map((it) => { const [x, y] = vp.convertToViewportPoint(it.transform[4], it.transform[5]); return { str: it.str, x, y }; })); } /* viewport point = page rotation applied (the nBank PDF is a rotated landscape page): x → right, y → down */
+  return R.statementRowsFromText(pages);
+}
 function bankUpload(file) {
   const box = $('#drawer #bankBox') || $('#bankBox');
+  if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+    box.textContent = 'Reading the statement PDF…';
+    file.arrayBuffer().then(bankPdfRows).then((rows) => { if (rows.length < 2) { box.textContent = 'No transaction rows found — is this the nBank "Electronic Account Statement" PDF? (Statement → Filter → PDF icon)'; return; } bankRows(rows, box); }).catch((e) => { box.textContent = 'Could not read the PDF: ' + (e && e.message || e); });
+    return;
+  }
   if (/\.xlsx?$/i.test(file.name)) {
     box.textContent = 'Reading Excel…';
     loadXlsx().then((X) => file.arrayBuffer().then((buf) => { const wb = X.read(buf, { type: 'array' }); const csv = X.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]); bankRows(R.parseCSV(csv), box); })).catch((e) => { box.textContent = 'Could not read the Excel file: ' + e.message; });
@@ -3372,7 +3386,7 @@ function bankRows(rows, box) {
     const hdr = rows[0]; const guess = (re) => Math.max(0, hdr.findIndex((h) => re.test(String(h))));
     const opt = (sel) => hdr.map((h, i) => `<option value="${i}"${i === sel ? ' selected' : ''}>${esc(h || 'column ' + (i + 1))}</option>`).join('');
     S.bankRows = rows.slice(1);
-    box.innerHTML = `<div class="row"><div><label>Date</label><select id="bmDate">${opt(guess(/date|miti/i))}</select></div><div><label>Amount</label><select id="bmAmt">${opt(guess(/amount|credit|cr|deposit/i))}</select></div></div>
+    box.innerHTML = `<div class="row"><div><label>Date</label><select id="bmDate">${opt(guess(/date|miti/i))}</select></div><div><label>Amount</label><select id="bmAmt">${opt(guess(/amount|credit|\bcr\b|deposit/i))}</select></div></div>
       <label>Description</label><select id="bmDesc">${opt(guess(/desc|narr|remark|detail|particular/i))}</select><button class="btn ghost" data-act="bankMatch" type="button">Match ${rows.length - 1} rows</button><div id="bankRes"></div>`;
   }
 }
@@ -3382,7 +3396,7 @@ function bankMatch() {
   const res = R.matchBankRows(S.bankRows || [], map, arr('customers'), model().ledgers, arr('payments')).filter((r) => r.amount > 0);
   S.bankMatches = res;
   const out = g('bankRes');
-  out.innerHTML = `<table class="tbl" style="margin-top:10px"><tr><th></th><th>Date</th><th class="n">NPR</th><th>Match</th></tr>${res.map((r) => `<tr><td><input type="checkbox" data-bank="${r.i}" ${r.customer && !r.dup ? 'checked' : r.customer ? '' : 'disabled'} style="min-height:auto;width:auto"></td><td>${esc(r.date)}</td><td class="n">${r.amount}</td><td>${r.customer ? `${esc(custLabel(r.customer))} <span class="pill blue">${esc(r.how)}</span>${r.dup ? ' <span class="pill warn">already recorded</span>' : ''}` : `<span class="muted">${esc(r.desc.slice(0, 40))}</span>`}</td></tr>`).join('')}</table>
+  out.innerHTML = `<table class="tbl" style="margin-top:10px"><tr><th></th><th>Date</th><th class="n">NPR</th><th>Match</th></tr>${res.map((r) => `<tr><td><input type="checkbox" data-bank="${r.i}" ${r.customer && !r.dup ? 'checked' : r.customer ? '' : 'disabled'} style="min-height:auto;width:auto"></td><td>${esc(r.date)}</td><td class="n">${r.amount}</td><td>${r.customer ? `${esc(custLabel(r.customer))} <span class="pill blue">${esc(r.how)}</span>${r.dup ? ' <span class="pill warn">already recorded</span>' : ''}<div class="muted" data-noi18n>${esc(r.desc.slice(0, 60))}</div>` : `<span class="muted" data-noi18n>${esc(r.desc.slice(0, 60))}</span>`}</td></tr>`).join('')}</table>
     <button class="btn" data-act="bankCreate" type="button">Create ${res.filter((r) => r.customer).length} payments</button>`;
 }
 
@@ -3591,7 +3605,7 @@ document.addEventListener('click', async (ev) => {
   }
   else if (act === 'bankCreate') {
     const picked = [...document.querySelectorAll('[data-bank]:checked')].map((b) => Number(b.dataset.bank)); let n = 0;
-    for (const r of S.bankMatches || []) if (picked.includes(r.i) && r.customer) { const led = model().ledgers.get(r.customer.id); save(`payments/${newId('payments')}`, { customerId: r.customer.id, date: r.date || today(), type: led && led.paidThrough < 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: r.amount, method: 'Fonepay QR', ref: r.desc.slice(0, 80), point: 'Digital', notes: 'bank CSV match: ' + r.how, by: myName() }, true); n++; }
+    for (const r of S.bankMatches || []) if (picked.includes(r.i) && r.customer) { const led = model().ledgers.get(r.customer.id); save(`payments/${newId('payments')}`, { customerId: r.customer.id, date: r.date || today(), type: led && led.paidThrough < 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: r.amount, method: 'Fonepay QR', ref: r.desc.slice(0, 80), point: 'Digital', notes: 'bank statement match: ' + r.how, by: myName() }, true); n++; }
     toast(`Created ${n} payments`); closeDrawer(true); nav('status', 'report', { r: 'payments' });
   }
 });
@@ -3755,7 +3769,7 @@ if (DEMO) {
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
     S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, bankPdfRows };
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */

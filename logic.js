@@ -722,6 +722,37 @@ export function parseCSV(text) {
   if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
   return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
 }
+// v0.20.9: Nabil nBank "Electronic Account Statement" PDF (Statement → Filter → PDF icon · 🟢 real file 2026-10-05) → rows like a CSV.
+// Input = pages of text items {str, x, y} (y grows downward). Columns come from the header words; each transaction row is anchored
+// on its S.N number; a wrapped Description line (above or below) joins the nearest S.N row. Opening/Closing Balance lines are skipped.
+export const STATEMENT_HEADER = ['Date', 'Description', 'Deposit', 'Withdraw', 'Balance'];
+export function statementRowsFromText(pages) {
+  const out = [STATEMENT_HEADER.slice()]; const isNum = (t) => /^-?[\d,]+\.\d{2}$/.test(t);
+  for (const items0 of pages || []) {
+    const items = (items0 || []).map((it) => ({ str: String(it.str || '').trim(), x: Number(it.x) || 0, y: Number(it.y) || 0 })).filter((it) => it.str);
+    const hx = (re) => { const h = items.find((it) => re.test(it.str)); return h ? h.x : null; };
+    const xDate = hx(/^Transaction Date$/i), xDesc = hx(/^Description$/i), xWd = hx(/^Withdraw/i), xDep = hx(/^Deposit$/i), xBal = hx(/^Balance$/i);
+    if (xDate === null || xDesc === null || xDep === null) continue; /* not this layout */
+    const colOf = (x) => (x < (xDate + xDesc) / 2 ? (x < xDate - 20 ? 'sn' : 'date') : x < (xDesc + (xWd ?? xDep)) / 2 + 40 ? 'desc' : xWd !== null && x < (xWd + xDep) / 2 + 30 ? 'wd' : xBal !== null && x >= (xDep + xBal) / 2 + 30 ? 'bal' : 'dep');
+    const hdrY = items.find((it) => /^Transaction Date$/i.test(it.str)).y;
+    const body = items.filter((it) => it.y > hdrY + 2 && !/^(Opening|Closing) Balance$/i.test(it.str) && !/^The statement/i.test(it.str));
+    const anchors = body.filter((it) => /^\d{1,5}$/.test(it.str) && colOf(it.x) === 'sn').sort((a, b) => a.y - b.y);
+    if (!anchors.length) continue;
+    const rows = anchors.map((a) => ({ y: a.y, date: '', desc: [], dep: '', wd: '', bal: '' }));
+    const nearest = (y) => { let best = null, d = 1e9; for (const r of rows) { const dd = Math.abs(r.y - y); if (dd < d) { d = dd; best = r; } } return d <= 26 ? best : null; };
+    for (const it of body) {
+      if (anchors.includes(it)) continue; const r = nearest(it.y); if (!r) continue; const c = colOf(it.x);
+      if (c === 'date') { const m = it.str.match(/^(\d{4}-\d{2}-\d{2})/); if (m && !r.date) r.date = m[1]; }
+      else if (c === 'desc') r.desc.push(it);
+      else if (c === 'dep') { if (isNum(it.str)) r.dep = it.str; }
+      else if (c === 'wd') { if (isNum(it.str)) r.wd = it.str; }
+      else if (c === 'bal') { if (isNum(it.str)) r.bal = it.str; }
+      else if (c === 'sn') { /* a second number in the S.N column = noise */ }
+    }
+    for (const r of rows) if (r.date) out.push([r.date, r.desc.sort((a, b) => a.y - b.y || a.x - b.x).map((it) => it.str).join(' ').replace(/\s+/g, ' ').trim(), r.dep, r.wd, r.bal]);
+  }
+  return out;
+}
 // #2 bank statement matching — finds the customer by KC code or phone digits in the description; else by a unique exact amount.
 export function matchBankRows(rows, map, customers, ledgers, payments) {
   const num = (s) => Number(String(s).replace(/[^\d.-]/g, ''));

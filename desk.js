@@ -651,7 +651,7 @@ function repVisual(k, m, p) {
   if (k === 'payments') {
     const cur = R.monthKey(t); const ps = m.D.payments.filter((q) => !R.isNonCash(q));
     const thisM = ps.filter((q) => R.monthKey(q.date) === cur); const prevM = ps.filter((q) => R.monthKey(q.date) === R.monthKey(R.addMonths(cur + '-01', -1)));
-    const byMethod = {}; for (const q of thisM) byMethod[q.method || '—'] = (byMethod[q.method || '—'] || 0) + (Number(q.amount) || 0);
+    const byMethod = {}; for (const q of thisM) { const k = R.methodGroup(q.method); byMethod[k] = (byMethod[k] || 0) + (Number(q.amount) || 0); } /* v0.21.4 (R1): two kinds */
     const days = Array.from({ length: 30 }, (_, i) => R.addDays(t, i - 29)); const byDay = Object.fromEntries(days.map((x) => [x, 0])); for (const q of ps) if (byDay[q.date] !== undefined) byDay[q.date] += Number(q.amount) || 0;
     const colors = ['#34c1ff', '#2ee59d', '#ffcc4d', '#ff9a3d', '#7c4dff', '#ff5c5c'];
     return kpi(1, '<b>This month</b> · cash in', thisM.reduce((s2, q) => s2 + (Number(q.amount) || 0), 0), `${thisM.length} payments`) + kpi(2, '<b>Last month</b>', prevM.reduce((s2, q) => s2 + (Number(q.amount) || 0), 0), `${prevM.length} payments`)

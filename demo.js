@@ -59,7 +59,7 @@ export function loadDemo(S, today) {
       const delay = k === 1 ? 0 : kind < 0.88 ? int(-2, 4) : kind < 0.96 ? int(4, 18) : int(0, 6);
       const date = R.addDays(due, delay); if (date > today) continue;
       const b = R.billAmount(k);
-      put('payments', { customerId: c.id, date, type: k === 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: b.amount, method: pick(['Khalti', 'eSewa', 'Fonepay QR', 'Fonepay QR', k === 1 ? 'Khalti' : 'Cash']), ref: 'TXN' + int(100000, 999999), billNo: r() < 0.05 ? '' : String(1000 + (++billN)), point: pick(['Field visit', 'Digital', 'Digital']), by: billN % 3 === 0 ? 'Laxmi' : 'Tara', /* v0.21.0: two cash holders — without touching the seeded random sequence (it would change the whole demo world) */ updatedAt: { toMillis: () => R.parseD(date).getTime() + 14 * 3600e3 } });
+      put('payments', { customerId: c.id, date, type: k === 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: b.amount, method: pick(['QR / bank', 'QR / bank', 'QR / bank', 'QR / bank', k === 1 ? 'QR / bank' : 'Cash']), ref: 'TXN' + int(100000, 999999), billNo: r() < 0.05 ? '' : String(1000 + (++billN)), point: pick(['Field visit', 'Digital', 'Digital']), by: billN % 3 === 0 ? 'Laxmi' : 'Tara', /* v0.21.0: two cash holders — without touching the seeded random sequence (it would change the whole demo world) */ updatedAt: { toMillis: () => R.parseD(date).getTime() + 14 * 3600e3 } });
     }
   }
   // visits: monthly for 6 months, then quarterly; filters by E-2 booking; some visits missed
@@ -186,7 +186,7 @@ export function loadDemo(S, today) {
   const nowMs = Date.now(); const near = (c, k) => ({ lat: c.gps.lat + 0.0004 * k, lng: c.gps.lng - 0.0003 * k, acc: 12 });
   const mk = (who, list, minsAgo) => list.forEach((c, i) => { const ms = Math.max(nowMs - minsAgo[i] * 60000, R.parseD(today).getTime() + 300000); const at = { ...near(c, i), t: ms }; /* v0.11: never before today 00:05 — after midnight the board dropped 'yesterday' records (2 flaky desk tests) */
     put('visits', { customerId: c.id, customerCode: c.code, customerName: c.name, date: today, visitType: 'Routine check', status: '✅ Completed', filters: [], technician: who, savedAt: at, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms }, ...(DEMO_NOTES[(i + (who === 'Tara' ? 0 : 1)) % 4] || {}) });
-    if (i % 2 === 0) put('payments', { customerId: c.id, date: today, type: 'Monthly subscription', amount: 1400, method: who === 'Laxmi' && i === 0 ? 'Cash' : 'Fonepay QR', by: who, savedAt: { ...at, t: ms + 90000 }, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms + 90000 } }); });
+    if (i % 2 === 0) put('payments', { customerId: c.id, date: today, type: 'Monthly subscription', amount: 1400, method: who === 'Laxmi' && i === 0 ? 'Cash' : 'QR / bank', by: who, savedAt: { ...at, t: ms + 90000 }, createdBy: who === 'Tara' ? 'demo-tara' : 'demo-ram', updatedAt: { toMillis: () => ms + 90000 } }); });
   const withGps = (who) => custs.filter((c) => c.status === 'Active' && c.assignee === who && c.gps && Number.isFinite(c.gps.lat));
   mk('Tara', withGps('Tara').slice(0, 4), [230, 170, 95, 20]);
   // v0.8 demo: two callbacks (a leak 6 and 12 days after a completed visit) — done, so open requests stay the same
@@ -219,7 +219,7 @@ export function loadDemo(S, today) {
     // v0.8 #12: money actions waiting for an OK (a discount by Laxmi, a deposit refund) + one decided
     { const act = [...S.D.customers.values()].filter((c) => c.status === 'Active' && R.isDate(c.installDate)); const c1 = act[3], c2 = act[8];
       if (c1) put('payments', { customerId: c1.id, date: R.addDays(today, -1), type: 'Monthly subscription', amount: 900, discount: 500, discountReason: 'Promotion', method: 'Cash', by: 'Laxmi', approval: 'Pending' }).createdBy = 'demo-ram';
-      if (c2) put('payments', { customerId: c2.id, date: R.addDays(today, -20), type: 'Monthly subscription', amount: 1100, discount: 300, discountReason: 'Claim compensation', method: 'Fonepay QR', by: 'Tara', approval: 'Approved', approvedBy: 'Jun', approvedAt: new Date(R.parseD(R.addDays(today, -19)).getTime() + 9 * 3600e3).toISOString() });
+      if (c2) put('payments', { customerId: c2.id, date: R.addDays(today, -20), type: 'Monthly subscription', amount: 1100, discount: 300, discountReason: 'Claim compensation', method: 'QR / bank', by: 'Tara', approval: 'Approved', approvedBy: 'Jun', approvedAt: new Date(R.parseD(R.addDays(today, -19)).getTime() + 9 * 3600e3).toISOString() });
       const rc = [...S.D.recoveries.values()].find((r) => ['Recovered', 'Partial'].includes(r.outcome)); if (rc) { rc.depositRefunded = rc.depositRefunded || 1200; rc.approval = 'Pending'; } }
     // v0.8 security: a few change-log entries (edits of saved records)
     { const au = (x) => { const r = put('audit', { at: new Date(Date.now() - x.h * 3600e3).toISOString(), ...x }); r.createdBy = x.by === 'Laxmi' ? 'demo-ram' : x.by === 'Tara' ? 'demo-tara' : 'demo-uid'; return r; }; const cs2 = [...S.D.customers.values()].filter((c) => c.status === 'Active');
@@ -369,7 +369,7 @@ export function liveWorld(S, anchor, nowMs) {
   const chases = [...S.D.checkins.values()].filter((q) => q.kind === R.CHASE_KIND && R.isDate(q.promiseDate) && q.promiseDate > anchor && q.promiseDate <= today);
   const pay = (c, date, amount, key, extra) => {
     if (!(amount > 0.5)) return; const s = stream('m|' + key); const h = s.int(8, 20), mi = s.int(0, 59);
-    put('payments', { id: 'sim_pay_' + key, customerId: c.id, date, type: 'Monthly subscription', amount: Math.round(amount), method: s.pick(['Khalti', 'eSewa', 'Fonepay QR', 'Fonepay QR']), ref: 'TXN' + s.int(100000, 999999), billNo: '', point: 'Digital', by: 'Tara', ...extra }, msOf(date, h, mi));
+    put('payments', { id: 'sim_pay_' + key, customerId: c.id, date, type: 'Monthly subscription', amount: Math.round(amount), method: s.pick(['QR / bank', 'QR / bank', 'QR / bank', 'QR / bank']), ref: 'TXN' + s.int(100000, 999999), billNo: '', point: 'Digital', by: 'Tara', ...extra }, msOf(date, h, mi));
   };
   // 1 · bills: each home pays by its habit (from how it stood on the day the world was made)
   for (const c of active) {

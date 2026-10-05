@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.21.3 (2026-10-06)';
+export const APP_VERSION = 'kf-v0.21.4 (2026-10-06)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -48,7 +48,7 @@ export const OPT = {
   waterSource: ['Municipal tap', 'Well / borehole', 'Tanker', 'Spring', 'Other'],
   installChecks: ['No leaks at any joint (checked twice)', 'Pump runs quietly', 'UV lamp is on', 'TDS shown to the customer', 'Contract signed (2 copies)', 'Told: next filter change in about 4 months', 'Gave our number for breakdowns'],
   firstPay: ['Received 4,900', 'Not yet'], // v0.10.2 (Jun 2026-09-29): the first day is always 4,900 — a referee's free month comes off bill 2 (🎁 apply on the customer page)
-  method: ['Khalti', 'eSewa', 'Fonepay QR', 'Bank transfer', 'Cash'],
+  method: ['QR / bank', 'Cash'], /* v0.21.4 (R1) Jun 10/6 "아직은 없다": no Khalti/eSewa wallet — every non-cash payment lands in the company bank (QR or transfer) and is matched from the statement · old records keep their old value (R.methodGroup reads them as QR / bank) */
   point: ['Field visit', 'Office', 'Digital'],
   discountReason: ['Promotion', 'Referral', 'Claim compensation'],
   filters: R.FILTER_TYPES,
@@ -1104,8 +1104,8 @@ FORMS.payment = {
     { k: 'type', l: 'What for', t: 'chips', o: () => R.PAYMENT_TYPES.filter((x) => !R.NONCASH.has(x) || isBoss()), req: 1, def: 'Monthly subscription' },
     { k: 'months', l: 'Prepay — how many bills?', t: 'chips', o: ['1', '2', '3', '6', '12'], def: '1', show: (v) => v.type === 'Monthly subscription', hint: 'The amount fills in: the next bills added up. More than one = paid ahead; each bill keeps its own date on the receipt.' }, /* v0.19.0 (3) Jun 10/4 "선납 옵션" — no discount: one price (memory kora-price-1100-decision) */
     { k: 'amount', l: 'Amount received (NPR)', t: 'number', req: 1 },
-    { k: 'method', l: 'Paid by', t: 'chips', o: OPT.method, req: 1, def: 'Khalti' },
-    { k: 'ref', l: 'Transaction ID', t: 'text', ph: 'from Khalti / eSewa / bank' },
+    { k: 'method', l: 'Paid by', t: 'chips', o: OPT.method, req: 1, def: 'QR / bank' },
+    { k: 'ref', l: 'Transaction ID', t: 'text', ph: 'from the bank app or statement' },
     { k: 'billNo', l: 'VAT bill no.', t: 'text', ph: 'number on the VAT bill you gave', hint: 'Goes into the IRD sales book for the CA (Money → CA pack). The app does not print tax invoices.', show: (v) => v.type !== 'Referral credit' },
     { k: 'point', l: 'Where', t: 'chips', o: OPT.point, def: 'Field visit' },
     { k: 'lateReason', l: 'Paid late — why?', t: 'chips', o: OPT.lateReason, show: (v) => isLate(v.customerId) || (editingForm() && !!v.lateReason), hint: 'Ask once. "Money not come in yet" (remittance, salary) vs "no money this month" need different fixes.' },
@@ -2139,7 +2139,7 @@ function viewToday() {
 export function myDay(m, name, day) {
   const me = name || myName(); const t = day || m.t; const isDone = (v) => String(v.status || '').includes('Completed');
   const visits = m.D.visits.filter((v) => v.date === t && (v.technician || '') === me && isDone(v)); const installs = m.D.customers.filter((c) => c.installDate === t && ((c.installer || '') === me || (S.user && c.createdBy === S.user.uid && me === myName())));
-  const pays = m.D.payments.filter((p) => p.date === t && (p.by || '') === me && (Number(p.amount) || 0) > 0); const byMethod = {}; for (const p of pays) byMethod[p.method || '—'] = (byMethod[p.method || '—'] || 0) + (Number(p.amount) || 0);
+  const pays = m.D.payments.filter((p) => p.date === t && (p.by || '') === me && (Number(p.amount) || 0) > 0); const byMethod = {}; for (const p of pays) { const k = R.methodGroup(p.method); byMethod[k] = (byMethod[k] || 0) + (Number(p.amount) || 0); }
   const parts = {}; for (const v of visits) for (const p of v.parts || []) parts[p] = (parts[p] || 0) + 1; const filters = visits.reduce((n, v) => n + (v.filters || []).length, 0);
   const noShows = m.D.visits.filter((v) => v.date === t && (v.technician || '') === me && R.isNoShow(v)).length;
   return { me, t, visits, installs, pays, byMethod, parts, filters, noShows, cash: R.cashInHand(m.D, me) };
@@ -3152,7 +3152,7 @@ export function viewReport(p) {
     <div class="card"><h3>New install</h3>1. Measure raw TDS and pressure first.<br>2. Install, leak test twice, pump quiet, UV lamp on.<br>3. Measure purified TDS and flow (UV: 1.2 L/min or less).<br>4. Tick all checks · take the 3 photos (device, TDS meter, signed contract).<br>5. Day-1 payment NPR 4,900 by QR — the install is not finished before it is confirmed.</div>
     <div class="card"><h3>Visits</h3>• Look at the PP filter: brown or black → replace now.<br>• One old filter back for every new one.<br>• A completed visit needs photos, TDS after, and the next visit date.<br>• Sanitise pipes every 3 months — tick it on the visit.</div>
     <div class="card"><h3>The day-7 call</h3>One call 7 days after every install — Tara calls or WhatsApps the home.<br>• Is the water fine? Anything to fix? (a fault found early is a cheap one)<br>• The home feels looked after — that is what keeps it with us.<br>• Would a neighbour or relative like a demo?<br>Log it under New → Check-in call. No other routine calls: the monthly visits cover the rest. A late bill is chased from Collections, not from here.</div>
-    <div class="card"><h3>Money</h3>• Bill = same day each month as the install day. Months 2–13: 1,400 (1,100 + 300 deposit). From month 14: 1,100.<br>• 3 days before → WhatsApp reminder · due day → remind again · +3 days → Tara calls · +7 days → home visit.<br>• Only Tara takes cash. Everyone else: Khalti / eSewa / Fonepay QR.<br>• Send the receipt from the customer page — the deposit is on its own line.</div>
+    <div class="card"><h3>Money</h3>• Bill = same day each month as the install day. Months 2–13: 1,400 (1,100 + 300 deposit). From month 14: 1,100.<br>• 3 days before → WhatsApp reminder · due day → remind again · +3 days → Tara calls · +7 days → home visit.<br>• Only Tara takes cash. Everyone else: the company QR or a bank transfer.<br>• Send the receipt from the customer page — the deposit is on its own line.</div>
     <div class="card"><h3>Breakdowns</h3>Office hours → reply within 2 hours, visit today or tomorrow. After 17:00 → reply today, visit tomorrow. Saturday → reply next morning. 3+ days = red.</div>`;
   return head('Report', '') + '<div class="card">Unknown report</div>';
 }
@@ -3716,7 +3716,7 @@ document.addEventListener('click', async (ev) => {
   }
   else if (act === 'bankCreate') {
     const picked = [...document.querySelectorAll('[data-bank]:checked')].map((b) => Number(b.dataset.bank)); let n = 0;
-    for (const r of S.bankMatches || []) if (picked.includes(r.i) && r.customer) { const led = model().ledgers.get(r.customer.id); save(`payments/${newId('payments')}`, { customerId: r.customer.id, date: r.date || today(), type: led && led.paidThrough < 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: r.amount, method: 'Fonepay QR', ref: r.desc.slice(0, 80), point: 'Digital', notes: 'bank statement match: ' + r.how, by: myName() }, true); n++; }
+    for (const r of S.bankMatches || []) if (picked.includes(r.i) && r.customer) { const led = model().ledgers.get(r.customer.id); save(`payments/${newId('payments')}`, { customerId: r.customer.id, date: r.date || today(), type: led && led.paidThrough < 1 ? 'Installation fee (4,900)' : 'Monthly subscription', amount: r.amount, method: 'QR / bank', ref: r.desc.slice(0, 80), point: 'Digital', notes: 'bank statement match: ' + r.how, by: myName() }, true); n++; }
     toast(`Created ${n} payments`); closeDrawer(true); nav('status', 'report', { r: 'payments' });
   }
 });

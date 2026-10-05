@@ -1270,6 +1270,9 @@ Object.assign(W, {
   'Real days between changes, across all households. The booking intervals are first values; PoC data decides the final ones.': ['모든 가구의 실제 교체 간격(일). 예약 주기는 첫 값이고, PoC 데이터가 최종값을 정합니다.', 'सबै घरको वास्तविक परिवर्तन अन्तराल (दिन)। बुकिङ अन्तराल पहिलो मान हो; PoC डाटाले अन्तिम तय गर्छ।'],
   'Start + new + came back + deposit starts − left − month 14 = end. Install month = 1,100 (inside the 4,900), bills 2–13 = 1,400, then 1,100. The deposit part is held, not earned.': ['시작 + 신규 + 복귀 + 보증금 시작 − 해지 − 14개월차 = 끝. 설치 달 = 1,100(4,900 안에 포함), 2–13회차 = 1,400, 그 뒤 1,100. 보증금 몫은 맡아둔 돈이지 수익이 아닙니다.', 'सुरु + नयाँ + फर्किएको + धरौटी सुरु − छोडेको − महिना १४ = अन्त्य। जडान महिना = १,१०० (४,९०० भित्र), बिल २–१३ = १,४००, त्यसपछि १,१००। धरौटी अंश राखिएको हो, कमाइ होइन।'],
   'statement → payments': ['입금내역 → 결제', 'स्टेटमेन्ट → भुक्तानी'],
+  /* v0.21.4 R1 — NE 🟡 Claude, Tara to review */
+  'QR / bank': ['QR · 계좌', 'QR / बैंक'], 'from the bank app or statement': ['은행 앱이나 명세에서', 'बैंक एप वा स्टेटमेन्टबाट'],
+  'Only Tara takes cash. Everyone else: the company QR or a bank transfer.': ['현금은 타라만 받아요. 나머지는 회사 QR이나 계좌이체로.', 'नगद तारा मात्र लिन्छिन्। अरू: कम्पनीको QR वा बैंक ट्रान्सफर।'],
   /* v0.21.3 R2 + repair swap — NE 🟡 Claude, Tara to review */
   'Live & dispatch': ['현장 실시간·배정', 'फिल्ड लाइभ · काम बाँडफाँड'], 'Excel + JSON · everything': ['엑셀 + JSON · 전부', 'एक्सेल + JSON · सबै'],
   'Unit replaced?': ['기기 교체했나요?', 'उपकरण फेरियो?'], 'Yes — new unit put in': ['예 — 새 기기 설치', 'हो — नयाँ उपकरण राखियो'], 'New unit number (sticker)': ['새 기기 번호 (스티커)', 'नयाँ उपकरण नम्बर (स्टिकर)'],

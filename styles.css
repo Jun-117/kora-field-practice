@@ -1053,3 +1053,12 @@ body.desk .drawer.full .dpage.scr-detail { margin-right:96px; } /* (1) the â¤¢ â
 
 /* v0.20.0 (C2): the record changed under an open form */
 .conflictbar { background:var(--warn-soft); color:var(--ink); border:1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); border-radius:12px; padding:10px 12px; font-size:13.5px; font-weight:600; margin-bottom:10px; }
+
+/* v0.20.3 (4): the Phones page as device cards */
+.fleet { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; }
+.fl-card { background:var(--card2); border:1px solid var(--line); border-radius:14px; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+.fl-card.lv-bad { border-color:color-mix(in srgb, var(--bad) 55%, var(--line)); } .fl-card.lv-warn { border-color:color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.fl-h { display:flex; align-items:center; gap:10px; } .fl-h .main { flex:1; min-width:0; } .fl-h .muted { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fl-h .avatar { width:36px; height:36px; border-radius:11px; display:grid; place-items:center; font:800 15px var(--sans); color:#fff; background:linear-gradient(135deg, var(--grad-a), var(--grad-b)); flex:none; }
+.fl-kv { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px 10px; } .fl-kv > div { display:flex; flex-direction:column; gap:1px; } .fl-kv .k { font:700 10px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--muted); } .fl-kv b { font-family:var(--mono); font-size:14px; } .fl-kv b.warn { color:var(--warn); } .fl-kv b.bad { color:var(--bad); }
+.fl-pills { display:flex; flex-wrap:wrap; gap:6px; } .fl-needs .now-i { padding:6px 0 0; margin-top:6px; } .fl-needs .now-i .ic { font-size:13px; width:20px; } .fl-needs .now-i .t { font-size:13px; } .fl-ok { font-size:13px; color:var(--ok); font-weight:700; }

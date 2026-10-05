@@ -18,7 +18,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.19.3 (2026-10-04)';
+export const APP_VERSION = 'kf-v0.19.4 (2026-10-05)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -3357,6 +3357,7 @@ document.addEventListener('click', async (ev) => {
     const [col, id, st] = apb.dataset.appr.split('|'); const x = S.D[col] && S.D[col].get(id); if (!x || x.approval !== 'Pending') return;
     if ((x.createdBy === S.user.uid || x.updatedBy === S.user.uid) && !S.isAdmin) { toast('Someone else has to OK your own'); return; }
     save(`${col}/${id}`, { approval: st, approvedBy: myName(), approvedByUid: S.user.uid, approvedAt: new Date().toISOString(), approvedAmount: Number(x[col === 'payments' ? 'discount' : 'depositRefunded']) || 0 }, false); /* the rules check the amount */ toast(st === 'Approved' ? '✓ Approved' : '✕ Not approved'); bump(); if (S.drawer) refreshDrawer(); else scheduleRender(); return; }
+  { const qb = t.closest('[data-act="rcBill"]'); if (qb) { ev.preventDefault(); ev.stopPropagation(); const cid = qb.dataset.cid; if ($('#rcBox')) imageCard('bill', cid); else { nav('customers', 'detail', { id: cid }); setTimeout(() => imageCard('bill', cid), 450); } return; } } /* v0.19.4 Jun 10/5 "핸드폰뷰 저기서 qr 눌러도 아무 작동도 안하고": the 🧾 QR in a Today row carries data-stop (so the row does not open) — which also stopped it before the act handler below ever ran */
   if (t.closest('[data-stop]')) return; // links inside list rows
   const chip = t.closest('.chip');
   if (chip && chip.parentElement && chip.parentElement.dataset.group) {

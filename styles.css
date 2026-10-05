@@ -1075,3 +1075,9 @@ button.warn.link { display:block; width:100%; text-align:left; cursor:pointer; f
 #scanBox video { width:100%; aspect-ratio:3/4; max-height:60vh; object-fit:cover; border-radius:12px; background:#000; }
 #scanBox .row { gap:8px; } #scanBox label.btn input { display:none; }
 .sg-row [data-scan] { flex:none; }
+
+/* v0.21.3 (R2) Live & dispatch in one page · Money ↔ History tabs */
+.dp-live { margin:6px 0 2px; font-size:12.5px; display:flex; flex-direction:column; gap:4px; } .dp-live .lv-st { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.dp-live .lv-kv { margin:0; } .dp-live .lv-next { margin:0; }
+.lv-tlx summary { cursor:pointer; color:var(--muted); font-size:12px; } .lv-tlx .lv-tl { max-height:180px; overflow:auto; margin-top:4px; }
+.pg-tabs { grid-column: 1 / -1; margin-bottom:-4px; }

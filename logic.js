@@ -616,7 +616,8 @@ export const REPORT_CATALOG = [
   { title: 'Company', tone: 'tone-co', rows: [
     { r: 'users', ic: '🪪', l: 'Staff & permissions', s: 'who can do what', need: 'admin', desk: 'status' }, { r: 'settings', ic: '⚙️', l: 'Settings', s: 'company · calendar · techs', need: 'admin', desk: 'status' },
     { r: 'payroll', ic: '💼', l: 'Payroll', s: 'SSF · TDS · payslips', need: 'boss', desk: 'status' }, { r: 'handover', ic: '🆘', l: 'If Jun cannot work', s: 'handover page', need: 'boss', desk: 'status' },
-    { r: 'trainings', ic: '🎓', l: 'Trainings', s: 'records', need: 'admin', desk: 'status' }, { r: 'export', ic: '💾', l: 'Export all data', s: 'backup', need: 'export', desk: 'status' }] },
+    { r: 'trainings', ic: '🎓', l: 'Trainings', s: 'records', need: 'admin', desk: 'status' }, { r: 'export', ic: '💾', l: 'Export all data', s: 'backup', need: 'export', desk: 'status' },
+    { r: 'backup', ic: '💾', l: 'Backup', s: 'Excel + JSON · everything', need: 'boss', desk: 'status', deskOnly: 1 }] }, /* v0.21.3 (R2): the desk sidebar's Backup page → this row on Sync & settings */
   { title: 'Help', tone: 'tone-co', rows: [{ r: 'help', ic: '❓', l: 'How to use', s: 'one page for staff' }] },
 ];
 // ctx = { money, expense, stock, admin, boss, referral, exportOk, approvalsOk, pay, field, capacity, n: { approvals, contract, claims, vials } }
@@ -624,7 +625,7 @@ export function reportGroups(ctx) {
   const ok = (need) => !need || ({ money: ctx.money, expense: ctx.expense || ctx.money, stock: ctx.stock, admin: ctx.admin, boss: ctx.boss, referral: ctx.referral, export: ctx.exportOk, approvals: ctx.approvalsOk, pay: ctx.pay || ctx.money, field: ctx.field, capacity: ctx.capacity })[need];
   const n = ctx.n || {};
   const sub = (row) => row.dyn === 'approvals' ? (n.approvals ? `${n.approvals} waiting` : row.s) : row.dyn === 'contract' ? (n.contract ? `${n.contract} to do` : row.s) : row.dyn === 'claims' ? (n.claims ? `${n.claims} open` : row.s) : row.dyn === 'vials' ? `${n.vials || 0} filled · PoC` : row.s;
-  return REPORT_CATALOG.map((g) => ({ title: g.title, tone: g.tone, rows: g.rows.filter((row) => ok(row.need)).map((row) => ({ ...row, s: sub(row) })) })).filter((g) => g.rows.length);
+  return REPORT_CATALOG.map((g) => ({ title: g.title, tone: g.tone, rows: g.rows.filter((row) => ok(row.need) && (!row.deskOnly || ctx.desk)).map((row) => ({ ...row, s: sub(row) })) })).filter((g) => g.rows.length);
 }
 
 // ---------- v0.21.0 (B2) cash in hand: Cash payments a person took in − what they handed over (collection cashHandovers) ----------
@@ -1062,18 +1063,26 @@ export function serialMask(raw, yy = '26', final = false) {
   if (!n) return final ? '' : `KD-${y}-`;
   return final ? `KD-${y}-${n.padStart(4, '0')}` : `KD-${y}-${n}`;
 }
-export function deviceRegistry(customers, recoveries, events, relocations, today) {
+const EV_RANK = { 'Received into stock': 0, 'Arrival check OK': 1, 'Arrival check — defect': 1, 'Refurbished — ready': 1, Installed: 2, 'Swapped out': 3, Recovered: 3, 'Sent to refurbish': 4, Scrapped: 5, 'Lost / stolen': 5 };
+export function deviceRegistry(customers, recoveries, events, relocations, today, visits) {
   const by = new Map();
   const add = (serial, ev) => { const k = normSerial(serial); if (!k) return; if (!by.has(k)) by.set(k, { serial: k, events: [] }); by.get(k).events.push(ev); };
-  for (const c of customers) if (c.deviceSerial && isDate(c.installDate)) add(c.deviceSerial, { date: c.installDate, event: 'Installed', customerId: c.id, src: 'install' });
-  for (const r of recoveries || []) if (r.deviceSerial && ['Recovered', 'Partial'].includes(r.outcome)) add(r.deviceSerial, { date: r.closedDate || r.startedDate, event: 'Recovered', customerId: r.customerId, src: 'recovery', id: r.id });
-  for (const rl of relocations || []) if (rl.status === 'Done' && rl.newSerial && normSerial(rl.newSerial) !== normSerial(rl.oldSerial)) {
-    if (rl.oldSerial) add(rl.oldSerial, { date: rl.moveDate, event: 'Swapped out', customerId: rl.customerId, src: 'relocation', id: rl.id });
-    add(rl.newSerial, { date: rl.moveDate, event: 'Installed', customerId: rl.customerId, src: 'relocation', id: rl.id });
+  /* v0.21.3: a home's units in order — the first install, then each swap (a relocation with a new unit · a repair visit with a new unit).
+     Before: the install came from the customer's CURRENT serial on the first install day, so after a swap the new unit got a second, wrong install
+     and the old unit lost its own. */
+  const swaps = new Map(); const sw = (cid, x) => { if (!cid) return; if (!swaps.has(cid)) swaps.set(cid, []); swaps.get(cid).push(x); };
+  for (const rl of relocations || []) if (rl.status === 'Done' && rl.newSerial && normSerial(rl.newSerial) !== normSerial(rl.oldSerial)) sw(rl.customerId, { date: rl.moveDate, old: rl.oldSerial, neu: rl.newSerial, src: 'relocation', id: rl.id });
+  for (const v of visits || []) if (v.swapNew && v.swapOld && normSerial(v.swapNew) !== normSerial(v.swapOld) && String(v.status || '').includes('Completed')) sw(v.customerId, { date: String(v.date || '').slice(0, 10), old: v.swapOld, neu: v.swapNew, src: 'repair', id: v.id, notes: v.swapReason || '' });
+  for (const c of customers) {
+    const list = (swaps.get(c.id) || []).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const first = list.length ? list[0].old : c.deviceSerial;
+    if (first && isDate(c.installDate)) add(first, { date: c.installDate, event: 'Installed', customerId: c.id, src: 'install' });
+    for (const x of list) { if (x.old) add(x.old, { date: x.date, event: 'Swapped out', customerId: c.id, src: x.src, id: x.id, notes: x.notes }); add(x.neu, { date: x.date, event: 'Installed', customerId: c.id, src: x.src, id: x.id }); }
   }
+  for (const r of recoveries || []) if (r.deviceSerial && ['Recovered', 'Partial'].includes(r.outcome)) add(r.deviceSerial, { date: r.closedDate || r.startedDate, event: 'Recovered', customerId: r.customerId, src: 'recovery', id: r.id });
   for (const e of events || []) add(e.serial, { date: e.date, event: e.event, customerId: e.customerId || '', src: 'manual', id: e.id, notes: e.notes, batch: e.batch, cost: e.cost });
   const out = [...by.values()].map((d) => {
-    d.events.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    d.events.sort((a, b) => String(a.date).localeCompare(String(b.date)) || (EV_RANK[a.event] ?? 2) - (EV_RANK[b.event] ?? 2)); /* v0.21.3: same day → life order (a unit received and put in on the same day ends up at the home) */
     const last = d.events[d.events.length - 1]; const status = DEV_STATUS[last.event] || 'In stock';
     const inst = d.events.filter((e) => e.event === 'Installed'); const firstIn = d.events.find((e) => e.event === 'Received into stock');
     const checked = d.events.some((e) => e.event === 'Arrival check OK' || e.event === 'Arrival check — defect');

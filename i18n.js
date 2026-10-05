@@ -1270,6 +1270,12 @@ Object.assign(W, {
   'Real days between changes, across all households. The booking intervals are first values; PoC data decides the final ones.': ['모든 가구의 실제 교체 간격(일). 예약 주기는 첫 값이고, PoC 데이터가 최종값을 정합니다.', 'सबै घरको वास्तविक परिवर्तन अन्तराल (दिन)। बुकिङ अन्तराल पहिलो मान हो; PoC डाटाले अन्तिम तय गर्छ।'],
   'Start + new + came back + deposit starts − left − month 14 = end. Install month = 1,100 (inside the 4,900), bills 2–13 = 1,400, then 1,100. The deposit part is held, not earned.': ['시작 + 신규 + 복귀 + 보증금 시작 − 해지 − 14개월차 = 끝. 설치 달 = 1,100(4,900 안에 포함), 2–13회차 = 1,400, 그 뒤 1,100. 보증금 몫은 맡아둔 돈이지 수익이 아닙니다.', 'सुरु + नयाँ + फर्किएको + धरौटी सुरु − छोडेको − महिना १४ = अन्त्य। जडान महिना = १,१०० (४,९०० भित्र), बिल २–१३ = १,४००, त्यसपछि १,१००। धरौटी अंश राखिएको हो, कमाइ होइन।'],
   'statement → payments': ['입금내역 → 결제', 'स्टेटमेन्ट → भुक्तानी'],
+  /* v0.21.3 R2 + repair swap — NE 🟡 Claude, Tara to review */
+  'Live & dispatch': ['현장 실시간·배정', 'फिल्ड लाइभ · काम बाँडफाँड'], 'Excel + JSON · everything': ['엑셀 + JSON · 전부', 'एक्सेल + JSON · सबै'],
+  'Unit replaced?': ['기기 교체했나요?', 'उपकरण फेरियो?'], 'Yes — new unit put in': ['예 — 새 기기 설치', 'हो — नयाँ उपकरण राखियो'], 'New unit number (sticker)': ['새 기기 번호 (스티커)', 'नयाँ उपकरण नम्बर (स्टिकर)'],
+  'Scan the sticker on the new unit. The old unit goes back to stock as “Back — check it”; the new one starts its own 30-day dead-on-arrival window today.': ['새 기기 스티커를 스캔하세요. 옛 기기는 「돌아옴 — 확인」 상태로 재고에 돌아가고, 새 기기는 오늘부터 자기 30일 초기 불량 기간이 시작돼요.', 'नयाँ उपकरणको स्टिकर स्क्यान गर्नुहोस्। पुरानो उपकरण “फिर्ता — जाँच” भएर भण्डारमा जान्छ; नयाँको ३० दिने सुरुवाती खराबी अवधि आजबाट सुरु हुन्छ।'],
+  'Why it was replaced': ['교체 이유', 'किन फेरियो'], 'Dead on arrival (first 30 days)': ['초기 불량 (첫 30일)', 'सुरुमै बिग्रिएको (पहिलो ३० दिन)'],
+  'Which unit did you put in? Scan or type its number.': ['어느 기기를 넣었나요? 스캔하거나 번호를 입력하세요.', 'कुन उपकरण राख्नुभयो? स्क्यान गर्नुहोस् वा नम्बर लेख्नुहोस्।'], 'That is the unit already at this home.': ['이 집에 이미 있는 기기예요.', 'यो घरमा पहिले नै भएको उपकरण हो।'],
   /* v0.21.1 sticker QR scan */
   'Scan the sticker': ['스티커 스캔', 'स्टिकर स्क्यान'], 'Scan stickers one after another': ['스티커를 차례로 스캔', 'स्टिकरहरू एकपछि अर्को स्क्यान'], '📷 Scan': ['📷 스캔', '📷 स्क्यान'],
   '📷 Scan stickers': ['📷 스티커 스캔', '📷 स्टिकर स्क्यान'], '📷 Scan the sticker': ['📷 스티커 스캔', '📷 स्टिकर स्क्यान'], 'Point the camera at the QR on the sticker': ['스티커의 QR에 카메라를 맞추세요', 'स्टिकरको QR मा क्यामेरा फर्काउनुहोस्'],
@@ -1405,6 +1411,8 @@ P.unshift(
   [/^Nothing to deduct → refund (.+)$/, '공제 없음 → $1 환불', 'कटौती छैन → $1 फिर्ता'],
   [/^(.+) is already in the list$/, '$1 — 이미 목록에 있음', '$1 — सूचीमा छ'],
   [/^(\d+) scanned · keep going or Done$/, '$1개 스캔 · 계속하거나 완료', '$1 स्क्यान · जारी राख्नुस् वा भयो'],
+  [/^(\d+) saved today$/, '오늘 저장 $1건', 'आज $1 सेभ'],
+  [/^(.+) is not in stock in the app — check the number \(or record its arrival first\)\.$/, '$1 — 앱 재고에 없어요. 번호를 확인하거나 먼저 입고를 기록하세요.', '$1 — एपको भण्डारमा छैन। नम्बर जाँच्नुहोस् वा पहिले आगमन लेख्नुहोस्।'],
   [/^📋 (\d+) request\(s\) past the reply time$/, '📋 답 기한 지난 요청 $1건', '📋 जवाफ समय नाघेका $1 अनुरोध'],
   [/^Shelf = in − out − issued \+ returned − used from the shelf\. Order more below (\d+) \(🔴 first guess$/, '선반 = 입고 − 출고 − 지급 + 반납 − 선반에서 씀. $1 아래면 추가 주문 (🔴 첫 추정', 'शेल्फ = भित्र − बाहिर − दिइएको + फिर्ता − शेल्फबाट प्रयोग। $1 भन्दा कम भए थप अर्डर (🔴 पहिलो अनुमान'],
 );

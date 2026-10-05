@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.21.2 (2026-10-06)';
+export const APP_VERSION = 'kf-v0.21.3 (2026-10-06)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -610,7 +610,7 @@ function model0() {
   for (const [k, g] of Object.entries(metrics.gate)) if (g.judgeable && g.bad) alerts.push({ lvl: 'bad', ic: '🧭', t: `Direction gate: ${k} crossed its trigger`, report: 'gate' });
   if (leadsDue.length) alerts.push({ lvl: 'info', ic: '🧲', t: `${leadsDue.length} lead(s) to follow up`, list: 'leads' });
   if (isBoss()) { const lb = S.settings.lastBackupAt; const age = lb ? R.daysBetween(lb, t) : null; if (age === null || age > 7) alerts.push({ lvl: 'warn', ic: '💾', t: age === null ? 'No backup yet — make one' : `Last backup ${age} days ago — make a new one`, report: 'backup' }); }
-  const devices = R.deviceRegistry(D.customers, D.recoveries, D.deviceEvents, D.relocations, t);
+  const devices = R.deviceRegistry(D.customers, D.recoveries, D.deviceEvents, D.relocations, t, D.visits); /* v0.21.3: repair swaps live on the visit */
   const num = (v) => (v === '' || v === undefined || v === null ? undefined : Number(v));
   // filter order dates (settings: lead weeks · safety weeks · months to cover — 🔴 until a real filter order has come in)
   const capPeople = S.settings.capPeople !== undefined && S.settings.capPeople !== '' ? Number(S.settings.capPeople) : Math.max(1, techNames().filter((n) => n !== 'Jun').length);
@@ -702,7 +702,7 @@ export const errList = () => errQ;
 window.addEventListener('error', (ev) => { if (ev && ev.message) noteError('error', ev.message, `${String(ev.filename || '').split('/').pop()}:${ev.lineno || ''}`); });
 window.addEventListener('unhandledrejection', (ev) => { const r = ev && ev.reason; noteError('reject', (r && (r.code || r.message)) || String(r || ''), ''); });
 export const myName = () => (S.isAdmin ? 'Jun' : (S.profile && S.profile.name) || (S.user && S.user.email ? S.user.email.split('@')[0] : ''));
-export const reportCtx = (m) => ({ money: can('money'), expense: can('expense'), stock: can('stock'), admin: !!S.isAdmin, boss: isBoss(), referral: referralOn(), exportOk: can('export'), pay: can('pay'), field: can('visit') || can('pay') || can('install'), approvalsOk: !!(m.approvals.pending.length || isApprover()), capacity: !!m.capacity, n: { approvals: m.approvals.pending.length, contract: m.contractOpen.length, claims: m.claimsSt.open.length, vials: m.vials.started } }); /* v0.21.0 (A1·A2) */
+export const reportCtx = (m) => ({ money: can('money'), expense: can('expense'), stock: can('stock'), admin: !!S.isAdmin, boss: isBoss(), referral: referralOn(), exportOk: can('export'), pay: can('pay'), field: can('visit') || can('pay') || can('install'), approvalsOk: !!(m.approvals.pending.length || isApprover()), desk: !!S.desk, capacity: !!m.capacity, n: { approvals: m.approvals.pending.length, contract: m.contractOpen.length, claims: m.claimsSt.open.length, vials: m.vials.started } }); /* v0.21.0 (A1·A2) */
 export const referralOn = () => S.settings.referralCampaign === 'Yes'; /* v0.15: the referral campaign (card · rewards · tree) is off until Settings says Yes */
 export const techNames = () => { const base = ['Tara', 'Jun']; const extra = String(S.settings.techNames || '').split(',').map((s) => s.trim()).filter(Boolean); return [...new Set([...base, ...extra])]; };
 
@@ -1017,6 +1017,9 @@ FORMS.visit = {
     { k: 'issuedFrom', l: 'Parts came from', t: 'chips', o: ['my bag', 'shelf'], def: 'my bag', show: (v) => !R.isNoShow(v) && (v.parts || []).length > 0, hint: 'My bag = issued to me this morning. Shelf = taken straight from stock.' },
     { k: 'partsUsed', l: 'Other parts / extra quantity', t: 'text', ph: 'e.g. O-ring ×2, fitting ×1', show: (v) => !R.isNoShow(v) },
     { k: 'sanitised', l: 'Pipes sanitised on this visit?', t: 'chips', o: OPT.yesNo, hint: 'Full pipe sanitisation every 3 months.', show: (v) => !R.isNoShow(v) },
+    { k: 'swapDev', l: 'Unit replaced?', t: 'chips', o: ['No', 'Yes — new unit put in'], def: 'No', show: (v) => !R.isNoShow(v) && v.visitType === 'Repair' }, /* v0.21.3 Jun 10/6 "만들어라": a repair swap at the same home (dead on arrival · breakdown) */
+    { k: 'swapNew', l: 'New unit number (sticker)', t: 'serial', ph: 'KD-26-0001', show: (v) => !R.isNoShow(v) && v.visitType === 'Repair' && v.swapDev === 'Yes — new unit put in', hint: 'Scan the sticker on the new unit. The old unit goes back to stock as “Back — check it”; the new one starts its own 30-day dead-on-arrival window today.' },
+    { k: 'swapReason', l: 'Why it was replaced', t: 'chips', o: ['Dead on arrival (first 30 days)', 'Breakdown', 'Other'], def: 'Breakdown', show: (v) => !R.isNoShow(v) && v.visitType === 'Repair' && v.swapDev === 'Yes — new unit put in' },
     { t: 'section', k: 'secCust', l: 'For the customer (visit note)', hint: 'Tap what you did — it goes on the visit note in English and Nepali. Anything else: one line in English or Nepali; the other language is added once the visit reaches the server.', show: (v) => !R.isNoShow(v) }, /* v0.17.0 (8) */
     { k: 'custPick', l: 'What we did', t: 'chips', multi: 1, noi18n: 1, o: () => visitLines().map((x) => x.en), show: (v) => !R.isNoShow(v) }, /* the button words are data (Settings) — not run through the UI dictionary */
     { k: 'custNote', l: 'Anything else for the customer', t: 'text', ph: 'English or नेपाली — one short line', show: (v) => !R.isNoShow(v) },
@@ -1048,6 +1051,12 @@ FORMS.visit = {
     if (done && v.visitType === 'Filter change' && !(v.filters || []).length) errs.filters = 'Which filters did you change?';
     if (done && v.tdsAfter === null) errs.tdsAfter = 'Measure TDS after.';
     if (done && !v.nextVisitDate) errs.nextVisitDate = 'Enter the next visit date.';
+    if (done && v.visitType === 'Repair' && v.swapDev === 'Yes — new unit put in' && !v._edit) { /* v0.21.3 */
+      const c0 = S.D.customers.get(v.customerId) || {}; const ns = R.normSerial(v.swapNew);
+      if (!ns) errs.swapNew = 'Which unit did you put in? Scan or type its number.';
+      else if (ns === R.normSerial(c0.deviceSerial)) errs.swapNew = 'That is the unit already at this home.';
+      else if (!confirmed && !stockSerials().includes(ns)) warns.swapNew = `${ns} is not in stock in the app — check the number (or record its arrival first).`;
+    }
     if (!inRange(v.tdsBefore, 0, 5000)) errs.tdsBefore = 'Check the TDS number (0–5000).';
     if (!inRange(v.tdsAfter, 0, 5000)) errs.tdsAfter = 'Check the TDS number (0–5000).';
     if (!inRange(v.flow, 0, 10)) errs.flow = 'Check the flow (0–10 L/min).';
@@ -1075,7 +1084,12 @@ FORMS.visit = {
       data.custLines = data.custPick.map((en) => { const q = VL.find((x) => x.en === en) || (Array.isArray(prev.custLines) ? prev.custLines.find((x) => x && x.en === en) : null); return { en, ne: q ? q.ne || '' : '' }; });
       data.custNote = String(v.custNote || '').trim().slice(0, 200); if (!isNew && String(prev.custNote || '') !== data.custNote) data.custNoteTr = null; } /* a changed line waits for its new translation */
     if (isNew) { const e = omwFor(v.customerId, v.date); if (e) { data.omwAt = new Date(e.at).toISOString(); data.omwEta = e.eta; } } // "on my way" sent that day → stamped for the wasted-trip page
+    /* v0.21.3: a repair swap — the visit keeps old + new (the device history reads them) · the home's unit becomes the new one · an edit keeps the first old serial */
+    const prevV = S.D.visits.get(id) || {}; const oldSn = prevV.swapOld || R.normSerial(c.deviceSerial); const newSn = R.normSerial(v.swapNew);
+    const swapping = isDone(v.status) && v.visitType === 'Repair' && v.swapDev === 'Yes — new unit put in' && !!newSn && newSn !== oldSn;
+    data.swapNew = swapping ? newSn : ''; data.swapOld = swapping ? oldSn : ''; if (!swapping) { data.swapDev = v.visitType === 'Repair' ? 'No' : ''; data.swapReason = ''; }
     const ok = save(`visits/${id}`, data, isNew);
+    if (ok && swapping && R.normSerial(c.deviceSerial) !== newSn) save(`customers/${c.id}`, { deviceSerial: newSn }, false);
     if (isNew && ok) omwClear(v.customerId);
     const np = savePhotos(v.customerId, `visits/${id}`, v.visitType === 'Repair' ? 'repair' : 'visit') + (ok ? saveSign(v.customerId, `visits/${id}`, sig, v.signName) : 0);
     return { ok, np, go: ['customers', 'detail', { id: v.customerId, vrep: id }] };
@@ -1713,7 +1727,7 @@ FORMS.relocation = {
     { k: 'gps', l: 'New house location', t: 'gps' },
     { t: 'section', l: 'Device' },
     { k: 'sameDevice', l: 'Same device moved?', t: 'chips', o: OPT.yesNo, def: 'Yes' },
-    { k: 'newSerial', l: 'New device serial', t: 'text', show: (v) => v.sameDevice === 'No' },
+    { k: 'newSerial', l: 'New device serial', t: 'serial', ph: 'KD-26-0001', show: (v) => v.sameDevice === 'No' }, /* v0.21.3: 📷 + KD mask like every device-number box */
     { k: 'technician', l: 'Technician', t: 'chips', o: techNames, def: myName },
     { k: 'fee', l: 'Relocation fee charged (NPR)', t: 'number', hint: 'No fixed fee in the contract draft yet — 0 if none.' },
     { k: 'pressurePsi', l: 'Water pressure at the new house (PSI)', t: 'number' },

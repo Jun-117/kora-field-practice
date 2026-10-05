@@ -27,11 +27,12 @@ const monthEnd = (mk) => R.addDays(R.addMonths(mk + '-01', 1), -1);
 
 // ---------- shell ----------
 // [key, icon, label, right, group] — grouped so the sidebar reads like the company: the day · customers · money · company
+/* v0.21.3 (R2) Jun 10/6 "r2먼저 ㄱㄱ": a 6th item = the page it now lives in — hidden from the sidebar, still a route (links · ⌘K · rights) */
 const SIDE = [
-  ['command', '◎', 'Command', '', 'Run the day'], ['calendar', '🗓️', 'Calendar', '', 'Run the day'], ['live', '📡', 'Field live', 'admin', 'Run the day'], ['dispatch', '🧭', 'Dispatch', 'admin', 'Run the day'], ['capacity', '👷', 'Capacity', '', 'Run the day'], ['field', '🔧', 'Field work', '', 'Run the day'], ['map', '🗺️', 'Map', '', 'Run the day'],
-  ['customers', '👥', 'Customers', '', 'Customers & growth'], ['watch', '⚠️', 'Watch list', '', 'Customers & growth'], ['leavers', '🚪', 'Leavers', '', 'Customers & growth'], ['network', '🕸️', 'Referrals', '', 'Customers & growth'],
-  ['money', '💰', 'Money', 'money', 'Money & plans'], ['history', '📅', 'History', 'money', 'Money & plans'], ['whatif', '🎛️', 'What-if', 'money', 'Money & plans'],
-  ['devices', '📦', 'Devices', '', 'Company'], ['staff', '🪪', 'Staff', 'admin', 'Company'], ['phones', '📱', 'Phones', 'admin', 'Company'], ['changes', '🕵️', 'Change log', 'admin', 'Company'], ['reports', '📑', 'Reports', '', 'Company'], ['backup', '💾', 'Backup', 'admin', 'Company'], ['status', '⚙️', 'Sync & settings', '', 'Company'],
+  ['command', '◎', 'Command', '', 'Run the day'], ['calendar', '🗓️', 'Calendar', '', 'Run the day'], ['live', '📡', 'Live & dispatch', 'admin', 'Run the day'], ['dispatch', '🧭', 'Dispatch', 'admin', 'Run the day', 'live'], ['capacity', '👷', 'Capacity', '', 'Run the day'], ['field', '🔧', 'Field work', '', 'Run the day'], ['map', '🗺️', 'Map', '', 'Run the day'],
+  ['customers', '👥', 'Customers', '', 'Customers & growth'], ['watch', '⚠️', 'Watch list', '', 'Customers & growth'], ['leavers', '🚪', 'Leavers', '', 'Customers & growth'], ['network', '🕸️', 'Referrals', '', 'Customers & growth', 'customers'],
+  ['money', '💰', 'Money', 'money', 'Money & plans'], ['history', '📅', 'History', 'money', 'Money & plans', 'money'], ['whatif', '🎛️', 'What-if', 'money', 'Money & plans'],
+  ['devices', '📦', 'Devices', '', 'Company'], ['staff', '🪪', 'Staff', 'admin', 'Company'], ['phones', '📱', 'Phones', 'admin', 'Company'], ['changes', '🕵️', 'Change log', 'admin', 'Company'], ['reports', '📑', 'Reports', '', 'Company'], ['backup', '💾', 'Backup', 'admin', 'Company', 'status'], ['status', '⚙️', 'Sync & settings', '', 'Company'],
   ['board', '🧱', 'Milestones', 'owner', 'Company build'], /* Jun only (10/3 "어차피 타라는 그런거 안봄") */ /* v0.15: gate chain · shipment — one board kind, many boards */
 ];
 export const DESK_PAGES = [...SIDE.map((x) => x[0]), 'report'];
@@ -71,14 +72,14 @@ export function renderDesk(root, fresh) {
   const qa = [['install', '🏠', 'Install', 'install'], ['payment', '💵', 'Payment', 'pay'], ['expense', '🧾', 'Expense', 'expense']].filter((q) => can(q[3])); /* v0.17.0 (1) A1·(5): quick add on top — at the bottom it fell off a 16" MacBook screen */
   const side = `<div class="brand"><div class="logo"></div><div><b>KORA</b><small>FIELD · COMMAND</small></div></div>
       ${qa.length ? `<div class="side-qa">${qa.map(([f, ic, l]) => `<button data-go-form="${f}" title="＋ ${l}"><span class="qi">${ic}<b class="qp">＋</b></span><span class="ql">${l}</span></button>`).join('')}</div>` : ''}
-      ${SIDE.filter(sideOk).map(([k, i, l, , g], n, arr) => `${n === 0 || arr[n - 1][4] !== g ? `<div class="side-grp">${esc(g)}</div>` : ''}<button data-side="${k}" class="${scr === k || (scr === 'report' && k === 'reports') ? 'on' : ''}"><span class="i">${i}</span>${l}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</button>`).join('')}
+      ${SIDE.filter((x) => sideOk(x) && !x[5]).map(([k, i, l, , g], n, arr) => `${n === 0 || arr[n - 1][4] !== g ? `<div class="side-grp">${esc(g)}</div>` : ''}<button data-side="${k}" class="${scr === k || (scr === 'report' && k === 'reports') || (SIDE.find((x) => x[0] === scr) || [])[5] === k ? 'on' : ''}"><span class="i">${i}</span>${l}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</button>`).join('')}
       <div class="grow"></div>
       <button data-act="deskOff"><span class="i">📱</span>Phone view</button>
       <div class="foot">${esc(APP_VERSION)}${DEMO ? '<br><span style="color:var(--warn)">DEMO DATA</span>' : ''}<br>${esc(S.user.email)}<br><span class="muted">⌘K · Esc · ‹ Back</span></div>`;
   if (side !== last.side) { root.querySelector('#deskSide').innerHTML = side; last.side = side; }
   { const upd = S.swWaiting ? '<button class="btn small ok" data-act="swReload" title="The new version is downloaded — this switches to it">⬆️ New version — update</button>' : ''; /* v0.17.2 (4) Jun 10/4 "본방 버전 왜 아직 0.10.2냐": the button was only on the phone's Status tab */
     const u = root.querySelector('#deskUpd'); if (u && upd !== last.upd) { u.innerHTML = upd; last.upd = upd; } }
-  root.querySelector('#deskTtl').innerHTML = `KORA <b>${esc(scr === 'report' ? 'Reports' : (SIDE.find((x) => x[0] === scr) || SIDE[0])[2])}</b> · Pokhara`;
+  root.querySelector('#deskTtl').innerHTML = `KORA <b>${esc(scr === 'report' ? 'Reports' : (SIDE.find((x) => x[0] === (scr === 'dispatch' ? 'live' : scr)) || SIDE[0])[2])}</b> · Pokhara`;
   const nAl = liveAlerts(m).length;
   const bell = `<button class="bell" data-act="bell" title="Alerts">🔔${nAl ? `<span class="badge">${nAl}</span>` : ''}</button><div id="bellBox" class="card bellbox hidden">${alertsHtml(m)}</div>`;
   if (bell !== last.bell) { const open = document.getElementById('bellBox') && !document.getElementById('bellBox').classList.contains('hidden'); root.querySelector('#bellWrap').innerHTML = bell; if (open) document.getElementById('bellBox').classList.remove('hidden'); last.bell = bell; }
@@ -89,7 +90,7 @@ export function renderDesk(root, fresh) {
   const pg = root.querySelector('#deskPage');
   pg.className = `deskpage ${fresh ? 'page-in' : 'calm'}`; /* v0.17.0 (3): Settings was held to 820 px (now two columns across the page) */
   if (fresh) { void pg.offsetWidth; }
-  const T2 = performance.now(); const pageKey = `${modelStamp()}|${scr}|${JSON.stringify(S.route.params || {})}|${getLang()}|${S.mapKind || ''}|${(S.mapHide || []).join()}|${S.swWaiting ? 1 : 0}|${S.auditFloor || 0}|${Math.floor(Date.now() / 60000)}`; const html = fresh || scr === 'live' || scr === 'phones' ? page(scr, m) : memo('page', `${pageKey}|${uiSeq}`, () => page(scr, m)); const T3 = performance.now(); /* v0.18.1 (B5): the same page with the same data is not rebuilt (a redraw every 30 s) — at most once a minute */ pg.innerHTML = html; chartTips(pg); /* v0.17.3 (2) */ const T4 = performance.now();
+  const T2 = performance.now(); const pageKey = `${modelStamp()}|${scr}|${JSON.stringify(S.route.params || {})}|${getLang()}|${S.mapKind || ''}|${(S.mapHide || []).join()}|${S.swWaiting ? 1 : 0}|${S.auditFloor || 0}|${Math.floor(Date.now() / 60000)}`; const html = fresh || scr === 'live' || scr === 'dispatch' || scr === 'phones' ? page(scr, m) : memo('page', `${pageKey}|${uiSeq}`, () => page(scr, m)); const T3 = performance.now(); /* v0.18.1 (B5): the same page with the same data is not rebuilt (a redraw every 30 s) — at most once a minute */ pg.innerHTML = html; chartTips(pg); /* v0.17.3 (2) */ const T4 = performance.now();
   tickClock(); ensureClock();
   animateCounts(root);
   const box = pg.querySelector('#mapBox');
@@ -116,7 +117,7 @@ function page(scr, m) {
   if (scr === 'changes') return pageChanges(m);
   if (scr === 'network') return pageNetwork(m);
   if (scr === 'live') return pageLive(m);
-  if (scr === 'dispatch') return pageDispatch(m);
+  if (scr === 'dispatch') return pageLive(m); /* v0.21.3 (R2): one page */
   if (scr === 'backup') return reportPage(m, { r: 'backup' }, true);
   if (scr === 'leavers') return reportPage(m, { r: 'leavers' }, true);
   if (scr === 'capacity') return reportPage(m, { r: 'capacity' }, true);
@@ -436,7 +437,7 @@ function pageCustomers(m) {
   const th = (k, l, cls = '') => `<th class="${cls}" data-sort="${k}" style="cursor:pointer">${l}${sort === k ? ' ▾' : ''}</th>`;
   const tt = toleTable(m);
   return `<div class="cc">
-    ${panel('s9 cust-main', 1, `<b>Customers</b> · ${list.length}${p.tole ? ' · 📍 ' + esc(p.tole) : ''}`, `<div class="scroll-x"><table class="tbl"><tr><th></th>${th('name', 'Customer')}${th('tole', 'Tole')}<th>Phone</th>${th('installed', 'Installed')}<th class="n">Next bill</th>${th('overdue', 'Overdue', 'n')}<th>Stage</th>${th('next', 'Next visit')}<th>Filters</th></tr>
+    ${panel('s9 cust-main', 1, `<b>Customers</b> · ${list.length}${p.tole ? ' · 📍 ' + esc(p.tole) : ''}${referralOn() ? ' <button type="button" class="btn small ghost" data-side="network" style="margin-left:8px"><span data-noi18n>🕸️</span> <span>Referrals</span></button>' : ''}`, `<div class="scroll-x"><table class="tbl"><tr><th></th>${th('name', 'Customer')}${th('tole', 'Tole')}<th>Phone</th>${th('installed', 'Installed')}<th class="n">Next bill</th>${th('overdue', 'Overdue', 'n')}<th>Stage</th>${th('next', 'Next visit')}<th>Filters</th></tr>
     ${list.slice(0, 400).map((x) => { const fo = x.fd.filter((q) => q.status === 'overdue').map((q) => q.type); return `<tr data-cust="${esc(x.c.id)}" style="cursor:pointer"><td><span class="dot ${x.dot}"></span></td><td><b>${esc(x.c.name)}</b><br><span class="muted mono">${esc(x.c.code)}</span></td><td>${esc(toleOf(x.c))}</td><td class="mono">${esc(x.c.phone || '')}</td><td class="nw">${esc(x.c.installDate || '')}</td><td class="n nw">${x.led.nextBill ? esc(x.led.nextBill.due.slice(5)) + ' · ' + fmtN(x.led.nextBill.amount - x.led.nextBill.paid) : ''}</td><td class="n" style="color:${x.led.overdue ? 'var(--bad)' : 'inherit'}">${x.led.overdue ? fmtN(x.led.overdue) : '—'}</td><td>${x.dn ? `<span class="pill ${{ reminder: 'blue', due: 'warn', late: 'warn', call: 'orange', visit: 'bad' }[x.dn.stage]}">${esc(x.dn.short)}</span>` : ''}</td><td class="nw">${x.nv ? esc(x.nv.date) : ''}</td><td>${fo.length ? `<span class="pill bad">${esc(fo.join(', '))}</span>` : ''}</td></tr>`; }).join('')}</table></div>${list.length > 400 ? `<div class="empty">+${list.length - 400} more — use the search</div>` : ''}`, `<div class="seg" style="padding:0">${segs.map(([k, l]) => `<button data-dseg="${k}" class="${f === k ? 'on' : ''}">${l}</button>`).join('')}</div>`)}
     ${panel('s3 fs fs-480 tole-side', 0, `<b>Areas</b> · ${tt.length}`, `<div class="mini-list tole-list">${tt.map((r) => `<div class="item${p.tole === r.k ? ' sel' : ''}" data-tole="${esc(r.k)}"><span class="dot ${r.od ? 'r' : 'g'}"></span><div class="main"><div class="t">📍 ${esc(r.k)} <span class="muted">· ${r.act}/${r.hh}</span></div><div class="s">${r.od ? `<span style="color:var(--bad)">${r.od} overdue · ${fmtN(r.odAmt)}</span>` : 'no overdue'}${r.due ? ` · ${Math.round((r.paid / r.due) * 100)}% paid` : ''}${r.visits ? ` · 🔧 ${r.visits}` : ''}${r.nogps ? ` · <span style="color:var(--warn)">no GPS ${r.nogps}</span>` : ''}</div></div></div>`).join('')}</div>`, p.tole ? `<button class="a" data-tole="">clear ✕</button>` : '<span class="muted">tap to filter</span>')}${/* v0.17.0 (5) B6: areas beside the list — the 11-row tole table came first and left 5 customers on the first screen */ ''}
   </div>`;
@@ -447,6 +448,7 @@ function caMonths(m, n = 6) {
   for (let i = 0; i < n; i++) { const a = B.addBsMonths(now.y, now.m, -i); const X = CA.buildPack({ y: a.y, m: a.m, n: 1 }); if (X) out.push({ a, X, current: i === 0 }); }
   return out;
 }
+const moneyTabs = (cur) => `<div class="pg-tabs seg">${[['money', '💰', 'This month'], ['history', '📅', 'History']].map(([k, ic, l]) => `<button data-side="${k}" class="${cur === k ? 'on' : ''}"><span data-noi18n>${ic}</span> <span>${l}</span></button>`).join('')}</div>`; /* v0.21.3 (R2): History lives on the Money page */
 function pageMoney(m) {
   const M = m.metrics; const mk = monthsBack(m.t, 12);
   const cashBy = Object.fromEntries(mk.map((k) => [k, 0])); const depBy = Object.fromEntries(mk.map((k) => [k, 0]));
@@ -455,6 +457,7 @@ function pageMoney(m) {
   const { ag, out } = memo('aging', modelStamp(), () => ({ ag: R.agingBuckets(m.ledgers, activeIds(m), m.t), out: R.cashOutlook(m.D.customers, m.ledgers, m.t, 28) }));
   const cam = caMonths(m, 6);
   return `<div class="cc">
+    ${moneyTabs('money')}
     ${panel('s3 kpi', 0, '<b>Cash in</b> · this month', `<div class="v">${counter('m_cash', M.cashThisMonth)}</div>`)}
     ${panel('s3 kpi', 1, '<b>Recurring</b> · per month', `<div class="v">${counter('m_mrr', M.mrr)}</div>`)}
     ${panel('s3 kpi', 2, '<b>Overdue</b> · all', `<div class="v" style="color:var(--bad)">${counter('m_od', M.overdueAmt)}</div><div class="sub"><span>${M.overdueHH} homes</span><span>7+ days ${M.due7}</span></div>`)}
@@ -726,6 +729,7 @@ function pageHistory(m) {
   const maxK = Math.max(1, ...H.cohorts.map((r) => r.cells.length));
   const cn = (id) => { const c = S.D.customers.get(id); return c ? c.name : '?'; };
   return `<div class="cc">
+    ${moneyTabs('history')}
     <div class="panel s12 monthbar" style="--i:0"><button class="nav" data-hist="${H.months[Math.max(0, i - 1)]}" ${i <= 0 ? 'disabled' : ''}>‹</button>
       <div class="chips">${H.months.map((k) => `<button data-hist="${k}" class="${k === sel ? 'on' : ''}">${esc(monLabel(k))}</button>`).join('')}</div>
       <button class="nav" data-hist="${H.months[Math.min(H.months.length - 1, i + 1)]}" ${i >= H.months.length - 1 ? 'disabled' : ''}>›</button>
@@ -876,7 +880,7 @@ function pageCalendar(m) {
 
 // ---------- 🧭 dispatch: who goes to which home (drag, or tick and send) ----------
 const dsel = new Set(); let dmode = 'perm', duntil = '', dundo = null, dlast = null; /* v0.12.1 (#12) Jun: a moved home goes under the person's TOLE list (not a "Today" list) — the tole opens and the moved rows glow */
-function pageDispatch(m) {
+function pageDispatch(m, lv) { /* v0.21.3 (R2): lv = the live model by name → embedded in the Live & dispatch page */
   const t = m.t; if (!duntil) duntil = R.addDays(t, 2);
   const names = techNames(); const cols = [...names, ''];
   const work = new Map(); const mark = (cid, ic) => { const a = work.get(cid) || []; if (!a.includes(ic)) a.push(ic); work.set(cid, a); };
@@ -893,10 +897,10 @@ function pageDispatch(m) {
     const load = today.length; const lc = load > 8 ? 'bad' : load >= 4 ? 'ok' : load ? 'warn' : '';
     return `<div class="dp-col" data-dcol="${esc(n)}"><div class="dp-h"><span class="avatar">${esc(n ? n.slice(0, 1).toUpperCase() : '?')}</span><div class="main"><b>${esc(n || 'Nobody yet')}</b><div class="muted">${xs.length} homes · <span class="pill ${lc}">${load} today</span></div></div>
       ${n && today.length ? `<select data-handover="${esc(n)}" title="Give today's jobs to someone else"><option value="">↪ today's jobs to…</option>${names.filter((q) => q !== n).map((q) => `<option value="${esc(q)}">${esc(q)}</option>`).join('')}</select>` : ''}</div>
-      <div class="dp-load"><i style="width:${Math.min(100, (load / 8) * 100)}%" class="${lc}"></i></div>
+      <div class="dp-load"><i style="width:${Math.min(100, (load / 8) * 100)}%" class="${lc}"></i></div>${lvLine(lv && n ? lv.get(n) : null)}
       <div class="dp-sub">Homes by tole · ${load} with a job today</div><div class="dp-scroll">${Object.entries(byT).sort((a, b) => b[1].length - a[1].length).map(([tl, ys]) => { const hot = dlast && dlast.to === n && ys.some((x) => dlast.cids.has(x.c.id)); const jobs = ys.filter((x) => work.has(x.c.id)).length; return `<details${ys.length <= 4 || hot || jobs ? ' open' : ''}><summary><span class="tl" title="${esc(tl)}">📍 ${esc(tl)}</span> <span class="pill">${ys.length}</span>${jobs ? `<span class="pill warn">${jobs} today</span>` : ''}<button class="btn small ghost" data-dtole="${esc(tl)}" data-dfrom="${esc(n)}">tick all</button></summary>${ys.map(row).join('')}</details>`; }).join('') || '<div class="empty">—</div>'}</div></div>`;
   };
-  return `<div class="cc dispatch">
+  const body = `
     <div class="panel s12 dp-bar" style="--i:0"><b>${dsel.size}</b>&nbsp;selected
       <div class="seg"><button data-dmode="today" class="${dmode === 'today' ? 'on' : ''}">Just today</button><button data-dmode="until" class="${dmode === 'until' ? 'on' : ''}">Until</button><button data-dmode="perm" class="${dmode === 'perm' ? 'on' : ''}">From now on</button></div>
       ${dmode === 'until' ? `<input type="date" id="dUntil" value="${esc(duntil)}" min="${esc(t)}">` : ''}
@@ -904,7 +908,8 @@ function pageDispatch(m) {
       <span class="sp"></span>${dsel.size ? '<button class="btn small ghost" data-dclear="1">Clear</button>' : ''}${dundo ? `<button class="btn small ghost" data-dundo="1">↩ Undo (${dundo.length})</button>` : ''}</div>
     <div class="panel s12 dp-tip muted" style="--i:1"><span class="dp-tiptext">Drag a home onto a person, or tick several and press a name. <b>Just today</b> = a cover that ends tonight (sick day) · <b>Until</b> = a cover to a date · <b>From now on</b> = their regular person. Staff phones then show their own homes + the unassigned ones (Jun sees everything).</span>
       <span class="sp"></span><span class="dp-tole">Whole area: <select id="dTole"><option value="">tole…</option>${OPT.tole.filter((x) => x !== 'Other').map((x) => `<option>${esc(x)}</option>`).join('')}</select> → <select id="dToleTo"><option value="">person…</option>${names.map((n) => `<option>${esc(n)}</option>`).join('')}</select><button class="btn small" data-dtolemove="1">Move (from now on)</button></span></div>
-    <div class="dp-board" style="--i:2">${[...cols, ...extra].map(col).join('')}</div>
+    <div class="dp-board" style="--i:2">${[...cols, ...extra].map(col).join('')}</div>`;
+  return lv ? body : `<div class="cc dispatch">${body}
   </div>`;
 }
 function dispatchApply(cids, to, mode) {
@@ -1105,28 +1110,25 @@ export function liveModel(m) {
   return rows.sort((a, b) => (a.name === '—') - (b.name === '—') || b.ev.length - a.ev.length);
 }
 const hhmm = (ms) => (ms ? new Date(ms).toLocaleTimeString('en-GB', { timeZone: NPT, hour: '2-digit', minute: '2-digit' }) : '');
-function pageLive(m) {
-  const L = liveModel(m); const t = m.t;
-  const card = (p) => {
-    const planN = p.plan.length, doneN = p.done.length; const pct = planN + doneN ? doneN / (planN + doneN) : 0;
-    const next = p.plan.find((q) => !p.doneSet.has(q.x.c.id));
-    const cashWarn = p.cashCash > 0 && p.name !== 'Tara';
-    return `<div class="lv-card ${p.state.replace(' ', '-')}"><div class="lv-h"><span class="avatar">${esc(p.name === '—' ? '?' : p.name.slice(0, 1).toUpperCase())}</span><div class="main"><b>${esc(p.name === '—' ? 'Not assigned yet' : p.name)}</b><div class="muted">${esc(p.state)}${p.last ? ` · last ${esc(hhmm(p.last.ms))} (${esc(agoS(p.last.ms))})` : ''}</div></div><span class="pill ${p.state === 'working' ? 'ok' : p.state === 'quiet' ? 'warn' : 'grey'}">${doneN} done · ${planN} to go</span></div>
-      <div class="dp-load"><i style="width:${Math.round(pct * 100)}%" class="ok"></i></div>
-      <div class="lv-kv"><span>💵 ${fmtN(p.cash)}</span>${p.cashCash ? `<span class="${cashWarn ? 'bad' : ''}">cash ${fmtN(p.cashCash)}${cashWarn ? ' · G-1 §1-1: only Tara takes cash' : ''}</span>` : ''}${p.lastAt ? `<span>📍 ${esc(hhmm(p.lastAt.ms))}</span>` : '<span class="muted">📍 no location saved today</span>'}</div>
-      ${next ? `<div class="lv-next" data-cust="${esc(next.x.c.id)}">➜ next: <b>${esc(next.x.c.name)}</b> · ${esc(toleOf(next.x.c))} · ${esc(next.k)}</div>` : ''}
-      <div class="lv-tl">${p.ev.slice(-8).reverse().map((e) => `<div class="ev" ${e.cid ? `data-cust="${esc(e.cid)}"` : ''}><span class="mono">${esc(hhmm(e.ms))}</span> ${e.ic} ${esc(e.t)}</div>`).join('') || '<div class="empty">Nothing saved today yet</div>'}</div></div>`;
-  };
+function pageLive(m) { /* v0.21.3 (R2) Jun 10/6: Field live + Dispatch = one page — each person's column carries their live line (state · last save · done/to go · cash · next · today's saves); the map under the board */
+  const L = liveModel(m); const t = m.t; const lv = new Map(L.map((p) => [p.name, p]));
   const allDone = L.reduce((s, p) => s + p.done.length, 0), allPlan = L.reduce((s, p) => s + p.plan.length, 0), cash = L.reduce((s, p) => s + p.cash, 0);
-  return `<div class="cc live">
+  return `<div class="cc live dispatch">
     ${panel('s3 kpi', 0, '<b>Done today</b>', `<div class="v">${counter('lvd', allDone)}</div><div class="sub"><span>${allPlan} still to go</span></div>`)}
     ${panel('s3 kpi', 1, '<b>Cash today</b>', `<div class="v">${counter('lvc', cash)}</div><div class="sub"><span>NPR · all methods</span></div>`)}
     ${panel('s3 kpi', 2, '<b>Out working</b>', `<div class="v">${L.filter((p) => p.state === 'working').length}</div><div class="sub"><span>saved something in the last 45 min</span></div>`)}
     ${(() => { const [d1, d2] = dualDate(t, new Date(t + 'T00:00:00').getDay()).split(' · '); return panel('s3 kpi', 3, '<b>Today</b>', `<div class="v" style="font-size:22px" data-noi18n>${esc(d1)}</div>${d2 ? `<div class="sub" data-noi18n><span>${esc(d2)}</span></div>` : ''}`); })()}
-    ${panel('s7 r2', 4, '<b>Map</b> · last saved spot of each person · green = done today · grey = still to go', `<div id="mapBox" class="mapbox" style="height:560px"></div><div class="muted" style="margin-top:6px">📍 A spot is saved only when someone saves a record with location allowed — not tracked in between.</div>`)}
-    <div class="s5 lv-cards fs-col" style="--i:5"><div class="fs-colin">${L.map(card).join('') || '<div class="panel empty">No staff yet</div>'}</div></div>
+    ${pageDispatch(m, lv)}
+    ${panel('s12', 5, '<b>Map</b> · last saved spot of each person · green = done today · grey = still to go', `<div id="mapBox" class="mapbox" style="height:440px"></div><div class="muted" style="margin-top:6px">📍 A spot is saved only when someone saves a record with location allowed — not tracked in between.</div>`)}
   </div>`;
 }
+const lvLine = (p) => { /* v0.21.3 (R2): what the Field live card said, inside the person's dispatch column */
+  if (!p) return ''; const planN = p.plan.length, doneN = p.done.length; const next = p.plan.find((q) => !p.doneSet.has(q.x.c.id)); const cashWarn = p.cashCash > 0 && p.name !== 'Tara';
+  return `<div class="dp-live"><div class="lv-st"><span class="pill ${p.state === 'working' ? 'ok' : p.state === 'quiet' ? 'warn' : 'grey'}">${doneN} done · ${planN} to go</span><span class="muted">${esc(p.state)}${p.last ? ` · last ${esc(hhmm(p.last.ms))} (${esc(agoS(p.last.ms))})` : ''}</span></div>`
+    + (p.cash || p.cashCash ? `<div class="lv-kv"><span>💵 ${fmtN(p.cash)}</span>${p.cashCash ? `<span class="${cashWarn ? 'bad' : ''}">cash ${fmtN(p.cashCash)}${cashWarn ? ' · G-1 §1-1: only Tara takes cash' : ''}</span>` : ''}</div>` : '')
+    + (next ? `<div class="lv-next" data-cust="${esc(next.x.c.id)}">➜ next: <b>${esc(next.x.c.name)}</b> · ${esc(toleOf(next.x.c))} · ${esc(next.k)}</div>` : '')
+    + (p.ev.length ? `<details class="lv-tlx"><summary>${p.ev.length} saved today</summary><div class="lv-tl">${p.ev.slice(-8).reverse().map((e) => `<div class="ev" ${e.cid ? `data-cust="${esc(e.cid)}"` : ''}><span class="mono">${esc(hhmm(e.ms))}</span> ${e.ic} ${esc(e.t)}</div>`).join('')}</div></details>` : '') + '</div>';
+};
 function drawLive() {
   const m = model(); const L = liveModel(m); const pts = []; const done = new Set(L.flatMap((p) => p.done));
   const todo = new Map(); for (const p of L) for (const q of p.plan) todo.set(q.x.c.id, q.x);
@@ -1511,14 +1513,14 @@ export async function mountMap(box) {
   const pts = drawMarkers();
   meLayer = addLocate(map, { position: 'topleft', note: (why) => locHelp(why), onFound: (p) => { map.setView([p.lat, p.lng], Math.max(map.getZoom(), 14)); } });
   hereIfAllowed().then((p) => { if (p && map && meLayer) drawMe(map, meLayer, p); });
-  if (view && !['live', 'watch'].includes(S.route.screen)) map.setView(view.c, view.z, { animate: false }); // field live always fits everyone in
+  if (view && !['live', 'dispatch', 'watch'].includes(S.route.screen)) map.setView(view.c, view.z, { animate: false }); // field live always fits everyone in
   else if (pts.length) map.fitBounds(pts, { padding: [30, 30], maxZoom: 15, animate: false });
   else map.setView(POKHARA, 13, { animate: false });
 }
 function drawMarkers() {
   if (!map || replay) return [];
   if (!map._kfZoomHook) { map._kfZoomHook = true; map.on('zoomend', () => { if (['map', 'command'].includes(S.route.screen) && !replay) drawMarkers(); }); map.on('moveend', () => { if (map._kfDense && ['map', 'command'].includes(S.route.screen) && !replay) drawMarkers(); }); } /* v0.18.1 (B5): dense = redraw as the map moves */
-  if (S.route.screen === 'live') { layer.clearLayers(); return drawLive(); }
+  if (['live', 'dispatch'].includes(S.route.screen)) { layer.clearLayers(); return drawLive(); }
   if (S.route.screen === 'watch') { layer.clearLayers(); return drawWatch(); }
   const m = model(); layer.clearLayers(); const pts = []; const clusters = {};
   const onMap = S.route.screen === 'map'; const mk0 = onMap ? S.mapKind || 'all' : 'all'; const mIds = mk0 === 'all' ? null : new Set(stopsFor(m).all.filter((s0) => s0.kinds.includes(mk0)).map((s0) => s0.id)); const mHide = new Set(onMap ? S.mapHide || [] : []); /* v0.17.4 (B) */

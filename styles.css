@@ -1039,3 +1039,14 @@ body.desk .drawer.full .dpage.scr-detail { margin-right:96px; } /* (1) the ⤢ �
 /* v0.19.3 arrangement: the hero numbers carry the tile colours (the three tiles under them are gone — one place per number) · the action groups on the desk customer page */
 .hero .stats button.bad b { color:#ffb4b4; } .hero .stats button.warn b { color:#ffe08a; }
 .lk-lab { align-self:center; font:800 10px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--muted); padding:0 4px 0 8px; }
+
+/* v0.19.5 Today (C2): slim hero — greeting + route/memo side by side; the six tiles carry the numbers, a size up, icon chips tinted by tone */
+.hero .hello { font-size:23px; }
+.hero-acts { display:flex; gap:8px; margin-top:14px; }
+.hero-acts .cta { flex:1.7; margin:0; }
+.hero-acts .memo-btn { flex:1; margin:0; min-height:52px; border-radius:14px; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+.tile { min-height:106px; padding:14px 14px 12px; gap:2px; }
+.tile .n { font-size:30px; line-height:1.05; margin-top:6px; }
+.tile > span:nth-child(3) { font-size:15px; font-weight:700; }
+.tile.bad .ic { background:var(--bad-soft); } .tile.warn .ic { background:var(--warn-soft); } .tile.ok .ic { background:var(--ok-soft, var(--brand-soft)); }
+.hero .top.sub { align-items:center; flex-wrap:wrap; gap:6px 10px; margin-top:4px; } .hero .top.sub .right { display:flex; align-items:center; gap:6px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; } .hero .top.sub .syncpill { padding:5px 9px; font-size:12px; }

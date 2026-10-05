@@ -18,7 +18,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.19.4 (2026-10-05)';
+export const APP_VERSION = 'kf-v0.19.5 (2026-10-05)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -2042,14 +2042,12 @@ function viewToday() {
   const hr = new Date().getHours(); const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
   // v0.11.1 (Jun 2026-10-01 "원래 그 화면이 우린 좋았음"): the v0.10 look is back — gradient card, three numbers, six tiles; the collections card below keeps its v0.11 shape
   return `<div class="hero">
-    <div class="top"><div><div class="hello">${esc(greet)}, ${esc(myName() || 'team')}</div><div class="date">${esc(fmtDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }))}</div></div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">${langSeg()}<span class="syncpill"><span class="dot live ${s.c}" data-sync-dot></span><span data-sync-text>${esc(s.t)}</span></span></div></div>
-    <div class="stats"><button data-list="collections" class="${late ? 'bad' : chase.length ? 'warn' : ''}"><b>${chase.length}</b><span>${late ? `To collect · ${late} late` : 'To collect'}</span></button><button data-list="visits" class="${m.visitsDue.length ? 'warn' : ''}"><b>${m.visitsDue.length}</b><span>Visits due · by tole</span></button><button data-list="calls" class="${m.calls.length ? 'warn' : ''}"><b>${m.calls.length}</b><span>Calls · day-7</span></button></div>
-    <button class="cta" data-tab-go="route">🗺️ Open today's route</button>
-    <button type="button" class="memo-btn${lsGet('kfp_memo', '') ? ' has' : ''}" data-act="memoToggle" title="Memo">📝 Memo${lsGet('kfp_memo', '') ? ' ·' : ''}</button>
+    <div class="hello">${esc(greet)}, ${esc(myName() || 'team')}</div>
+    <div class="top sub"><div class="date">${esc(fmtDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }))}</div><div class="right">${langSeg()}<span class="syncpill"><span class="dot live ${s.c}" data-sync-dot></span><span data-sync-text>${esc(s.t)}</span></span></div></div>${/* v0.19.5: the greeting owns its line (it wrapped next to the language + sync pills) */ ''}
+    <div class="hero-acts"><button class="cta" data-tab-go="route">🗺️ Open today's route</button><button type="button" class="memo-btn${lsGet('kfp_memo', '') ? ' has' : ''}" data-act="memoToggle" title="Memo">📝 Memo${lsGet('kfp_memo', '') ? ' ·' : ''}</button></div>${/* v0.19.5 Jun 10/5 "C로 하기로했다 … c2로 가자": the numbers live in the six tiles only; the hero keeps the greeting and two buttons side by side */ ''}
     <div id="memoBox" class="memo${lsGet('kfp_memo_open', 0) ? '' : ' hidden'}"><textarea id="memoTa" rows="4" placeholder="Memo — stays on this phone">${esc(lsGet('kfp_memo', ''))}</textarea><div class="muted" id="memoHint">${lsGet('kfp_memo', '') ? 'Saved on this phone' : 'Anything — it is saved as you type'}</div></div>
   </div>
-  <div class="grid2 stagger" style="margin-top:12px">${tiles.filter(([k]) => !['collections', 'visits', 'calls'].includes(k)).map(([k, ic, l, n, sub, cls], i) => `<button class="tile ${cls} ${tones[k]}" data-list="${k}" style="--i:${i}"><span class="ic">${ic}</span><span class="n">${n}</span><span>${l}</span><span class="s">${esc(sub)}</span></button>`).join('')}</div>
+  <div class="grid2 stagger" style="margin-top:12px">${tiles.map(([k, ic, l, n, sub, cls], i) => `<button class="tile ${cls} ${tones[k]}" data-list="${k}" style="--i:${i}"><span class="ic">${ic}</span><span class="n">${n}</span><span>${l}</span><span class="s">${esc(sub)}</span></button>`).join('')}</div>
   ${sec('💰 Chase first', chase.slice(0, 5).map((x) => dunItem(x)).join(''), 'Nobody to chase today 🏖️', 'collections')}
   ${m.watch.some((w) => w.lvl !== 'low') ? sec('⚠️ Look after this week', m.watch.filter((w) => w.lvl !== 'low').slice(0, 3).map((w) => watchItem(w, { max: 2 })).join(''), '', 'watch') : ''}
   ${sec('🔧 Visits due', m.visitsDue.slice(0, 5).map((x) => cItem(x, `<span class="pill ${x.due < t ? 'bad' : 'warn'}">${esc(x.filterOnly ? 'filter' : x.due === t ? 'today' : x.due)}</span>`)).join(''), 'No visits due', 'visits')}

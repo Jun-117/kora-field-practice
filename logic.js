@@ -622,12 +622,22 @@ export const REPORT_CATALOG = [
     { r: 'backup', ic: '💾', l: 'Backup', s: 'Excel + JSON · everything', need: 'boss', desk: 'status', deskOnly: 1 }] }, /* v0.21.3 (R2): the desk sidebar's Backup page → this row on Sync & settings */
   { title: 'Help', tone: 'tone-co', rows: [{ r: 'help', ic: '❓', l: 'How to use', s: 'one page for staff' }] },
 ];
-// ctx = { money, expense, stock, admin, boss, referral, exportOk, approvalsOk, pay, field, capacity, n: { approvals, contract, claims, vials } }
+// v0.21.3 (R3) Jun 10/6 "선수교체 하나씩" — related reports fold into one menu row (the first member opens · a tab strip joins the rest)
+export const REPORT_HUBS = {
+  ca: { l: 'CA & tax', ic: '🧾', s: 'CA pack · VAT by month · deposit book', members: ['capack', 'vat', 'deposits'] },
+  kpi: { l: 'KPIs', ic: '🧭', s: 'direction gate · grant KPIs', members: ['gate', 'perform'] },
+  fq: { l: 'Field quality', ic: '🔁', s: 'callbacks · wasted trips · proof of visit', members: ['callbacks', 'noshows', 'proof'] },
+  filt: { l: 'Filters', ic: '🧪', s: 'status · real intervals', members: ['filters', 'learning'] },
+  sales: { l: 'Sales', ic: '🧲', s: 'leads · screenings · stage days', members: ['leads', 'screenings', 'funnel'] },
+};
+export const hubOf = (r) => Object.keys(REPORT_HUBS).find((h) => REPORT_HUBS[h].members.includes(r)) || '';
+// ctx = { money, expense, stock, admin, boss, referral, exportOk, approvalsOk, pay, field, capacity, desk, all, n: { approvals, contract, claims, vials } } · all = every row as itself (the tab strip)
 export function reportGroups(ctx) {
   const ok = (need) => !need || ({ money: ctx.money, expense: ctx.expense || ctx.money, stock: ctx.stock, admin: ctx.admin, boss: ctx.boss, referral: ctx.referral, export: ctx.exportOk, approvals: ctx.approvalsOk, pay: ctx.pay || ctx.money, field: ctx.field, capacity: ctx.capacity })[need];
   const n = ctx.n || {};
   const sub = (row) => row.dyn === 'approvals' ? (n.approvals ? `${n.approvals} waiting` : row.s) : row.dyn === 'contract' ? (n.contract ? `${n.contract} to do` : row.s) : row.dyn === 'claims' ? (n.claims ? `${n.claims} open` : row.s) : row.dyn === 'vials' ? `${n.vials || 0} filled · PoC` : row.s;
-  return REPORT_CATALOG.map((g) => ({ title: g.title, tone: g.tone, rows: g.rows.filter((row) => ok(row.need) && (!row.deskOnly || ctx.desk)).map((row) => ({ ...row, s: sub(row) })) })).filter((g) => g.rows.length);
+  const fold = (row) => { const h = ctx.all ? '' : hubOf(row.r); if (!h) return { ...row, s: sub(row) }; const H = REPORT_HUBS[h]; return H.members[0] === row.r ? { ...row, l: H.l, ic: H.ic, s: H.s, hub: h } : null; };
+  return REPORT_CATALOG.map((g) => ({ title: g.title, tone: g.tone, rows: g.rows.filter((row) => ok(row.need) && (!row.deskOnly || ctx.desk)).map(fold).filter(Boolean) })).filter((g) => g.rows.length);
 }
 
 // ---------- v0.21.0 (B2) cash in hand: Cash payments a person took in − what they handed over (collection cashHandovers) ----------

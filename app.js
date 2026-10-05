@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.21.4 (2026-10-06)';
+export const APP_VERSION = 'kf-v0.21.5 (2026-10-06)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -1887,7 +1887,7 @@ let navDepth = 0;
 function pushNav() { try { history.pushState({ kf: ++navDepth }, ''); } catch (e) {} }
 window.addEventListener('popstate', () => { navDepth = Math.max(0, navDepth - 1); goBack(); });
 function backClick() { if (navDepth > 0) history.back(); else goBack(); }
-export function go(tab, screen, params, isBack) {
+export function go(tab, screen, params, isBack, dir) { /* v0.21.5: dir = 'tab' when a report hub tab swaps the page (no Back step) */
   const sh = document.getElementById('rsheet'); if (sh) sh.remove();
   const next = { tab, screen: screen || tab, params: params || {} };
   if (S.desk && ['detail', 'form', 'list'].includes(next.screen)) { openDrawer(next.screen, next.params); return; }
@@ -1895,7 +1895,7 @@ export function go(tab, screen, params, isBack) {
   if (!isBack && S.route && S.route.screen !== 'form') { history_.push(S.route); pushNav(); }
   if (history_.length > 40) history_.shift();
   if (S.route && S.route.screen === 'form' && next.screen !== 'form' && !S.desk) { const fm = S.route.params && S.route.params.form; if (fm && !S.route.params.id && draftGet(fm)) toast('📝 Draft kept — open the same form again to continue'); } /* v0.11.1 (#1) */
-  S.navDir = isBack ? 'back' : S.route && next.screen === next.tab && S.route.tab !== next.tab ? 'tab' : next.screen === next.tab ? 'tab' : 'fwd'; /* v0.11.1 motion: which way the next screen slides in */
+  S.navDir = dir || (isBack ? 'back' : S.route && next.screen === next.tab && S.route.tab !== next.tab ? 'tab' : next.screen === next.tab ? 'tab' : 'fwd'); /* v0.11.1 motion: which way the next screen slides in */
   S.route = next;
   if (S.route.screen === 'form') S.formPhotos = [];
   render(true);
@@ -1995,7 +1995,14 @@ function render0(fresh) {
 }
 export function screenHtml(r) {
   const views = { today: viewToday, new: viewNew, customers: viewCustomers, status: viewStatus, detail: viewDetail, form: formHtml, list: viewList, report: viewReport };
-  return (views[r.screen] || viewToday)(r.params || {});
+  const html = (views[r.screen] || viewToday)(r.params || {});
+  const k = r.screen === 'report' ? (r.params || {}).r : r.screen === 'list' ? (r.params || {}).list : ''; const tabs = k ? hubTabs(k) : ''; /* v0.21.5 (R3): the hub's tab strip under the title */
+  return tabs && html.includes('</h1>') ? html.replace('</h1>', '</h1>' + tabs) : html;
+}
+export function hubTabs(k) {
+  const h = R.hubOf(k); if (!h) return '';
+  const byR = new Map(R.reportGroups({ ...reportCtx(model()), all: 1 }).flatMap((g) => g.rows).map((x) => [x.r, x])); const ms = R.REPORT_HUBS[h].members.filter((r) => byR.has(r)); if (ms.length < 2) return '';
+  return `<div class="seg rp-tabs">${ms.map((r) => { const x = byR.get(r); return `<button ${x.list ? `data-list="${r}"` : `data-report="${r}"`} class="${r === k ? 'on' : ''}"><span data-noi18n>${x.ic}</span> <span>${esc(x.l)}</span></button>`; }).join('')}</div>`;
 }
 export function afterRender(root, r) {
   if (r.screen === 'form') G.hereIfAllowed().catch(() => {});
@@ -3565,6 +3572,8 @@ document.addEventListener('click', async (ev) => {
   const c = t.closest('[data-cust]'); if (c && c.dataset.cust) { nav('customers', 'detail', { id: c.dataset.cust }); return; }
   const pcd = t.closest('[data-pcal]'); if (pcd) { S.route.params = { ...(S.route.params || {}), d: pcd.dataset.pcal, mo: pcd.dataset.pcal.slice(0, 7) }; render(false); return; } /* v0.17.4 (D2) */
   const pcm = t.closest('[data-pcalmo]'); if (pcm) { S.route.params = { ...(S.route.params || {}), mo: pcm.dataset.pcalmo, d: '' }; render(false); return; }
+  const rt = t.closest('.rp-tabs [data-report], .rp-tabs [data-list]'); if (rt) { ev.preventDefault(); const isRep = !!rt.dataset.report; const prm = isRep ? { r: rt.dataset.report } : { list: rt.dataset.list }; /* v0.21.5 (R3): a hub tab swaps the page — Back still goes to where you came from */
+    if (S.desk && !isRep) openDrawer('list', prm, 'replace'); else go(isRep ? 'status' : S.route.tab, isRep ? 'report' : 'list', prm, true, 'tab'); return; }
   const ls = t.closest('[data-list]'); if (ls) { nav(S.route.tab, 'list', { list: ls.dataset.list }); return; }
   const rp = t.closest('[data-report]'); if (rp) { ev.preventDefault(); nav('status', 'report', { r: rp.dataset.report, ...(rp.dataset.who ? { who: rp.dataset.who } : {}), ...(rp.dataset.d ? { d: rp.dataset.d } : {}), ...(rp.dataset.serial ? { serial: rp.dataset.serial } : {}), ...(rp.dataset.uid ? { uid: rp.dataset.uid } : {}), ...(rp.dataset.pm ? { pm: rp.dataset.pm } : {}) }); return; }
   const sg = t.closest('[data-seg]'); if (sg) { S.route.params.f = sg.dataset.seg; render(false); return; }

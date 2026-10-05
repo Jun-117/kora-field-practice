@@ -1081,3 +1081,6 @@ button.warn.link { display:block; width:100%; text-align:left; cursor:pointer; f
 .dp-live .lv-kv { margin:0; } .dp-live .lv-next { margin:0; }
 .lv-tlx summary { cursor:pointer; color:var(--muted); font-size:12px; } .lv-tlx .lv-tl { max-height:180px; overflow:auto; margin-top:4px; }
 .pg-tabs { grid-column: 1 / -1; margin-bottom:-4px; }
+
+/* v0.21.5 (R3) report hubs: the tab strip under the title */
+.rp-tabs { margin:4px 0 12px; } .rp-tabs button { white-space:nowrap; }

@@ -373,7 +373,7 @@ export function proofStats(D, from, to) {
   for (const c of D.customers || []) if (inR(c.installDate)) jobs.push({ kind: 'install', x: c, date: c.installDate, who: c.agent || '—', cid: c.id });
   const by = {}; const reasons = {};
   for (const j of jobs) {
-    j.signed = !!j.x.signed; j.spot = !!(j.x.savedAt && Number.isFinite(j.x.savedAt.lat));
+    j.signed = !!j.x.signed; j.spot = !!((j.x.savedAt && Number.isFinite(j.x.savedAt.lat)) || (j.x.arrivedGps && Number.isFinite(j.x.arrivedGps.lat))); /* v0.22.1: the 🚪 Arrived location counts too */
     const p = (by[j.who] = by[j.who] || { who: j.who, jobs: 0, signed: 0 }); p.jobs++; if (j.signed) p.signed++;
     if (!j.signed && j.x.noSign) reasons[j.x.noSign] = (reasons[j.x.noSign] || 0) + 1;
   }

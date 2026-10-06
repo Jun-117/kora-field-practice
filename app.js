@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.22.0 (2026-10-06)';
+export const APP_VERSION = 'kf-v0.22.1 (2026-10-06)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -248,6 +248,17 @@ export function remSent(cid) { const r = lsGet(REM, {})[cid]; return r && r.day 
 export function omwMark(cid, eta) { const m = lsGet(OMW, {}); for (const k of Object.keys(m)) if (!m[k] || Date.now() - m[k].at > 2 * 864e5) delete m[k]; m[cid] = { at: Date.now(), day: today(), eta: Number(eta) || null, by: myName() }; lsSet(OMW, m); }
 export const omwFor = (cid, day) => { const e = lsGet(OMW, {})[cid]; return e && e.day === day ? e : null; };
 const omwClear = (cid) => { const m = lsGet(OMW, {}); if (m[cid]) { delete m[cid]; lsSet(OMW, m); } };
+// v0.22.1 (Jun 10/6 "걍 뭐 버튼같은거 누르게해, 도착 이런거"): 🚪 Arrived — one tap keeps the time (+ the location once, if the phone gives it) on this phone · the visit saved later takes its minutes from it · nothing is tracked in between
+const ARR = 'kfp_arr';
+export function arrMark(cid, g) { const m = lsGet(ARR, {}); for (const k of Object.keys(m)) if (!m[k] || Date.now() - m[k].at > 864e5) delete m[k]; m[cid] = { at: Date.now(), day: today(), by: myName(), ...(g && Number.isFinite(g.lat) ? { lat: g.lat, lng: g.lng, acc: g.acc || null } : {}) }; lsSet(ARR, m); }
+export const arrFor = (cid, day) => { const e = cid ? lsGet(ARR, {})[cid] : null; return e && e.day === day ? e : null; };
+const arrClear = (cid) => { const m = lsGet(ARR, {}); if (m[cid]) { delete m[cid]; lsSet(ARR, m); } };
+const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5);
+export const arrBtn = (c, cls = '') => { if (!c) return ''; const a = arrFor(c.id, today()); return `<button type="button" class="${cls}" data-arr="${esc(c.id)}">${a ? `🚪 Arrived ${hhmm(a.at)}` : '🚪 Arrived'}</button>`; };
+function arrLine(v, x) { /* the arrival in the visit form — a button until it is tapped */
+  if (!x || v.date !== today()) return ''; const a = arrFor(x.c.id, v.date);
+  return a ? `<div>${esc(`🚪 Arrived ${hhmm(a.at)} · the minutes fill in on Save`)}</div>` : `<div><button type="button" class="btn small ghost" data-arr="${esc(x.c.id)}">🚪 Arrived</button> <span class="muted">${esc('tap it at the door — the visit counts its minutes from it')}</span></div>`;
+}
 export const omwBtn = (c, cls = '') => (c && c.phone ? `<button type="button" class="${cls}" data-omw="${esc(c.id)}">🛵 On my way</button>` : '');
 export const omwChips = (c) => (c && c.phone ? `<div class="omw-eta hidden" id="omw_${esc(c.id)}"><span class="muted">Arriving in about</span>${OMW_ETAS.map((n) => `<a class="chip" href="${esc(waLink(c.phone, omwText(c, n)))}" target="_blank" rel="noopener" data-omw-sent="${esc(c.id)}" data-eta="${n}">${n} min</a>`).join('')}${(() => { const e = omwFor(c.id, today()); return e ? `<span class="pill ok">sent ${new Date(e.at).toTimeString().slice(0, 5)}</span>` : ''; })()}</div>` : '');
 
@@ -1001,7 +1012,7 @@ FORMS.visit = {
     { k: 'status', l: 'Status', t: 'chips', o: OPT.visitStatus, req: 1, def: '✅ Completed' },
     // 🚪 nobody home: a wasted trip — the visit is still owed, "try again on" moves the next visit (v0.8 #7)
     { k: 'noShowReason', l: 'What happened?', t: 'chips', o: OPT.noShowReason, show: (v) => R.isNoShow(v) },
-    { k: 'waitedMin', l: 'Minutes you waited or called', t: 'number', show: (v) => R.isNoShow(v) },
+    { k: 'waitedMin', l: 'Minutes you waited or called', t: 'number', show: (v) => R.isNoShow(v) && !arrFor(v.customerId, v.date) }, /* v0.22.1: from 🚪 Arrived when tapped */
     { k: 'retryDate', l: 'Try again on', t: 'date', show: (v) => R.isNoShow(v), hint: 'The visit stays owed — this date becomes the next visit. After saving, send the "sorry we missed you" message from the customer page.' },
     { t: 'section', k: 'secFilters', l: 'Filters', hint: 'Booking intervals are a guide — decide by what you see. PP brown/black → replace now.', show: (v) => !R.isNoShow(v) },
     { k: 'filters', l: 'Filters changed', t: 'chips', multi: 1, o: OPT.filters, show: (v) => !R.isNoShow(v), hint: S.settings.filterMode === 'Separate' ? '' : 'Filters go together: everything that falls due before the next change is done on this visit (pre-ticked).' },
@@ -1023,7 +1034,7 @@ FORMS.visit = {
     { t: 'section', l: 'Next & who' },
     { k: 'nextVisitDate', l: 'Next visit date', t: 'date', hint: 'Required to complete. Suggested: monthly for 6 months after install, then every 3 months.', show: (v) => !R.isNoShow(v) },
     { k: 'technician', l: 'Technician', t: 'chips', o: techNames, req: 1, def: myName },
-    { k: 'durationMin', l: 'Time at the house (minutes)', t: 'number', show: (v) => !R.isNoShow(v) },
+    { k: 'durationMin', l: 'Time at the house (minutes)', t: 'number', show: (v) => !R.isNoShow(v) && !arrFor(v.customerId, v.date) }, /* v0.22.1: from 🚪 Arrived when tapped */
     { t: 'section', k: 'secSign', l: 'Customer signature', hint: 'Proof we were there — the customer signs with a finger (saved like a photo). No signature → say why.', show: (v) => !R.isNoShow(v) },
     { k: 'signName', l: 'Signed by (name)', t: 'text', show: (v) => !R.isNoShow(v) },
     { k: 'sign', l: '', t: 'sign', show: (v) => !R.isNoShow(v) },
@@ -1037,7 +1048,7 @@ FORMS.visit = {
     const due = (x.fd || []).filter((f) => f.status === 'overdue' || f.status === 'soon').map((f) => `${f.type}${f.due ? ' (' + f.due + ')' : ''}`);
     const last = arr('visits').filter((q) => q.customerId === x.c.id && q.status && String(q.status).includes('Completed')).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
     const line = (s) => `<div>${s}</div>`;
-    return line(`<b>${esc('Due at this house')}</b>: ${due.length ? esc(due.join(' · ')) : esc('no filter due')}`) + (last ? line(`${esc('Last visit')} ${esc(last.date)} · <span>${esc(last.visitType || '')}</span>${last.ppColor ? ' · PP ' + esc(last.ppColor) : ''}${last.tdsAfter ? ' · TDS ' + esc(last.tdsAfter) : ''}${esc(last.notes ? ' · ' + String(last.notes).slice(0, 60) : '')}`) : line(esc('No completed visit yet'))) + (x.led && x.led.overdue ? line(`<span style="color:var(--bad)">${esc('Overdue ' + R.npr(x.led.overdue) + ' — ask for it while you are there')}</span>`) : '');
+    return line(`<b>${esc('Due at this house')}</b>: ${due.length ? esc(due.join(' · ')) : esc('no filter due')}`) + (last ? line(`${esc('Last visit')} ${esc(last.date)} · <span>${esc(last.visitType || '')}</span>${last.ppColor ? ' · PP ' + esc(last.ppColor) : ''}${last.tdsAfter ? ' · TDS ' + esc(last.tdsAfter) : ''}${esc(last.notes ? ' · ' + String(last.notes).slice(0, 60) : '')}`) : line(esc('No completed visit yet'))) + (x.led && x.led.overdue ? line(`<span style="color:var(--bad)">${esc('Overdue ' + R.npr(x.led.overdue) + ' — ask for it while you are there')}</span>`) : '') + arrLine(v, x);
   },
   prefill(p) { const c = S.D.customers.get(p.cid); const x = p.cid ? model().cust.get(p.cid) : null; const due = x ? (x.fb && x.fb.date <= R.addDays(today(), 14) ? x.fb.types : (x.fd || []).filter((f) => f.status === 'overdue').map((f) => f.type)) : []; /* v0.15: together → the whole batch */ return { customerId: p.cid || '', nextVisitDate: c ? R.suggestNextVisit(c.installDate, today()) : '', retryDate: R.addDays(today(), 1), signName: c ? c.name || '' : '', sanitised: p.cid ? (sanDue(p.cid) ? '' : 'No') : '', ...(due.length ? { filters: due, visitType: 'Filter change', oldCount: due.length } : {}) }; },
   onChange(form, v, key) { /* v0.22.0 Jun 10/6 "정말 중요한것만 입력하게": old filters follow the filters ticked · the signer follows the customer · sanitised = No unless due (never a ready-made Yes: the visit note would claim a cleaning) */
@@ -1093,9 +1104,11 @@ FORMS.visit = {
     const prevV = S.D.visits.get(id) || {}; const oldSn = prevV.swapOld || R.normSerial(c.deviceSerial); const newSn = R.normSerial(v.swapNew);
     const swapping = isDone(v.status) && v.visitType === 'Repair' && v.swapDev === 'Yes — new unit put in' && !!newSn && newSn !== oldSn;
     data.swapNew = swapping ? newSn : ''; data.swapOld = swapping ? oldSn : ''; if (!swapping) { data.swapDev = v.visitType === 'Repair' ? 'No' : ''; data.swapReason = ''; }
+    const arr = isNew ? arrFor(v.customerId, v.date) : null; /* v0.22.1: minutes from the 🚪 Arrived tap (only when the box was left empty) */
+    if (arr) { data.arrivedAt = new Date(arr.at).toISOString(); if (Number.isFinite(arr.lat)) data.arrivedGps = { lat: arr.lat, lng: arr.lng, acc: arr.acc || null }; const mins = Math.round((Date.now() - arr.at) / 60000); if (R.isNoShow(v)) { if (data.waitedMin == null) data.waitedMin = Math.max(0, Math.min(240, mins)); } else if (data.durationMin == null) data.durationMin = Math.max(1, Math.min(600, mins)); data.minutesFrom = 'arrived'; }
     const ok = save(`visits/${id}`, data, isNew);
     if (ok && swapping && R.normSerial(c.deviceSerial) !== newSn) save(`customers/${c.id}`, { deviceSerial: newSn }, false);
-    if (isNew && ok) omwClear(v.customerId);
+    if (isNew && ok) { omwClear(v.customerId); if (arr) arrClear(v.customerId); }
     const np = savePhotos(v.customerId, `visits/${id}`, v.visitType === 'Repair' ? 'repair' : 'visit') + (ok ? saveSign(v.customerId, `visits/${id}`, sig, v.signName) : 0);
     return { ok, np, go: ['customers', 'detail', { id: v.customerId, vrep: id }] };
   },
@@ -2327,7 +2340,7 @@ function viewDetail(p) {
   if (x.c.installDate && x.c.installDate > t && c.phone) todo.push({ lvl: 'info', ic: '📅', t: `Installation booked ${x.c.installDate}`, s: R.daysBetween(t, x.c.installDate) <= 3 ? 'confirm with the customer' : 'confirm 3 days before', a: `<a class="btn small ghost" href="${esc(waLink(c.phone, confText(c, x.c.installDate)))}" target="_blank" rel="noopener">💬 Confirm date</a>` }); /* v0.14 (#4): a booked install gets a 3-day confirm */
   const ns = x.nv && x.nv.noShow; // 🚪 nobody home on the last try (v0.8 #7)
   if (ns && String(ns.date).slice(0, 10) === t) todo.push({ lvl: 'warn', ic: '🚪', t: 'Nobody home today', s: `${ns.noShowReason || 'Nobody home'} · trying again ${ns.retryDate}`, a: c.phone ? `<a class="btn small ghost" href="${esc(waLink(c.phone, missText(c, ns)))}" target="_blank" rel="noopener">💬 Sorry we missed you</a>` : '' });
-  if (x.nv && x.nv.date <= t) todo.push({ lvl: x.nv.date < t ? 'bad' : 'warn', ic: '🔧', t: `Visit due ${x.nv.date === t ? 'today' : x.nv.date}`, s: x.nv.source, a: `${can('visit') ? omwBtn(c, 'btn small ghost') : ''}<button class="btn small" data-go-form="visit" data-cid="${esc(c.id)}">🔧 Visit</button>` });
+  if (x.nv && x.nv.date <= t) todo.push({ lvl: x.nv.date < t ? 'bad' : 'warn', ic: '🔧', t: `Visit due ${x.nv.date === t ? 'today' : x.nv.date}`, s: x.nv.source, a: `${can('visit') ? omwBtn(c, 'btn small ghost') + arrBtn(c, 'btn small ghost') : ''}<button class="btn small" data-go-form="visit" data-cid="${esc(c.id)}">🔧 Visit</button>` });
   if (fo.length) todo.push({ lvl: 'bad', ic: '🧪', t: `Filters to change: ${fo.map((f) => f.type).join(', ')}`, s: fo.map((f) => f.why).join(' · '), a: x.nv && x.nv.date <= t ? '' : `<button class="btn small" data-go-form="visit" data-cid="${esc(c.id)}">🔧 Visit</button>` });
   const open = m.openReq.filter((o) => o.r.customerId === c.id);
   for (const o of open) { const late = Date.now() > o.sla.replyBy; todo.push({ lvl: late || o.r.priority === 'Urgent' ? 'bad' : 'warn', ic: '📋', t: `${o.r.type} · ${o.r.status}`, s: `${String(o.r.description || '').slice(0, 80)} · ${late ? 'reply overdue' : 'reply by ' + fmtTime(new Date(o.sla.replyBy), { hour: '2-digit', minute: '2-digit' })}`, a: `<button class="btn small" data-edit="request" data-id="${esc(o.r.id)}">Update</button>` }); }
@@ -2350,7 +2363,7 @@ function viewDetail(p) {
     ${can('pay') ? `<button data-go-form="payment" data-cid="${esc(c.id)}">💵 Pay</button>` : ''}${can('visit') ? `<button data-go-form="visit" data-cid="${esc(c.id)}">🔧 Visit</button>` : ''}
   </div>
   <div class="links more${S.desk ? '' : ' hidden'}" id="moreLinks">
-    ${hasGps ? `<a href="${esc(G.dirUrl(dest))}" data-nav="${esc(dest)}" target="_blank" rel="noopener">🧭 Navigate</a>` : ''}${can('visit') && x.status !== 'Churned' ? omwBtn(c) : ''}
+    ${hasGps ? `<a href="${esc(G.dirUrl(dest))}" data-nav="${esc(dest)}" target="_blank" rel="noopener">🧭 Navigate</a>` : ''}${can('visit') && x.status !== 'Churned' ? omwBtn(c) + arrBtn(c) : ''}
     ${S.desk ? '<span class="lk-lab">record</span>' : ''}${can('visit') ? `<button data-go-form="request" data-cid="${esc(c.id)}">📋 Request</button>` : ''}${canEdit ? `<button data-go-form="customerEdit" data-id="${esc(c.id)}">✏️ Edit</button>` : ''}${canForm('contract') ? `<button data-go-form="contract" data-cid="${esc(c.id)}">📜 Contract</button>` : ''}
     ${S.desk ? '<span class="lk-lab">send</span>' : ''}${x.status === 'Active' && referralOn() ? `<button data-act="rcRef" data-cid="${esc(c.id)}">🎁 Referral card</button>` : ''}${(() => { const lv = [...m.D.visits.values()].filter((q) => q.customerId === c.id && (String(q.status).includes('Completed') || R.isNoShow(q))).sort((p, q) => String(q.date).localeCompare(String(p.date)))[0]; return lv ? `<button data-act="rcVisit" data-vid="${esc(lv.id)}">${R.isNoShow(lv) ? '📨 Missed-visit note' : '📨 Visit note'}</button>` : ''; })()}${x.status === 'Active' ? `<button data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card</button>` : ''}${x.status === 'Active' && S.settings.coQr && (x.dn || (x.led && x.led.nextBill)) ? `<button data-act="rcBill" data-cid="${esc(c.id)}">🧾 Bill + QR</button>` : ''}
     ${S.isAdmin ? `<button data-act="delCust" data-cid="${esc(c.id)}" style="color:var(--bad)">🗑️ Delete (test)</button>` : ''}
@@ -3531,6 +3544,8 @@ document.addEventListener('click', async (ev) => {
   const cl = t.closest('[data-cal]'); if (cl && S.desk) { ev.preventDefault(); const bb = $('#bellBox'); if (bb) bb.classList.add('hidden'); go('calendar', 'calendar', { d: cl.dataset.cal, mo: cl.dataset.cal.slice(0, 7) }); return; }
   const wo = t.closest('[data-watchok]'); if (wo) { ev.preventDefault(); const [cid, sc] = wo.dataset.watchok.split('|'); watchCheck(cid, Number(sc)); toast('✓ Checked — hidden for 7 days unless it gets worse'); scheduleRender(); return; }
   const spk = t.closest('[data-staffpick]'); if (spk) { ev.preventDefault(); staffPick(spk.dataset.staffpick); return; } /* v0.17.0 (3) B2 */
+  const arb = t.closest('[data-arr]'); if (arb) { ev.preventDefault(); if (arb.disabled) return; arb.disabled = true; const cid = arb.dataset.arr; /* v0.22.1 */
+    G.getHere(2 * 60e3, 8000).then((g) => { arrMark(cid, g); toast(g ? '🚪 Arrived — time and place kept' : '🚪 Arrived — time kept (no location)'); const f = arb.closest('#theForm'); if (f && f.isConnected) { refreshConditional(f); arb.disabled = false; } else scheduleRender(); }); return; }
   const om = t.closest('[data-omw]'); if (om) { ev.preventDefault(); const box = document.getElementById('omw_' + om.dataset.omw); if (box) { box.classList.toggle('hidden'); if (!box.classList.contains('hidden')) box.scrollIntoView({ block: 'nearest' }); } return; }
   const rms = t.closest('[data-rem-sent]'); if (rms) { remMark(rms.dataset.remSent); setTimeout(() => scheduleRender(), 400); } /* the link still opens WhatsApp */
   const oms = t.closest('[data-omw-sent]'); if (oms) { omwMark(oms.dataset.omwSent, oms.dataset.eta); setTimeout(() => { const b = document.getElementById('omw_' + oms.dataset.omwSent); if (b) b.classList.add('hidden'); toast('🛵 Marked "on my way" — it is saved with the visit'); }, 50); return; }
@@ -3926,14 +3941,14 @@ if (DEMO) {
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
     S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, bankPdfRows, decodeQrFromImage };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, bankPdfRows, decodeQrFromImage, arrFor };
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */
   if (!location.search.includes('empty')) import('./demo.js').then((d) => { d.loadDemo(S, practiceDay()); practiceReplay(); practiceLive(d, true); setInterval(() => practiceLive(d, false), 180000); bump(); heartbeat(true); render(true); }).catch((e) => console.warn('demo', e));
 }
 if (EMU) { /* v0.18.0 (A-1): the self-test drives the real sign-in → save → server → read-back path */
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R, CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, noteError, errList, deviceIssues, heartbeat };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R, CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, noteError, errList, deviceIssues, heartbeat, arrFor };
   window.__emu = {
     signUp: async (email, pw) => { const r = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emu', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw, returnSecureToken: true }) }); return (await r.json()).localId; },
     signIn: (email, pw) => signInWithEmailAndPassword(auth, email, pw), signOut: () => signOut(auth),

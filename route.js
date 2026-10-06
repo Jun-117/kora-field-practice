@@ -4,7 +4,7 @@
 //        MANUAL = your own order (hold ☰ and drag a stop, or 📌 it next — v0.11); "Auto" switches back. Both are kept per day on the phone.
 import * as R from './logic.js';
 import { nextText } from './app.js';
-import { S, model, esc, custLabel, toleOf, waLink, dunText, nav, toast, today, offerLink, omwBtn, omwChips, can } from './app.js';
+import { S, model, esc, custLabel, toleOf, waLink, dunText, nav, toast, today, offerLink, omwBtn, omwChips, can, arrFor } from './app.js';
 import { loadLeaflet, MAP_OPTS, setHere, hereNow, openDirections, dirUrl } from './geo.js';
 
 const KIND = {
@@ -170,6 +170,7 @@ function sheet(s, n) {
       <a href="tel:${esc(c.phone)}"><span class="i">📞</span>Call</a>
       <a href="${esc(waLink(c.phone, x.dn ? dunText(x) : ''))}" target="_blank" rel="noopener"><span class="i">💬</span>WhatsApp</a>
       ${can('visit') && c.phone ? `<button data-omw="${esc(c.id)}"><span class="i">🛵</span>On my way</button>` : ''}
+      ${can('visit') ? (() => { const a = arrFor(c.id, today()); return `<button data-arr="${esc(c.id)}"><span class="i">🚪</span>${a ? 'Arrived ' + new Date(a.at).toTimeString().slice(0, 5) : 'Arrived'}</button>`; })() : ''} <!-- v0.22.1 -->
       <button data-go-form="visit" data-cid="${esc(c.id)}"><span class="i">🔧</span>Visit</button>
       <button data-go-form="payment" data-cid="${esc(c.id)}"><span class="i">💵</span>Pay</button>
       <button data-go-form="request" data-cid="${esc(c.id)}"><span class="i">📋</span>Request</button>

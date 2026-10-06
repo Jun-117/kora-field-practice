@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.22.2 (2026-10-06)';
+export const APP_VERSION = 'kf-v0.22.3 (2026-10-06)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -261,9 +261,32 @@ function insightCard(v) {
   if (Number.isFinite(I.flow)) L.push(I.uv === 'ok' ? `💡 UV margin OK · flow ${I.flow} L/min` : I.uv === 'thin' ? `💡 UV margin thin · flow ${I.flow} L/min · tighten the flow valve to 1.2 or less` : `💡 UV margin low · flow ${I.flow} L/min · tighten the flow valve now`);
   if (Number.isFinite(I.flowPct)) L.push(Math.abs(I.flowPct) < 5 ? '🚰 Flow vs install: about the same' : `🚰 Flow vs install: ${Math.abs(I.flowPct)}% ${I.flowPct < 0 ? 'less' : 'more'} (${I.flowBase} → ${I.flow})`);
   if (Number.isFinite(I.ppDays) && I.ppDays > 0) L.push(I.ppColor === 'White' ? `⚪ PP still white after ${I.ppDays} days` : `🟤 PP ${String(I.ppColor).toLowerCase()} after ${I.ppDays} days at this home${(v.filters || []).includes('PP') ? ` · next PP booked at ${I.ppDays} days` : ''}`);
-  if (v.nextVisitDate) L.push(`📅 Next visit ${v.nextVisitDate}`);
+  if (v.nextVisitDate) L.push(`📅 Next visit ${v.nextVisitDate}${v.nextWhy ? ` · before ${v.nextWhy}` : ''}`);
   if (I.oldBack) L.push(`♻️ Old filters to hand in: ${I.oldBack}`);
   return L.length ? `<div class="ins" style="margin-top:8px"><div class="muted">${esc('What this visit tells us')} · ${esc('staff only — not on the customer note')}</div>${L.map((l) => `<div>${esc(l)}</div>`).join('')}</div>` : '';
+}
+// v0.22.3 (Jun 10/6 "이건 각 방문일자들 나중까지 고려해서 가장 일정 없는 날짜로 자동으로 해주는거 그런거 만들자( 뭐 모든 고객 다 첫째주 월욜로 잡으면 우짜노)"): the next visit for this home after this visit
+const capPerDay = () => { const ppl = S.settings.capPeople !== undefined && S.settings.capPeople !== '' ? Number(S.settings.capPeople) : Math.max(1, techNames().filter((n) => n !== 'Jun').length); return Math.max(1, ppl * (Number(S.settings.capJobsPerDay) || R.CAPACITY.jobsPerDay)); };
+const winNum = (x) => (x === undefined || x === null || x === '' || !Number.isFinite(Number(x)) ? undefined : Number(x));
+const wdOf = (d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(d + 'T00:00:00').getDay()];
+export function nextPlanFor(v) {
+  const c = v && S.D.customers.get(v.customerId); if (!c || !R.isDate(c.installDate) || !R.isDate(v.date)) return null;
+  const m = model(); const FM = learnCache.FM || undefined;
+  const me = { id: '_plan', date: v.date, status: '✅ Completed', filters: v.filters || [], ppColor: v.ppColor || '', sanitised: v.sanitised || '', visitType: v.visitType || '' };
+  const hv = [...S.D.visits.values()].filter((q) => q.customerId === c.id && q.id !== v._id).concat([me]).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const monthly = R.monthsBetween(c.installDate, v.date) < R.VISIT_RULE.monthlyUntilMonth;
+  let latest = R.suggestNextVisit(c.installDate, v.date), why = monthly ? 'the monthly check' : 'the 3-month check';
+  for (const f of R.filterDues(c, hv, v.date, FM)) if (f.due && f.due > v.date && f.due < latest) { latest = f.due; why = f.type; }
+  const booked = new Map(); for (const x of m.cust.values()) { if (x.c.id === c.id || x.c.status !== 'Active' || !x.nv || !R.isDate(x.nv.date) || x.nv.date <= v.date) continue; const b = booked.get(x.nv.date) || { n: 0, toles: new Map() }; b.n++; const tl = toleOf(x.c); b.toles.set(tl, (b.toles.get(tl) || 0) + 1); booked.set(x.nv.date, b); }
+  const hm = CAL.holidayMap(S.settings.holidays);
+  const p = R.planNextVisit({ latest, from: v.date, tole: toleOf(c), booked, isOff: (d) => CAL.isOff(hm, d), cap: capPerDay(), monthly, winQuarterly: winNum(S.settings.nextWinQuarterly), winMonthly: winNum(S.settings.nextWinMonthly) });
+  return p && { ...p, why, tole: toleOf(c) };
+}
+function nextBoxHtml(v) {
+  if (!v.customerId || R.isNoShow(v)) return ''; const p = nextPlanFor(v); if (!p) return '';
+  const segs = [`📅 Suggested ${p.date} (${wdOf(p.date)})`, `before ${p.why} ${p.latest}`]; if (p.same) segs.push(`${p.same} home${p.same > 1 ? 's' : ''} in ${p.tole} that day`); segs.push(`${p.load}/${p.cap} booked`); if (p.full) segs.push('every day is full — the least full one');
+  const alts = p.alts.length ? `<div class="row" style="gap:6px;margin-top:4px;flex-wrap:wrap"><span class="muted">${esc('Other days')}</span>${p.alts.map((d) => `<button type="button" class="chip" data-nvd="${esc(d)}">${esc(`${d} (${wdOf(d)})`)}</button>`).join('')}</div>` : '';
+  return `<div>${esc(segs.join(' · '))}</div>${alts}`;
 }
 function arrLine(v, x) { /* the arrival in the visit form — a button until it is tapped */
   if (!x || v.date !== today()) return ''; const a = arrFor(x.c.id, v.date);
@@ -1044,7 +1067,8 @@ FORMS.visit = {
     { k: 'custPick', l: 'What we did', t: 'chips', multi: 1, noi18n: 1, o: () => visitLines().map((x) => x.en), show: (v) => !R.isNoShow(v) }, /* the button words are data (Settings) — not run through the UI dictionary */
     { k: 'custNote', l: 'Anything else for the customer', t: 'text', ph: 'English or नेपाली — one short line', show: (v) => !R.isNoShow(v) },
     { t: 'section', l: 'Next & who' },
-    { k: 'nextVisitDate', l: 'Next visit date', t: 'date', hint: 'Required to complete. Suggested: monthly for 6 months after install, then every 3 months.', show: (v) => !R.isNoShow(v) },
+    { k: 'nextVisitDate', l: 'Next visit date', t: 'date', hint: 'Required to complete. The app suggests the emptiest working day before it is due — change it if needed.', show: (v) => !R.isNoShow(v) },
+    { k: 'nextBox', t: 'info', show: (v) => !R.isNoShow(v) }, /* v0.22.3: why this day · other days */
     { k: 'technician', l: 'Technician', t: 'chips', o: techNames, req: 1, def: myName },
     { k: 'durationMin', l: 'Time at the house (minutes)', t: 'number', show: (v) => !R.isNoShow(v) && !arrFor(v.customerId, v.date) }, /* v0.22.1: from 🚪 Arrived when tapped */
     { t: 'section', k: 'secSign', l: 'Customer signature', hint: 'Proof we were there — the customer signs with a finger (saved like a photo). No signature → say why.', show: (v) => !R.isNoShow(v) },
@@ -1055,22 +1079,25 @@ FORMS.visit = {
     { k: 'photos', l: 'Photos', t: 'photos', roles: ['before', 'after', 'tds', 'other'] }, /* v0.19.0 (4) */
     { k: 'notes', l: 'Notes', t: 'textarea', ph: 'complaints, symptoms, anything to remember' },
   ],
-  info(v) {
+  info(v, k) {
+    if (k === 'nextBox') return nextBoxHtml(v); /* v0.22.3 */
     const x = v.customerId ? model().cust.get(v.customerId) : null; if (!x) return '';
     const due = (x.fd || []).filter((f) => f.status === 'overdue' || f.status === 'soon').map((f) => `${f.type}${f.due ? ' (' + f.due + ')' : ''}`);
     const last = arr('visits').filter((q) => q.customerId === x.c.id && q.status && String(q.status).includes('Completed')).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
     const line = (s) => `<div>${s}</div>`;
     return line(`<b>${esc('Due at this house')}</b>: ${due.length ? esc(due.join(' · ')) : esc('no filter due')}`) + (last ? line(`${esc('Last visit')} ${esc(last.date)} · <span>${esc(last.visitType || '')}</span>${last.ppColor ? ' · PP ' + esc(last.ppColor) : ''}${last.tdsAfter ? ' · TDS ' + esc(last.tdsAfter) : ''}${esc(last.notes ? ' · ' + String(last.notes).slice(0, 60) : '')}`) : line(esc('No completed visit yet'))) + (x.led && x.led.overdue ? line(`<span style="color:var(--bad)">${esc('Overdue ' + R.npr(x.led.overdue) + ' — ask for it while you are there')}</span>`) : '') + arrLine(v, x);
   },
-  prefill(p) { const c = S.D.customers.get(p.cid); const x = p.cid ? model().cust.get(p.cid) : null; const due = x ? (x.fb && x.fb.date <= R.addDays(today(), 14) ? x.fb.types : (x.fd || []).filter((f) => f.status === 'overdue').map((f) => f.type)) : []; /* v0.15: together → the whole batch */ return { customerId: p.cid || '', nextVisitDate: c ? R.suggestNextVisit(c.installDate, today()) : '', retryDate: R.addDays(today(), 1), signName: c ? c.name || '' : '', sanitised: p.cid ? (sanDue(p.cid) ? '' : 'No') : '', ...(due.length ? { filters: due, visitType: 'Filter change', oldCount: due.length } : {}) }; },
+  prefill(p) { const c = S.D.customers.get(p.cid); const x = p.cid ? model().cust.get(p.cid) : null; const due = x ? (x.fb && x.fb.date <= R.addDays(today(), 14) ? x.fb.types : (x.fd || []).filter((f) => f.status === 'overdue').map((f) => f.type)) : []; /* v0.15: together → the whole batch */ return { customerId: p.cid || '', nextVisitDate: c ? ((nextPlanFor({ customerId: c.id, date: today(), filters: due, sanitised: sanDue(c.id) ? '' : 'No' }) || {}).date || R.suggestNextVisit(c.installDate, today())) : '', retryDate: R.addDays(today(), 1), signName: c ? c.name || '' : '', sanitised: p.cid ? (sanDue(p.cid) ? '' : 'No') : '', ...(due.length ? { filters: due, visitType: 'Filter change', oldCount: due.length } : {}) }; },
   onChange(form, v, key) { /* v0.22.0 Jun 10/6 "정말 중요한것만 입력하게": old filters follow the filters ticked · the signer follows the customer · sanitised = No unless due (never a ready-made Yes: the visit note would claim a cleaning) */
-    if (key === 'oldCount' || key === 'sanitised') { form.dataset[key + 'Touched'] = '1'; return; }
+    if (key === 'oldCount' || key === 'sanitised' || key === 'nextVisitDate') form.dataset[key + 'Touched'] = '1';
     if (key === 'filters' && form.dataset.oldCountTouched !== '1') { const el = form.elements.oldCount; if (el) el.value = (v.filters || []).length || ''; }
     if (key === 'customerId') {
       const c = S.D.customers.get(v.customerId); const sn = form.elements.signName;
       if (c && sn && (!sn.value.trim() || [...S.D.customers.values()].some((q) => q.name === sn.value))) sn.value = c.name || '';
-      if (form.dataset.sanitisedTouched !== '1') setChips(form, 'sanitised', v.customerId && !sanDue(v.customerId) ? 'No' : '');
+      if (form.dataset.sanitisedTouched !== '1') { const sv = v.customerId && !sanDue(v.customerId) ? 'No' : ''; setChips(form, 'sanitised', sv); v = { ...v, sanitised: sv }; }
     }
+    /* v0.22.3: the next visit follows what this visit does (filters changed · sanitised · the date) — until a day is picked by hand */
+    if (['filters', 'ppColor', 'sanitised', 'date', 'visitType', 'customerId', 'status'].includes(key) && form.dataset.nextVisitDateTouched !== '1') { const p = nextPlanFor(v); const el = form.elements.nextVisitDate; if (p && el) el.value = p.date; }
   },
   check(v, confirmed) {
     const errs = {}, warns = {};
@@ -1079,6 +1106,7 @@ FORMS.visit = {
     const done = isDone(v.status);
     if (done && v.visitType === 'Filter change' && !(v.filters || []).length) errs.filters = 'Which filters did you change?';
     if (done && !v.nextVisitDate) errs.nextVisitDate = 'Enter the next visit date.';
+    else if (done && !confirmed && !v._edit) { const p = nextPlanFor(v); if (p && v.nextVisitDate > p.latest) warns.nextVisitDate = `Later than ${p.latest} (${p.why}) — that visit would be late.`; } /* v0.22.3 */
     if (done && v.visitType === 'Repair' && v.swapDev === 'Yes — new unit put in' && !v._edit) { /* v0.21.3 */
       const c0 = S.D.customers.get(v.customerId) || {}; const ns = R.normSerial(v.swapNew);
       if (!ns) errs.swapNew = 'Which unit did you put in? Scan or type its number.';
@@ -1118,7 +1146,7 @@ FORMS.visit = {
     data.swapNew = swapping ? newSn : ''; data.swapOld = swapping ? oldSn : ''; if (!swapping) { data.swapDev = v.visitType === 'Repair' ? 'No' : ''; data.swapReason = ''; }
     const arv = isNew ? arrFor(v.customerId, v.date) : null; /* v0.22.1: minutes from the 🚪 Arrived tap (only when the box was left empty) */
     if (arv) { data.arrivedAt = new Date(arv.at).toISOString(); if (Number.isFinite(arv.lat)) data.arrivedGps = { lat: arv.lat, lng: arv.lng, acc: arv.acc || null }; const mins = Math.round((Date.now() - arv.at) / 60000); if (R.isNoShow(v)) { if (data.waitedMin == null) data.waitedMin = Math.max(0, Math.min(240, mins)); } else if (data.durationMin == null) data.durationMin = Math.max(1, Math.min(600, mins)); data.minutesFrom = 'arrived'; }
-    if (isDone(v.status) && !R.isNoShow(v)) data.insight = R.visitInsight({ ...data, id }, c, [...S.D.visits.values()].filter((q) => q.customerId === c.id)); /* v0.22.2: what this visit tells us — kept as of this day */
+    if (isDone(v.status) && !R.isNoShow(v)) { data.insight = R.visitInsight({ ...data, id }, c, [...S.D.visits.values()].filter((q) => q.customerId === c.id)); const np0 = nextPlanFor({ ...v, _id: id }); data.nextWhy = np0 ? `${np0.why} ${np0.latest}` : ''; } /* v0.22.2: what this visit tells us — kept as of this day */
     const ok = save(`visits/${id}`, data, isNew);
     if (ok && swapping && R.normSerial(c.deviceSerial) !== newSn) save(`customers/${c.id}`, { deviceSerial: newSn }, false);
     if (isNew && ok) { omwClear(v.customerId); if (arv) arrClear(v.customerId); }
@@ -1877,7 +1905,7 @@ function refreshConditional(form, key) {
   const spec = F.spec(); const v = readForm(form, spec);
   for (const f of spec) if (f.show && f.k) { const el = form.querySelector(`.fld[data-k="${f.k}"], .fsec[data-k="${f.k}"]`); if (el) el.classList.toggle('hidden', !f.show(v)); }
   if (F.onChange && key) F.onChange(form, v, key); /* v0.19.0 (3) */
-  if (F.info) for (const f of spec) if (f.t === 'info') { const el = form.querySelector('#info_' + f.k); if (el) { const h = F.info(v); el.innerHTML = h; el.parentElement.classList.toggle('hidden', !h); } }
+  if (F.info) for (const f of spec) if (f.t === 'info') { const el = form.querySelector('#info_' + f.k); if (el) { const h = F.info(v, f.k); el.innerHTML = h; el.parentElement.classList.toggle('hidden', !h); } }
 }
 function submitForm(form) {
   const F = FORMS[form.dataset.form]; const spec = F.spec();
@@ -3137,6 +3165,8 @@ export function viewReport(p) {
       <label>Visit slots one install takes</label><input name="capInstallSlots" type="number" min="1" value="${esc(S.settings.capInstallSlots ?? '')}" placeholder="${R.CAPACITY.installSlots}">
       <label>Weeks to find and train a technician</label><input name="hireLeadWeeks" type="number" min="0" value="${esc(S.settings.hireLeadWeeks ?? '')}" placeholder="${R.CAPACITY.hireLeadWeeks} (guess)">
       <label>Callback window — days after a job</label><input name="callbackDays" type="number" min="1" value="${esc(S.settings.callbackDays ?? '')}" placeholder="${R.CALLBACK.days} (guess)">
+      <label>Next visit — days early a 3-month visit may move</label><input name="nextWinQuarterly" type="number" min="0" value="${esc(S.settings.nextWinQuarterly ?? '')}" placeholder="${R.NEXT_WIN.quarterly}">
+      <label>Next visit — days early a monthly visit may move</label><input name="nextWinMonthly" type="number" min="0" value="${esc(S.settings.nextWinMonthly ?? '')}" placeholder="${R.NEXT_WIN.monthly}"><div class="hint">🔴 first values. The app picks the emptiest working day in this window, the same tole first — never after the day the visit is due.</div>
       <h3>🔎 Sign-up screening</h3>
       <label>Warn when an install has no screening?</label><select name="screenWarn"><option value="No"${S.settings.screenWarn === 'Yes' ? '' : ' selected'}>No — screening is optional</option><option value="Yes"${S.settings.screenWarn === 'Yes' ? ' selected' : ''}>Yes — warn before saving the install</option></select><div class="hint">🔴 The screening rules are first guesses (G-1 has none yet) — they only advise.</div>
       <h3>🆘 Handover (if Jun cannot work)</h3>
@@ -3557,6 +3587,7 @@ document.addEventListener('click', async (ev) => {
   const cl = t.closest('[data-cal]'); if (cl && S.desk) { ev.preventDefault(); const bb = $('#bellBox'); if (bb) bb.classList.add('hidden'); go('calendar', 'calendar', { d: cl.dataset.cal, mo: cl.dataset.cal.slice(0, 7) }); return; }
   const wo = t.closest('[data-watchok]'); if (wo) { ev.preventDefault(); const [cid, sc] = wo.dataset.watchok.split('|'); watchCheck(cid, Number(sc)); toast('✓ Checked — hidden for 7 days unless it gets worse'); scheduleRender(); return; }
   const spk = t.closest('[data-staffpick]'); if (spk) { ev.preventDefault(); staffPick(spk.dataset.staffpick); return; } /* v0.17.0 (3) B2 */
+  const nvd = t.closest('[data-nvd]'); if (nvd) { ev.preventDefault(); const fm = nvd.closest('form'); const el = fm && fm.elements.nextVisitDate; if (el) { el.value = nvd.dataset.nvd; fm.dataset.nextVisitDateTouched = '1'; refreshConditional(fm); draftSave(fm); unconfirm(fm); } return; } /* v0.22.3 */
   const fsw = t.closest('[data-flowsw]'); if (fsw) { ev.preventDefault(); const k = fsw.dataset.flowsw; const fm = fsw.closest('form'); const el = fm && fm.elements[k]; if (!el) return; /* v0.22.2 (Jun 10/6): ⏱️ 1 L — tap when the jug starts filling, tap again when it is full → L/min */
     if (!S.flowSw || S.flowSw.k !== k) { S.flowSw = { k, t0: Date.now() }; fsw.classList.add('on'); fsw.textContent = '⏹️ Full'; toast('⏱️ Filling 1 L — tap again when the jug is full'); return; }
     const s = (Date.now() - S.flowSw.t0) / 1000; S.flowSw = null; fsw.classList.remove('on'); fsw.textContent = '⏱️ 1 L';
@@ -3850,7 +3881,7 @@ document.addEventListener('submit', async (ev) => {
     const e = f.elements; const pan = e.coPan.value.replace(/\s/g, '');
     if (pan && !/^\d{9}$/.test(pan)) { toast('Company PAN has 9 digits'); return; }
     delete f.dataset.dirty; /* v0.17.2 (1) */
-    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), coNameNe: e.coNameNe.value.trim().slice(0, 80), coBankLine: e.coBankLine.value.trim().slice(0, 120), referralCampaign: e.referralCampaign.value, filterMode: e.filterMode.value, bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600), fxKrw100: Number(e.fxKrw100.value) > 0 ? Number(e.fxKrw100.value) : null, msgLang: MSG_LANGS.includes(e.msgLang.value) ? e.msgLang.value : 'Nepali',
+    const data = { leadTimeWeeks: Number(e.leadTimeWeeks.value) || R.FCL.leadTimeWeeks, techNames: e.techNames.value.trim(), holidays: e.holidays.value.trim(), coName: e.coName.value.trim(), coPan: pan, coAddress: e.coAddress.value.trim(), coPhone: e.coPhone.value.trim().slice(0, 40), coNameNe: e.coNameNe.value.trim().slice(0, 80), coBankLine: e.coBankLine.value.trim().slice(0, 120), referralCampaign: e.referralCampaign.value, filterMode: e.filterMode.value, bsOverride: e.bsOverride.value.trim(), payday: e.payday.value.trim(), payroll: e.payroll.value, filterLeadWeeks: e.filterLeadWeeks.value.trim(), filterSafetyWeeks: e.filterSafetyWeeks.value.trim(), filterCoverMonths: e.filterCoverMonths.value.trim(), capPeople: e.capPeople.value.trim(), capJobsPerDay: e.capJobsPerDay.value.trim(), capInstallSlots: e.capInstallSlots.value.trim(), hireLeadWeeks: e.hireLeadWeeks.value.trim(), callbackDays: e.callbackDays.value.trim(), nextWinQuarterly: e.nextWinQuarterly.value.trim(), nextWinMonthly: e.nextWinMonthly.value.trim(), promiseMaxDays: e.promiseMaxDays.value.trim(), screenWarn: e.screenWarn.value, signAsk: e.signAsk.value, partsList: e.partsList.value.trim().slice(0, 2000), partsMin: e.partsMin.value.trim(), vialTarget: e.vialTarget.value.trim(), learnFilters: e.learnFilters.value, handoverContacts: e.handoverContacts.value.trim().slice(0, 2000), taxTable: e.taxTable.value.trim().slice(0, 1000), handoverNotes: e.handoverNotes.value.trim().slice(0, 2000), omwEn: e.omwEn.value.trim().slice(0, 600), omwNe: e.omwNe.value.trim().slice(0, 600), missEn: e.missEn.value.trim().slice(0, 600), missNe: e.missNe.value.trim().slice(0, 600), fxKrw100: Number(e.fxKrw100.value) > 0 ? Number(e.fxKrw100.value) : null, msgLang: MSG_LANGS.includes(e.msgLang.value) ? e.msgLang.value : 'Nepali',
       apprDiscountOver: e.apprDiscountOver.value.trim() === '' ? null : Math.max(0, Number(e.apprDiscountOver.value) || 0), apprRefundOver: e.apprRefundOver.value.trim() === '' ? null : Math.max(0, Number(e.apprRefundOver.value) || 0), apprWho: e.apprWho.value, visitLines: e.visitLines.value.trim().slice(0, 2000), ...Object.fromEntries(R.RETURN_DEDUCT_KEYS.map((k2) => [k2, Math.max(0, Number(e[k2] && e[k2].value) || 0)])) }; // numbers: the rules compare them
     auditLog('settings', 'app', S.settings, data); save('settings/app', data, false); S.settings = { ...S.settings, ...data }; B.setOverrides(data.bsOverride); bump(); toast('Settings saved'); goBack();
   }
@@ -3959,14 +3990,14 @@ if (DEMO) {
     // v0.10.1: signed in as that person's own account (what they save carries their id) · Tara = the deputy admin (Jun 2026-09-29)
     S.user = { uid: asRole === 'office' ? 'demo-tara' : asRole === 'technician' ? 'demo-ram' : 'demo-viewer', email: asRole === 'office' ? 'tara@example.com' : asRole === 'technician' ? 'laxmi@example.com' : 'viewer@example.com' };
     if (asRole === 'office') { S.profile.deputy = true; S.isDeputy = true; } }
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, bankPdfRows, decodeQrFromImage, arrFor };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R , CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, bankPdfRows, decodeQrFromImage, arrFor, nextPlanFor };
   const who = DEMO_WHO[asRole && PRESETS[asRole] ? asRole : ''] || DEMO_WHO[''];
   const flag = document.createElement('button'); flag.type = 'button'; flag.className = 'demo-flag'; flag.dataset.act = 'demoWho'; flag.title = 'Change who you are';
   flag.innerHTML = `<span>${DEMO_LABEL}</span> · ${who[0]} ${who[1]} ▾`; document.body.appendChild(flag); document.body.classList.add('has-flag'); /* v0.11: the page starts below the badge */
   if (!location.search.includes('empty')) import('./demo.js').then((d) => { d.loadDemo(S, practiceDay()); practiceReplay(); practiceLive(d, true); setInterval(() => practiceLive(d, false), 180000); bump(); heartbeat(true); render(true); }).catch((e) => console.warn('demo', e));
 }
 if (EMU) { /* v0.18.0 (A-1): the self-test drives the real sign-in → save → server → read-back path */
-  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R, CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, noteError, errList, deviceIssues, heartbeat, arrFor };
+  window.__kf = { S, jLoad, syncState, go, nav, addFormPhotos, appCheckState, APP_CHECK_SITE_KEY, conflictOf, photoGet, model, closeDrawer, FORMS, render, setLang, getLang, G, CA, B, can, PRESETS, R, CAL, liveAlerts, techNames, closePeek, save, rcCacheKeys, toAppUrl, msBoards, rerenderSoon: scheduleRender, noteError, errList, deviceIssues, heartbeat, arrFor, nextPlanFor };
   window.__emu = {
     signUp: async (email, pw) => { const r = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emu', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw, returnSecureToken: true }) }); return (await r.json()).localId; },
     signIn: (email, pw) => signInWithEmailAndPassword(auth, email, pw), signOut: () => signOut(auth),

@@ -520,6 +520,19 @@ export function filterBatch(fd, months = FILTER_MONTHS) {
   const types = FILTER_TYPES.filter((t) => real.some((f) => f.type === t && f.due < horizon));
   return { date: first.due, types, horizon, status: first.status, lead: first.type };
 }
+// v0.22.3 (Jun 10/6 "각 방문일자들 나중까지 고려해서 가장 일정 없는 날짜로 자동으로"): the next visit = a working day inside a short window before the latest day it may be
+// (never after) · not a full day · the same tole first (one trip) · then the emptiest day · a tie → the later day (the filters are used longer)
+export const NEXT_WIN = { quarterly: 14, monthly: 3 }; // days the visit may move earlier (🔴 first values · Settings)
+export function planNextVisit(o) {
+  const { latest, from, tole, booked, isOff, cap, monthly } = o; if (!isDate(latest) || !isDate(from)) return null;
+  const win = monthly ? (Number.isFinite(o.winMonthly) ? o.winMonthly : NEXT_WIN.monthly) : Number.isFinite(o.winQuarterly) ? o.winQuarterly : NEXT_WIN.quarterly;
+  const first = addDays(from, 1); let start = addDays(latest, -Math.max(0, win)); if (start < first) start = first;
+  const day = (d) => { const b = (booked && booked.get(d)) || null; const load = b ? b.n : 0; return { date: d, load, same: tole && b && b.toles ? b.toles.get(tole) || 0 : 0, full: load >= cap }; };
+  const cands = []; for (let d = start; d <= latest; d = addDays(d, 1)) if (!isOff(d)) cands.push(day(d));
+  if (!cands.length) { for (let d = addDays(start, -1), i = 0; i < 21 && d >= first; d = addDays(d, -1), i++) if (!isOff(d)) return { ...day(d), latest, cap, alts: [], early: true }; return { ...day(latest), latest, cap, alts: [], off: true }; }
+  cands.sort((a, b) => a.full - b.full || (b.same > 0) - (a.same > 0) || a.load - b.load || b.date.localeCompare(a.date));
+  return { ...cands[0], latest, cap, alts: cands.slice(1, 3).map((c) => c.date) };
+}
 // v0.22.2 (Jun 10/6): what one visit tells us — kept on the visit as of that day, shown after Save (staff only)
 export const UV_FLOW = { ok: 1.2, thin: 1.7 }; // L/min · UV 6W verdict 9/22 (🟡): ≤ 1.2 passes · 1.7 = hepatitis E margin only 1.2–1.4× (kora-uv-disinfection-decision.md:23)
 export function visitInsight(v, customer, homeVisits) {

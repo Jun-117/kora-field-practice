@@ -1270,6 +1270,10 @@ Object.assign(W, {
   'Real days between changes, across all households. The booking intervals are first values; PoC data decides the final ones.': ['모든 가구의 실제 교체 간격(일). 예약 주기는 첫 값이고, PoC 데이터가 최종값을 정합니다.', 'सबै घरको वास्तविक परिवर्तन अन्तराल (दिन)। बुकिङ अन्तराल पहिलो मान हो; PoC डाटाले अन्तिम तय गर्छ।'],
   'Start + new + came back + deposit starts − left − month 14 = end. Install month = 1,100 (inside the 4,900), bills 2–13 = 1,400, then 1,100. The deposit part is held, not earned.': ['시작 + 신규 + 복귀 + 보증금 시작 − 해지 − 14개월차 = 끝. 설치 달 = 1,100(4,900 안에 포함), 2–13회차 = 1,400, 그 뒤 1,100. 보증금 몫은 맡아둔 돈이지 수익이 아닙니다.', 'सुरु + नयाँ + फर्किएको + धरौटी सुरु − छोडेको − महिना १४ = अन्त्य। जडान महिना = १,१०० (४,९०० भित्र), बिल २–१३ = १,४००, त्यसपछि १,१००। धरौटी अंश राखिएको हो, कमाइ होइन।'],
   'statement → payments': ['입금내역 → 결제', 'स्टेटमेन्ट → भुक्तानी'],
+  /* v0.22.0 technician input (Jun 10/6) — NE 🟡 Claude, Tara to review */
+  'Tap at the house — the ward fills in by itself.': ['집에서 누르세요 — 와드가 저절로 채워집니다.', 'घरमै थिच्नुहोस् — वडा आफैं भरिन्छ।'],
+  'This location is outside the Pokhara ward lines — choose the ward.': ['이 위치는 포카라 와드 경계 밖이에요 — 와드를 고르세요.', 'यो स्थान पोखराका वडाको सिमानाबाहिर छ — वडा छान्नुहोस्।'],
+  'TDS meter (raw water)': ['TDS 측정기 (원수)', 'TDS मिटर (कच्चा पानी)'], 'Tole · ward': ['동네 · 와드', 'टोल · वडा'], 'Flow': ['유량', 'बहाव'],
   /* v0.21.5 R3 report hubs — NE 🟡 Claude, Tara to review */
   'CA & tax': ['CA · 세금', 'CA र कर'], 'CA pack · VAT by month · deposit book': ['CA 팩 · 월별 VAT · 보증금 장부', 'CA प्याक · महिनाअनुसार VAT · धरौटी खाता'],
   'direction gate · grant KPIs': ['방향 게이트 · 그랜트 지표', 'दिशा जाँच · अनुदान KPI'], 'Field quality': ['현장 품질', 'फिल्ड गुणस्तर'], 'callbacks · wasted trips · proof of visit': ['재방문 · 허탕 · 방문 증빙', 'फेरि बोलाइ · खेर गएका यात्रा · भ्रमण प्रमाण'],
@@ -1474,6 +1478,7 @@ W['Thank-you card'] = ['감사 카드', 'धन्यवाद कार्ड']
 W['Before (old)'] = ['전 (헌 것)', 'अघि (पुरानो)']; W['After (new)'] = ['후 (새 것)', 'पछि (नयाँ)']; W['📨 Missed-visit note'] = ['📨 허탕 노트', '📨 भेट नभएको नोट']; W['Visits due · by tole'] = ['방문할 집 · 동네별', 'भ्रमण बाँकी · टोल अनुसार']; W['Calls · day-7'] = ['전화할 곳 · 7일', 'फोन कल · ७ दिने']; W['record'] = ['기록', 'रेकर्ड']; W['send'] = ['보내기', 'पठाउने'];
 W['Filter change: old filter · device after · TDS after. Repair: fault close-up · working after. Label each photo — "before" and "after" go on the visit note.'] = ['필터 교체: 헌 필터 · 교체 후 기기 · 교체 후 TDS. 수리: 고장 부위 클로즈업 · 수리 후 작동 모습. 사진마다 라벨 — 「전」·「후」가 방문 노트에 들어가요.', 'फिल्टर फेर्ने: पुरानो फिल्टर · पछिको उपकरण · पछिको TDS। मर्मत: खराबीको क्लोजअप · मर्मत पछि। हरेक फोटोमा लेबल — "अघि" र "पछि" भ्रमण नोटमा जान्छ।'];
 P.push([/^Could not open: (.+)$/, '열 수 없음: $1', 'खोल्न सकिएन: $1']);
+P.push([/^Ward (\d+) from the house location\.$/, '집 위치로 와드 $1.', 'घरको स्थानबाट वडा $1।'], [/^Ward (\d+) from the house location — close to a ward line, check it\.$/, '집 위치로 와드 $1 — 와드 경계 근처라 확인하세요.', 'घरको स्थानबाट वडा $1 — वडाको सिमाना नजिक, जाँच्नुहोस्।'], [/^The house location is in ward (\d+) — you chose (\d+)\.$/, '집 위치는 와드 $1 — 고른 와드는 $2.', 'घरको स्थान वडा $1 मा छ — तपाईंले $2 छान्नुभयो।'], [/^Sanitise \((\d{4}-\d{2}-\d{2})\)$/, '소독 ($1)', 'सफाइ ($1)']); /* v0.22.0 — NE 🟡 Claude, Tara to review */
 Object.assign(W, { 'Practice — saved on this phone only': ['연습 — 이 폰에만 저장', 'अभ्यास — यो फोनमा मात्र सेभ'], 'PRACTICE — NOT SENT TO THE SERVER': ['연습용 — 서버로 안 보냄', 'अभ्यास — सर्भरमा पठाइँदैन'] });
 
 const D2 = {}; for (const [en, [ko, ne]] of Object.entries(W)) { D2[en.trim()] = { ko, ne }; }

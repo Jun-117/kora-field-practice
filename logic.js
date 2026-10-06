@@ -520,6 +520,18 @@ export function filterBatch(fd, months = FILTER_MONTHS) {
   const types = FILTER_TYPES.filter((t) => real.some((f) => f.type === t && f.due < horizon));
   return { date: first.due, types, horizon, status: first.status, lead: first.type };
 }
+// v0.22.0: a point → the Pokhara ward it is in (the OSM ward lines in vendor/osm-pokhara-wards.json) · edgeM = metres to that ward's line (near a line → the person checks)
+export function wardOf(gj, lat, lng) {
+  if (!gj || !Array.isArray(gj.features) || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const kx = 111320 * Math.cos((lat * Math.PI) / 180), ky = 110540;
+  const inRing = (r) => { let ins = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1]; if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) ins = !ins; } return ins; };
+  const edge = (r) => { let best = Infinity; for (let i = 1; i < r.length; i++) { const ax = (r[i - 1][0] - lng) * kx, ay = (r[i - 1][1] - lat) * ky, dx = (r[i][0] - r[i - 1][0]) * kx, dy = (r[i][1] - r[i - 1][1]) * ky, L2 = dx * dx + dy * dy; const t = L2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0; best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy)); } return best; };
+  for (const f of gj.features) {
+    const g = f && f.geometry; if (!g) continue; const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+    for (const p of polys) if (p.length && inRing(p[0]) && !p.slice(1).some(inRing)) return { ward: String(f.properties && f.properties.ward), edgeM: Math.round(Math.min(...p.map(edge))) };
+  }
+  return null;
+}
 export function filterDues(customer, cVisits, today, months = FILTER_MONTHS) {
   const res = [];
   if (!customer || !isDate(customer.installDate)) return res;

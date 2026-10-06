@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.21.6 (2026-10-06)';
+export const APP_VERSION = 'kf-v0.22.0 (2026-10-06)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -829,7 +829,7 @@ FORMS.install = {
     { k: 'name', l: 'Customer name', t: 'text', req: 1 },
     { k: 'phone', l: 'Mobile number', t: 'tel', req: 1, ph: '98XXXXXXXX' },
     { k: 'msgLang', l: 'WhatsApp messages in', t: 'chips', o: MSG_LANGS, hint: 'Empty = the Settings default (Nepali) · one language reads less like spam' }, /* v0.17.2 (2) */
-    { k: 'zone', l: 'Zone', t: 'chips', o: OPT.zone, req: 1 },
+    { k: 'gps', l: 'House location', t: 'gps', hint: 'Tap at the house — the ward fills in by itself.' }, /* v0.22.0 Jun 10/6: the location fills the ward (zone box gone — nothing used it) */
     { k: 'ward', l: 'Ward', t: 'select', o: OPT.ward, req: 1 },
     { k: 'tole', l: 'Tole', t: 'select', o: OPT.tole, req: 1 },
     { k: 'toleOther', l: 'Tole name', t: 'text', show: (v) => v.tole === 'Other' },
@@ -839,7 +839,6 @@ FORMS.install = {
     { k: 'referrerName', l: 'Referred by (name, if not a customer)', t: 'text', show: (v) => v.referral === 'Word of mouth' },
     { t: 'section', l: 'Water & site', hint: 'Measure before installing.' },
     { k: 'waterSource', l: 'Water source', t: 'chips', o: OPT.waterSource, req: 1 },
-    { k: 'pressurePsi', l: 'Water pressure (PSI)', t: 'number', hint: '30–80 normal · 20–30 low (pump needed) · <20 very low · >80 needs a reducer' },
     { k: 'rawTds', l: 'Raw water TDS', t: 'number', req: 1 },
     { t: 'section', l: 'Device' },
     { k: 'deviceSerial', l: 'Device number (KORA sticker)', t: 'serial', req: 1, ph: 'KD-26-0001', hint: 'Pick the number on the sticker from the stock list · no sticker yet → 🏷️ Next number, then write it on a sticker (manual E-3)' },
@@ -847,7 +846,7 @@ FORMS.install = {
     { k: 'signUpDate', l: 'Sign-up date', t: 'date', req: 1, def: today },
     { t: 'section', l: 'Final checks', hint: 'All must be ticked. Flow and water source are required.' },
     { k: 'checks', l: 'Checklist', t: 'checks', o: OPT.installChecks, req: 1 },
-    { k: 'purifiedTds', l: 'Purified water TDS', t: 'number', req: 1 },
+    { k: 'purifiedTds', l: 'Purified water TDS', t: 'number' }, /* v0.22.0 Jun 10/6 TDS plan A: UF does not lower TDS → optional; the raw-water TDS stays required */
     { k: 'flow', l: 'Flow at the tap (L/min)', t: 'number', step: 0.1, req: 1, ph: 'e.g. 1.1', hint: 'The UV lamp is safe at 1.2 L/min or less.' },
     { t: 'section', l: 'First-day payment', hint: 'Day 1 = NPR 4,900 (install fee incl. first month). Do not finish the install before the payment is confirmed.' },
     { k: 'firstPay', l: 'First-day payment', t: 'chips', o: OPT.firstPay, req: 1 },
@@ -860,10 +859,9 @@ FORMS.install = {
     { k: 'signName', l: 'Signed by (name)', t: 'text' },
     { k: 'sign', l: '', t: 'sign' },
     { k: 'noSign', l: 'No signature — why?', t: 'chips', o: OPT.noSign, show: (v) => !v.sign },
-    { t: 'section', l: 'Photos', hint: 'Device as installed · TDS meter (raw vs purified) · signed contract.' },
+    { t: 'section', l: 'Photos', hint: 'Device as installed · TDS meter (raw water) · signed contract.' },
     { k: 'photos', l: 'Photos (3 required)', t: 'photos' },
     { t: 'section', l: 'Other' },
-    { k: 'gps', l: 'House location', t: 'gps' },
     { k: 'agent', l: 'Installed by', t: 'chips', o: techNames, req: 1, def: myName },
     ...(editingForm() ? [{ k: 'buyerPan', l: 'Buyer PAN (business customers only)', t: 'text', ph: '9 digits — leave empty for homes', hint: 'Printed in the IRD sales book. Hotels, shops, offices usually have one.' }] : []), /* v0.11 (Tara 2026-09-30): not on a new install — the office adds it when a business asks for it */
     { k: 'notes', l: 'Special comment', t: 'textarea', ph: 'e.g. dog in the yard · call before coming · landlord must be present' },
@@ -873,9 +871,11 @@ FORMS.install = {
   prefill(p) {
     const l = p.lead ? S.D.leads.get(p.lead) : null; S.convertLead = l ? l.id : '';
     const sc = l ? R.findScreening(arr('screenings'), l.id, normPhone(l.phone)) : null;
-    return { ...(l ? { name: l.name || '', phone: String(l.phone || '').replace('+977', ''), tole: l.tole || '', ward: l.ward || '', referral: l.channel || '', referrerId: l.referrerId || '' } : {}), ...(sc && sc.waterSource ? { waterSource: sc.waterSource } : {}) };
+    return { ...(l ? { name: l.name || '', signName: l.name || '', phone: String(l.phone || '').replace('+977', ''), tole: l.tole || '', ward: l.ward || '', referral: l.channel || '', referrerId: l.referrerId || '' } : {}), ...(sc && sc.waterSource ? { waterSource: sc.waterSource } : {}) };
   },
   onChange(form, v, key) { /* v0.21.0 (C1): the same number already in the book — said while typing, not after Save */
+    if (key === 'name' || key === 'signName') autoSigner(form, v, key); /* v0.22.0 */
+    if (key === 'gps' || key === 'ward') return autoWard(form, v, key, 'ward'); /* v0.22.0 */
     if (key !== 'phone') return; const hits = R.dupPhone([...S.D.customers.values()], [...S.D.leads.values()], v.phone, form.dataset.id || ''); const w = form.querySelector('.fld[data-k="phone"] .warn'); if (!w) return;
     if (!hits.length) { w.classList.add('hidden'); w.innerHTML = ''; return; } w.innerHTML = `⚠️ Same number: ${hits.slice(0, 3).map((h) => `<button type="button" class="btn small ghost" ${h.kind === 'customer' ? `data-cust="${esc(h.id)}"` : `data-edit="lead" data-id="${esc(h.id)}"`}>${esc(h.name)}${h.code ? ' (' + esc(h.code) + ')' : ''}${h.status ? ' · ' + esc(h.status) : ''}</button>`).join(' ')}`; w.classList.remove('hidden');
   },
@@ -885,18 +885,16 @@ FORMS.install = {
     const phone = normPhone(v.phone);
     if (!phone) errs.phone = 'Enter a Nepal mobile (98XXXXXXXX) or a landline with its area code (061-…).';
     else { const dup = arr('customers').find((c) => c.phone === phone && c.id !== v._id); if (dup && !confirmed) warns.phone = `Same number as ${custLabel(dup)}. Save anyway only if this is really a different household.`; else if (!phone.startsWith('+977') && !confirmed) warns.phone = 'Not a Nepal number — fine for a test or a foreign phone (WhatsApp still works).'; }
-    need(errs, v, 'zone', 'Choose a zone.'); need(errs, v, 'ward', 'Choose a ward.'); need(errs, v, 'tole', 'Choose a tole.');
+    need(errs, v, 'ward', 'Choose a ward.'); need(errs, v, 'tole', 'Choose a tole.');
     if (v.tole === 'Other' && !v.toleOther) errs.toleOther = 'Write the tole name.';
     if (!inRange(v.householdSize, 1, 40)) errs.householdSize = 'Check this number (1–40).';
     need(errs, v, 'referral', 'Choose one.'); need(errs, v, 'waterSource', 'Choose the water source.');
-    if (!inRange(v.pressurePsi, 0, 200)) errs.pressurePsi = 'Check the pressure (0–200 PSI).';
-    else if (v.pressurePsi !== null && !confirmed && (v.pressurePsi < 20 || v.pressurePsi > 80)) warns.pressurePsi = v.pressurePsi < 20 ? 'Very low pressure — tell the customer flow may be slow.' : 'High pressure — a reducing valve is needed.';
     if (v.rawTds === null) errs.rawTds = 'Measure the raw water TDS.'; else if (!inRange(v.rawTds, 0, 5000)) errs.rawTds = 'Check the TDS number (0–5000).';
     else if (v.rawTds >= 250 && !confirmed) warns.rawTds = 'TDS 250+ → offer the Siliphos option.';
     need(errs, v, 'deviceSerial', 'Enter the device serial.');
     { const ns = R.normSerial(v.deviceSerial); const stock = stockSerials(); if (ns && stock.length && !stock.includes(ns) && !(v._id && R.normSerial((S.D.customers.get(v._id) || {}).deviceSerial) === ns)) warns.deviceSerial = 'This number is not "In stock" in Devices — check the sticker, or receive it into stock first.'; } /* v0.17.2 (6) */ need(errs, v, 'installDate', 'Enter the date.'); need(errs, v, 'signUpDate', 'Enter the date.');
     if ((v.checks || []).length < OPT.installChecks.length && !v._edit) errs.checks = `Tick all ${OPT.installChecks.length} checks before finishing.`;
-    if (v.purifiedTds === null && !v._edit) errs.purifiedTds = 'Measure the purified water TDS.'; else if (!inRange(v.purifiedTds, 0, 5000)) errs.purifiedTds = 'Check the TDS number.';
+    if (!inRange(v.purifiedTds, 0, 5000)) errs.purifiedTds = 'Check the TDS number.';
     if (v.flow === null && !v._edit) errs.flow = 'Measure the flow.'; else if (!inRange(v.flow, 0, 10)) errs.flow = 'Check the flow (0–10 L/min).';
     else if (v.flow > UV_FLOW_LIMIT && !confirmed) warns.flow = `Above ${UV_FLOW_LIMIT} L/min the UV margin is thin — tighten the flow restrictor.`;
     if (!v._edit) {
@@ -966,6 +964,7 @@ FORMS.customerEdit = {
     return (E.skipDue ? line(`Skipped bill: ${E.skipDue} · paused until ${v.pausedUntil || E.until}`) : '') + line('Back within 15 days of that bill day → that bill is charged. Either way it is the one pause for 12 months.') + line('Collect the cartridges at the start · fit new ones at the restart visit.')
       + (E.why.length ? `<div class="warn" style="margin-top:6px">⚠️ ${E.why.map(esc).join('<br>')}</div>` : line('✅ All pause rules met.'));
   },
+  onChange(form, v, key) { if (key === 'gps' || key === 'ward') return autoWard(form, v, key, 'ward'); }, /* v0.22.0 */
   check(v, confirmed) {
     const r = FORMS.install.check({ ...v, _edit: true }, confirmed); if (v.status === 'Churned' && !v.churnDate) r.errs.churnDate = 'When did they leave?';
     const pc = S.D.customers.get(v._id); if (v.status === 'Paused' && pc && pc.status !== 'Paused' && !confirmed) { const E = R.pauseEligibility(pc, model().ledgers.get(pc.id), today(), { from: v.pausedFrom, reason: v.pauseReason, until: v.pausedUntil }); if (E.why.length) r.warns.pauseReason = E.why.join(' '); }
@@ -1007,15 +1006,13 @@ FORMS.visit = {
     { t: 'section', k: 'secFilters', l: 'Filters', hint: 'Booking intervals are a guide — decide by what you see. PP brown/black → replace now.', show: (v) => !R.isNoShow(v) },
     { k: 'filters', l: 'Filters changed', t: 'chips', multi: 1, o: OPT.filters, show: (v) => !R.isNoShow(v), hint: S.settings.filterMode === 'Separate' ? '' : 'Filters go together: everything that falls due before the next change is done on this visit (pre-ticked).' },
     { k: 'ppColor', l: 'Old PP filter colour', t: 'chips', o: OPT.ppColor, show: (v) => !R.isNoShow(v) },
-    { k: 'oldCollected', l: 'Old filters taken back?', t: 'chips', o: OPT.yesNo, show: (v) => !R.isNoShow(v) && (v.filters || []).length > 0 },
-    { k: 'oldCount', l: 'How many old filters', t: 'number', show: (v) => !R.isNoShow(v) && (v.filters || []).length > 0, hint: 'One old filter back for each new one.' },
+    { k: 'oldCount', l: 'How many old filters', t: 'number', show: (v) => !R.isNoShow(v) && (v.filters || []).length > 0, hint: 'One old filter back for each new one.' }, /* v0.22.0: one box, filled with the number of filters ticked (was a yes/no + a number) */
     { t: 'section', k: 'secMeasure', l: 'Measurements', show: (v) => !R.isNoShow(v) },
     { k: 'tdsBefore', l: 'TDS before', t: 'number', show: (v) => !R.isNoShow(v) },
-    { k: 'tdsAfter', l: 'TDS after', t: 'number', hint: 'Required to complete a visit.', show: (v) => !R.isNoShow(v) },
+    { k: 'tdsAfter', l: 'TDS after', t: 'number', show: (v) => !R.isNoShow(v) }, /* v0.22.0 Jun 10/6 TDS plan A: optional (UF does not lower TDS) */
     { k: 'flow', l: 'Flow (L/min)', t: 'number', step: 0.1, ph: 'e.g. 1.1', show: (v) => !R.isNoShow(v) },
     { k: 'parts', l: 'Parts used', t: 'counts', o: partsList, show: (v) => !R.isNoShow(v), hint: 'Tap a part once for each one used (tap again = 2). − takes one off. Counted off stock.' },
     { k: 'issuedFrom', l: 'Parts came from', t: 'chips', o: ['my bag', 'shelf'], def: 'my bag', show: (v) => !R.isNoShow(v) && (v.parts || []).length > 0, hint: 'My bag = issued to me this morning. Shelf = taken straight from stock.' },
-    { k: 'partsUsed', l: 'Other parts / extra quantity', t: 'text', ph: 'e.g. O-ring ×2, fitting ×1', show: (v) => !R.isNoShow(v) },
     { k: 'sanitised', l: 'Pipes sanitised on this visit?', t: 'chips', o: OPT.yesNo, hint: 'Full pipe sanitisation every 3 months.', show: (v) => !R.isNoShow(v) },
     { k: 'swapDev', l: 'Unit replaced?', t: 'chips', o: ['No', 'Yes — new unit put in'], def: 'No', show: (v) => !R.isNoShow(v) && v.visitType === 'Repair' }, /* v0.21.3 Jun 10/6 "만들어라": a repair swap at the same home (dead on arrival · breakdown) */
     { k: 'swapNew', l: 'New unit number (sticker)', t: 'serial', ph: 'KD-26-0001', show: (v) => !R.isNoShow(v) && v.visitType === 'Repair' && v.swapDev === 'Yes — new unit put in', hint: 'Scan the sticker on the new unit. The old unit goes back to stock as “Back — check it”; the new one starts its own 30-day dead-on-arrival window today.' },
@@ -1037,19 +1034,27 @@ FORMS.visit = {
   ],
   info(v) {
     const x = v.customerId ? model().cust.get(v.customerId) : null; if (!x) return '';
-    const due = (x.fd || []).filter((f) => f.status === 'overdue' || f.status === 'due').map((f) => `${f.type}${f.due ? ' (' + f.due + ')' : ''}`);
+    const due = (x.fd || []).filter((f) => f.status === 'overdue' || f.status === 'soon').map((f) => `${f.type}${f.due ? ' (' + f.due + ')' : ''}`);
     const last = arr('visits').filter((q) => q.customerId === x.c.id && q.status && String(q.status).includes('Completed')).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
     const line = (s) => `<div>${s}</div>`;
     return line(`<b>${esc('Due at this house')}</b>: ${due.length ? esc(due.join(' · ')) : esc('no filter due')}`) + (last ? line(`${esc('Last visit')} ${esc(last.date)} · <span>${esc(last.visitType || '')}</span>${last.ppColor ? ' · PP ' + esc(last.ppColor) : ''}${last.tdsAfter ? ' · TDS ' + esc(last.tdsAfter) : ''}${esc(last.notes ? ' · ' + String(last.notes).slice(0, 60) : '')}`) : line(esc('No completed visit yet'))) + (x.led && x.led.overdue ? line(`<span style="color:var(--bad)">${esc('Overdue ' + R.npr(x.led.overdue) + ' — ask for it while you are there')}</span>`) : '');
   },
-  prefill(p) { const c = S.D.customers.get(p.cid); const x = p.cid ? model().cust.get(p.cid) : null; const due = x ? (x.fb && x.fb.date <= R.addDays(today(), 14) ? x.fb.types : (x.fd || []).filter((f) => f.status === 'overdue').map((f) => f.type)) : []; /* v0.15: together → the whole batch */ return { customerId: p.cid || '', nextVisitDate: c ? R.suggestNextVisit(c.installDate, today()) : '', retryDate: R.addDays(today(), 1), signName: c ? c.name || '' : '', ...(due.length ? { filters: due, visitType: 'Filter change' } : {}) }; },
+  prefill(p) { const c = S.D.customers.get(p.cid); const x = p.cid ? model().cust.get(p.cid) : null; const due = x ? (x.fb && x.fb.date <= R.addDays(today(), 14) ? x.fb.types : (x.fd || []).filter((f) => f.status === 'overdue').map((f) => f.type)) : []; /* v0.15: together → the whole batch */ return { customerId: p.cid || '', nextVisitDate: c ? R.suggestNextVisit(c.installDate, today()) : '', retryDate: R.addDays(today(), 1), signName: c ? c.name || '' : '', sanitised: p.cid ? (sanDue(p.cid) ? '' : 'No') : '', ...(due.length ? { filters: due, visitType: 'Filter change', oldCount: due.length } : {}) }; },
+  onChange(form, v, key) { /* v0.22.0 Jun 10/6 "정말 중요한것만 입력하게": old filters follow the filters ticked · the signer follows the customer · sanitised = No unless due (never a ready-made Yes: the visit note would claim a cleaning) */
+    if (key === 'oldCount' || key === 'sanitised') { form.dataset[key + 'Touched'] = '1'; return; }
+    if (key === 'filters' && form.dataset.oldCountTouched !== '1') { const el = form.elements.oldCount; if (el) el.value = (v.filters || []).length || ''; }
+    if (key === 'customerId') {
+      const c = S.D.customers.get(v.customerId); const sn = form.elements.signName;
+      if (c && sn && (!sn.value.trim() || [...S.D.customers.values()].some((q) => q.name === sn.value))) sn.value = c.name || '';
+      if (form.dataset.sanitisedTouched !== '1') setChips(form, 'sanitised', v.customerId && !sanDue(v.customerId) ? 'No' : '');
+    }
+  },
   check(v, confirmed) {
     const errs = {}, warns = {};
     if (!v.customerId || !S.D.customers.has(v.customerId)) errs.customerId = 'Choose the customer.';
     need(errs, v, 'date'); need(errs, v, 'visitType'); need(errs, v, 'status'); need(errs, v, 'technician', 'Who did the visit?');
     const done = isDone(v.status);
     if (done && v.visitType === 'Filter change' && !(v.filters || []).length) errs.filters = 'Which filters did you change?';
-    if (done && v.tdsAfter === null) errs.tdsAfter = 'Measure TDS after.';
     if (done && !v.nextVisitDate) errs.nextVisitDate = 'Enter the next visit date.';
     if (done && v.visitType === 'Repair' && v.swapDev === 'Yes — new unit put in' && !v._edit) { /* v0.21.3 */
       const c0 = S.D.customers.get(v.customerId) || {}; const ns = R.normSerial(v.swapNew);
@@ -1063,7 +1068,7 @@ FORMS.visit = {
     else if (v.flow !== null && v.flow > UV_FLOW_LIMIT && !confirmed) warns.flow = `Above ${UV_FLOW_LIMIT} L/min the UV margin is thin — check the flow restrictor.`;
     if (!inRange(v.oldCount, 0, 20)) errs.oldCount = 'Check this number (0–20).';
     const nf = (v.filters || []).length;
-    if (nf && !confirmed && (v.oldCollected !== 'Yes' || (v.oldCount !== null && v.oldCount < nf))) warns.oldCount = `${nf} new filter(s) → ${nf} old filter(s) back.`;
+    if (nf && !confirmed && (v.oldCount === null || v.oldCount < nf)) warns.oldCount = `${nf} new filter(s) → ${nf} old filter(s) back.`;
     if (['Brown', 'Black'].includes(v.ppColor) && !(v.filters || []).includes('PP') && !confirmed) warns.ppColor = `PP is ${v.ppColor.toLowerCase()} — replace it now.`;
     if (!inRange(v.durationMin, 0, 600)) errs.durationMin = 'Check the minutes (0–600).';
     if (R.isNoShow(v)) {
@@ -1078,7 +1083,7 @@ FORMS.visit = {
   },
   save(v, id, isNew) {
     const c = S.D.customers.get(v.customerId);
-    const sig = v.sign; const data = { ...v, customerCode: c.code || '', customerName: c.name || '', oldCollected: v.oldCollected === 'Yes' ? true : v.oldCollected === 'No' ? false : null };
+    const sig = v.sign; const data = { ...v, customerCode: c.code || '', customerName: c.name || '', oldCollected: (v.filters || []).length ? (Number(v.oldCount) || 0) >= (v.filters || []).length : null }; /* v0.22.0: from the one box */
     delete data.sign; if (sig) { data.signed = true; data.noSign = ''; } else if (isNew || !(S.D.visits.get(id) || {}).signed) data.signed = false; /* an edit without a new signature keeps the old one */
     { const VL = visitLines(); const prev = S.D.visits.get(id) || {}; data.custPick = (v.custPick || []).filter((en) => typeof en === 'string').slice(0, 6); /* v0.17.0 (8): both languages saved with the visit — a later edit of the buttons does not change old notes */
       data.custLines = data.custPick.map((en) => { const q = VL.find((x) => x.en === en) || (Array.isArray(prev.custLines) ? prev.custLines.find((x) => x && x.en === en) : null); return { en, ne: q ? q.ne || '' : '' }; });
@@ -1719,22 +1724,21 @@ FORMS.relocation = {
     { k: 'status', l: 'Status', t: 'chips', o: OPT.relStatus, req: 1, def: 'Requested' },
     { k: 'moveDate', l: 'Move date', t: 'date', req: 1 },
     { t: 'section', l: 'New address', hint: 'When the status is Done, the customer\'s address and map pin change to this one (the old one stays on this record).' },
+    { k: 'gps', l: 'New house location', t: 'gps', hint: 'Tap at the house — the ward fills in by itself.' }, /* v0.22.0 */
+    { k: 'newWard', l: 'Ward', t: 'select', o: OPT.ward, req: 1 },
     { k: 'newTole', l: 'Tole', t: 'select', o: OPT.tole, req: 1 },
     { k: 'newToleOther', l: 'Tole name', t: 'text', show: (v) => v.newTole === 'Other' },
-    { k: 'newWard', l: 'Ward', t: 'select', o: OPT.ward, req: 1 },
-    { k: 'newZone', l: 'Zone', t: 'chips', o: OPT.zone },
     { k: 'newHouseDetail', l: 'How to find the new house', t: 'textarea' },
-    { k: 'gps', l: 'New house location', t: 'gps' },
     { t: 'section', l: 'Device' },
     { k: 'sameDevice', l: 'Same device moved?', t: 'chips', o: OPT.yesNo, def: 'Yes' },
     { k: 'newSerial', l: 'New device serial', t: 'serial', ph: 'KD-26-0001', show: (v) => v.sameDevice === 'No' }, /* v0.21.3: 📷 + KD mask like every device-number box */
     { k: 'technician', l: 'Technician', t: 'chips', o: techNames, def: myName },
     { k: 'fee', l: 'Relocation fee charged (NPR)', t: 'number', hint: 'No fixed fee in the contract draft yet — 0 if none.' },
-    { k: 'pressurePsi', l: 'Water pressure at the new house (PSI)', t: 'number' },
     { k: 'photos', l: 'Photos', t: 'photos' },
     { k: 'notes', l: 'Notes', t: 'textarea' },
   ],
-  prefill(p) { const c = S.D.customers.get(p.cid); return c ? { customerId: c.id, newZone: c.zone || '' } : { customerId: p.cid || '' }; },
+  prefill(p) { const c = S.D.customers.get(p.cid); return c ? { customerId: c.id } : { customerId: p.cid || '' }; },
+  onChange(form, v, key) { if (key === 'gps' || key === 'newWard') return autoWard(form, v, key, 'newWard'); }, /* v0.22.0 */
   check(v) {
     const errs = {}, warns = {};
     if (!v.customerId || !S.D.customers.has(v.customerId)) errs.customerId = 'Choose the customer.';
@@ -1752,7 +1756,7 @@ FORMS.relocation = {
     const data = { ...(prev && prev.oldTole !== undefined ? {} : old), ...v, newGps: v.gps || null, newSerial: v.sameDevice === 'No' ? R.normSerial(v.newSerial) : '', by: myName() }; delete data.gps;
     const ok = save(`relocations/${id}`, data, isNew);
     if (v.status === 'Done' && (can('editCust') || c.createdBy === S.user.uid)) {
-      save(`customers/${c.id}`, { tole: v.newTole, toleOther: v.newToleOther || '', ward: String(v.newWard), zone: v.newZone || c.zone || '', houseDetail: v.newHouseDetail || '', gps: v.gps, ...(v.sameDevice === 'No' ? { deviceSerial: R.normSerial(v.newSerial) } : {}) }, false);
+      save(`customers/${c.id}`, { tole: v.newTole, toleOther: v.newToleOther || '', ward: String(v.newWard), houseDetail: v.newHouseDetail || '', gps: v.gps, ...(v.sameDevice === 'No' ? { deviceSerial: R.normSerial(v.newSerial) } : {}) }, false);
     }
     const np = savePhotos(v.customerId, `relocations/${id}`, 'relocation');
     return { ok, np, go: ['customers', 'detail', { id: v.customerId }] };
@@ -2363,7 +2367,7 @@ function viewDetail(p) {
   <div class="card where">
     ${hasGps ? `<div class="minimap" id="miniMap" data-id="${esc(c.id)}" data-lat="${c.gps.lat}" data-lng="${c.gps.lng}" data-label="${esc((c.name || '').split(' ')[0])}"></div><div class="mini-foot"><span class="muted" data-mini-dist>📍 Tap the pin button on the map to see how far you are</span><a class="btn small" href="${esc(G.dirUrl(dest))}" data-nav="${esc(dest)}" target="_blank" rel="noopener">🧭 Navigate from here</a></div>`
       : `<div class="empty">📍 No location saved for this house yet.${can('visit') && x.status !== 'Churned' ? `<div style="margin-top:8px"><button class="btn small" data-act="gpsHere" data-cid="${esc(c.id)}">📍 Save my location as this house</button></div>` : ''}</div>`}
-    ${kv([['Find the house', c.houseDetail], ['Tole · ward · zone', `${toleOf(c)} · Ward ${c.ward || '–'} · ${c.zone || '–'}`], ['Phone', `<a href="tel:${esc(c.phone)}">${esc(c.phone || '–')}</a>`, 1]])}
+    ${kv([['Find the house', c.houseDetail], ['Tole · ward', `${toleOf(c)} · Ward ${c.ward || '–'}${c.zone ? ' · ' + c.zone : ''}`], ['Phone', `<a href="tel:${esc(c.phone)}">${esc(c.phone || '–')}</a>`, 1]])}
   </div>
   ${/* v0.19.3 arrangement (Jun 10/4 "디자인 레이아웃, 배열"): on site the order of use is where → money → device/filters → who; the customer facts, private notes and the change log moved below */ ''}
   <div class="sec">Money</div>
@@ -2382,7 +2386,7 @@ function viewDetail(p) {
   <div class="sec">Device & filters</div>
   <div class="card">
     <div class="kv"><div class="k">Serial</div><div class="v mono">${c.deviceSerial ? `<a href="#" data-report="device" data-serial="${esc(R.normSerial(c.deviceSerial))}">${esc(c.deviceSerial)}</a>${dev ? ` <span class="pill ${dev.status === 'At a customer' ? 'ok' : 'warn'}">${esc(dev.status)}</span>` : ''}` : '–'}</div><div class="k">Installed</div><div class="v">${esc(c.installDate || '–')} · ${esc(c.agent || '')}</div>
-      <div class="k">Water</div><div class="v">raw TDS ${esc(c.rawTds ?? '–')} → ${esc(c.purifiedTds ?? '–')}</div><div class="k">Flow · pressure</div><div class="v">${esc(c.flow ?? '–')} L/min · ${esc(c.pressurePsi ?? '–')} PSI</div>
+      <div class="k">Water</div><div class="v">raw TDS ${esc(c.rawTds ?? '–')} → ${esc(c.purifiedTds ?? '–')}</div><div class="k">${c.pressurePsi != null ? 'Flow · pressure' : 'Flow'}</div><div class="v">${esc(c.flow ?? '–')} L/min${c.pressurePsi != null ? ' · ' + esc(c.pressurePsi) + ' PSI' : ''}</div>
       <div class="k">Next visit</div><div class="v">${x.nv ? `${esc(x.nv.date)} <span class="muted">(${esc(x.nv.source)})</span>` : '–'}</div></div>
     <div class="scroll-x"><table class="tbl" style="margin-top:10px"><tr><th>Filter</th><th>Last</th><th>Due</th><th></th></tr>
       ${x.fd.map((f) => `<tr><td class="nw">${esc(f.type)}</td><td class="nw">${esc(f.lastIsInstall ? 'install' : f.last)}</td><td class="nw">${esc(f.due || '—')}</td><td>${f.status === 'none' ? '<span class="pill grey">observe</span>' : `<span class="pill ${f.status === 'overdue' ? 'bad' : f.status === 'soon' ? 'warn' : 'ok'}" title="${esc(f.why)}">${f.status}</span>`}</td></tr>`).join('')}</table></div>
@@ -3833,6 +3837,27 @@ function gpsHere(cid, btn) {
     toast(`📍 Location saved (±${acc} m)`); if (S.drawer) refreshDrawer(); else scheduleRender();
   }, (e) => { toast('Could not get location: ' + e.message); if (btn) btn.textContent = '📍 Save my location as this house'; }, { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 });
 }
+// v0.22.0 (Jun 10/6 "기사 입장에서는 … 정말 중요한것만 입력하게"): the house location fills the ward — the same OSM ward lines the route map draws (33 wards) — until the person picks a ward themselves
+let WARDS_GJ = null;
+async function wardFromGps(g) { if (!g || !Number.isFinite(g.lat) || !Number.isFinite(g.lng)) return null; if (!WARDS_GJ) { try { WARDS_GJ = await (await fetch('./vendor/osm-pokhara-wards.json')).json(); } catch (e) { return null; } } return R.wardOf(WARDS_GJ, g.lat, g.lng); }
+async function autoWard(form, v, key, wk) {
+  if (key === wk) { form.dataset.wardTouched = '1'; return null; }
+  if (key !== 'gps' || !v.gps) return null;
+  const w = await wardFromGps(v.gps); const sel = form.elements[wk]; const box = form.querySelector(`.fld[data-k="${wk}"] .warn`); if (!sel || !box) return w;
+  let msg;
+  if (!w) msg = 'This location is outside the Pokhara ward lines — choose the ward.';
+  else if (form.dataset.wardTouched === '1' && sel.value && sel.value !== w.ward) msg = `The house location is in ward ${w.ward} — you chose ${sel.value}.`;
+  else { sel.value = w.ward; msg = w.edgeM < Math.max(40, Number(v.gps.acc) || 0) ? `Ward ${w.ward} from the house location — close to a ward line, check it.` : `Ward ${w.ward} from the house location.`; draftSave(form); }
+  box.textContent = msg; box.classList.remove('hidden'); return w;
+}
+// v0.22.0: the signer is usually the customer — follow the name until a different signer is typed
+function autoSigner(form, v, key) {
+  const el = form.elements.signName; if (!el) return;
+  if (key === 'signName') { form.dataset.signTouched = el.value.trim() && el.value.trim() !== (form.dataset.signAuto || '') ? '1' : ''; return; }
+  if (form.dataset.signTouched === '1') return; el.value = v.name || ''; form.dataset.signAuto = el.value;
+}
+function setChips(form, k, val) { form.querySelectorAll(`[data-group="${k}"] .chip`).forEach((b) => b.classList.toggle('on', !!val && b.dataset.v === val)); }
+function sanDue(cid) { const x = cid && model().cust.get(cid); const s = x && (x.fd || []).find((f) => f.type === 'Sanitise'); return !!s && (s.status === 'overdue' || s.status === 'soon'); }
 function captureGps(form) {
   const out = form.querySelector('#gpsOut');
   if (!navigator.geolocation) { out.textContent = 'This phone cannot give location.'; return; }
@@ -3840,6 +3865,7 @@ function captureGps(form) {
   navigator.geolocation.getCurrentPosition((p) => {
     form.elements.gpsLat.value = p.coords.latitude.toFixed(6); form.elements.gpsLng.value = p.coords.longitude.toFixed(6); form.elements.gpsAcc.value = Math.round(p.coords.accuracy);
     out.textContent = `✅ ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)} (±${Math.round(p.coords.accuracy)} m)`;
+    refreshConditional(form, 'gps'); draftSave(form); /* v0.22.0: the ward follows the location */
   }, (e) => { out.textContent = 'Could not get location: ' + e.message; }, { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 });
 }
 

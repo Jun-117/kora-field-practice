@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.22.1 (2026-10-06)';
+export const APP_VERSION = 'kf-v0.22.2 (2026-10-06)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -255,6 +255,16 @@ export const arrFor = (cid, day) => { const e = cid ? lsGet(ARR, {})[cid] : null
 const arrClear = (cid) => { const m = lsGet(ARR, {}); if (m[cid]) { delete m[cid]; lsSet(ARR, m); } };
 const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5);
 export const arrBtn = (c, cls = '') => { if (!c) return ''; const a = arrFor(c.id, today()); return `<button type="button" class="${cls}" data-arr="${esc(c.id)}">${a ? `🚪 Arrived ${hhmm(a.at)}` : '🚪 Arrived'}</button>`; };
+// v0.22.2 (Jun 10/6 "중요한거 통해서 얻는 주변 정보들까지를 사이트가 해석해서 결과창에 유의미한건 띄워주고 저장"): what this visit tells us — staff only, never on the customer note (no virus claims outside)
+function insightCard(v) {
+  const I = v.insight || {}; const L = [];
+  if (Number.isFinite(I.flow)) L.push(I.uv === 'ok' ? `💡 UV margin OK · flow ${I.flow} L/min` : I.uv === 'thin' ? `💡 UV margin thin · flow ${I.flow} L/min · tighten the flow valve to 1.2 or less` : `💡 UV margin low · flow ${I.flow} L/min · tighten the flow valve now`);
+  if (Number.isFinite(I.flowPct)) L.push(Math.abs(I.flowPct) < 5 ? '🚰 Flow vs install: about the same' : `🚰 Flow vs install: ${Math.abs(I.flowPct)}% ${I.flowPct < 0 ? 'less' : 'more'} (${I.flowBase} → ${I.flow})`);
+  if (Number.isFinite(I.ppDays) && I.ppDays > 0) L.push(I.ppColor === 'White' ? `⚪ PP still white after ${I.ppDays} days` : `🟤 PP ${String(I.ppColor).toLowerCase()} after ${I.ppDays} days at this home${(v.filters || []).includes('PP') ? ` · next PP booked at ${I.ppDays} days` : ''}`);
+  if (v.nextVisitDate) L.push(`📅 Next visit ${v.nextVisitDate}`);
+  if (I.oldBack) L.push(`♻️ Old filters to hand in: ${I.oldBack}`);
+  return L.length ? `<div class="ins" style="margin-top:8px"><div class="muted">${esc('What this visit tells us')} · ${esc('staff only — not on the customer note')}</div>${L.map((l) => `<div>${esc(l)}</div>`).join('')}</div>` : '';
+}
 function arrLine(v, x) { /* the arrival in the visit form — a button until it is tapped */
   if (!x || v.date !== today()) return ''; const a = arrFor(x.c.id, v.date);
   return a ? `<div>${esc(`🚪 Arrived ${hhmm(a.at)} · the minutes fill in on Save`)}</div>` : `<div><button type="button" class="btn small ghost" data-arr="${esc(x.c.id)}">🚪 Arrived</button> <span class="muted">${esc('tap it at the door — the visit counts its minutes from it')}</span></div>`;
@@ -761,7 +771,9 @@ function field(f, v) {
     case 'sign':
       input = `<div class="signpad" data-sign="${f.k}"><canvas width="640" height="220"></canvas><div class="signhint">✍️ <span>Sign here with a finger</span></div><button type="button" class="btn small ghost" data-signclear>✕ Erase</button></div>`; break;
     case 'number':
-      input = `<input id="f_${f.k}" name="${f.k}" type="number" inputmode="${f.step ? 'decimal' : 'numeric'}" step="${f.step || 1}" value="${esc(val)}" placeholder="${esc(f.ph || '')}">`; break;
+      input = `<input id="f_${f.k}" name="${f.k}" type="number" inputmode="${f.step ? 'decimal' : 'numeric'}" step="${f.step || 1}" value="${esc(val)}" placeholder="${esc(f.ph || '')}">`;
+      if (f.sw) { const run = S.flowSw && S.flowSw.k === f.k; input = `<div class="row sg-row">${input}<button type="button" class="btn small${run ? ' on' : ''}" data-flowsw="${f.k}" title="Tap when the 1-litre jug starts filling, again when it is full">${run ? '⏹️ Full' : '⏱️ 1 L'}</button></div>`; } /* v0.22.2 */
+      break;
     default:
       input = `<input id="f_${f.k}" name="${f.k}" type="${f.t}" value="${esc(val)}" placeholder="${esc(f.ph || '')}" ${f.t === 'tel' ? 'inputmode="tel"' : ''} autocomplete="off">`;
     if (f.scan && !S.desk) input = `<div class="row sg-row">${input}<button type="button" class="btn small" data-scan="f_${f.k}" title="Scan the sticker">📷</button></div>`; /* v0.21.1 */
@@ -858,7 +870,7 @@ FORMS.install = {
     { t: 'section', l: 'Final checks', hint: 'All must be ticked. Flow and water source are required.' },
     { k: 'checks', l: 'Checklist', t: 'checks', o: OPT.installChecks, req: 1 },
     { k: 'purifiedTds', l: 'Purified water TDS', t: 'number' }, /* v0.22.0 Jun 10/6 TDS plan A: UF does not lower TDS → optional; the raw-water TDS stays required */
-    { k: 'flow', l: 'Flow at the tap (L/min)', t: 'number', step: 0.1, req: 1, ph: 'e.g. 1.1', hint: 'The UV lamp is safe at 1.2 L/min or less.' },
+    { k: 'flow', l: 'Flow at the tap (L/min)', t: 'number', sw: 1, step: 0.1, req: 1, ph: 'e.g. 1.1', hint: 'The UV lamp is safe at 1.2 L/min or less.' },
     { t: 'section', l: 'First-day payment', hint: 'Day 1 = NPR 4,900 (install fee incl. first month). Do not finish the install before the payment is confirmed.' },
     { k: 'firstPay', l: 'First-day payment', t: 'chips', o: OPT.firstPay, req: 1 },
     { k: 'payMethod', l: 'Paid by', t: 'chips', o: OPT.method, show: (v) => String(v.firstPay).startsWith('Received') },
@@ -1021,7 +1033,7 @@ FORMS.visit = {
     { t: 'section', k: 'secMeasure', l: 'Measurements', show: (v) => !R.isNoShow(v) },
     { k: 'tdsBefore', l: 'TDS before', t: 'number', show: (v) => !R.isNoShow(v) },
     { k: 'tdsAfter', l: 'TDS after', t: 'number', show: (v) => !R.isNoShow(v) }, /* v0.22.0 Jun 10/6 TDS plan A: optional (UF does not lower TDS) */
-    { k: 'flow', l: 'Flow (L/min)', t: 'number', step: 0.1, ph: 'e.g. 1.1', show: (v) => !R.isNoShow(v) },
+    { k: 'flow', l: 'Flow (L/min)', t: 'number', sw: 1, step: 0.1, ph: 'e.g. 1.1', show: (v) => !R.isNoShow(v) }, /* v0.22.2: ⏱️ 1 L stopwatch */
     { k: 'parts', l: 'Parts used', t: 'counts', o: partsList, show: (v) => !R.isNoShow(v), hint: 'Tap a part once for each one used (tap again = 2). − takes one off. Counted off stock.' },
     { k: 'issuedFrom', l: 'Parts came from', t: 'chips', o: ['my bag', 'shelf'], def: 'my bag', show: (v) => !R.isNoShow(v) && (v.parts || []).length > 0, hint: 'My bag = issued to me this morning. Shelf = taken straight from stock.' },
     { k: 'sanitised', l: 'Pipes sanitised on this visit?', t: 'chips', o: OPT.yesNo, hint: 'Full pipe sanitisation every 3 months.', show: (v) => !R.isNoShow(v) },
@@ -1104,11 +1116,12 @@ FORMS.visit = {
     const prevV = S.D.visits.get(id) || {}; const oldSn = prevV.swapOld || R.normSerial(c.deviceSerial); const newSn = R.normSerial(v.swapNew);
     const swapping = isDone(v.status) && v.visitType === 'Repair' && v.swapDev === 'Yes — new unit put in' && !!newSn && newSn !== oldSn;
     data.swapNew = swapping ? newSn : ''; data.swapOld = swapping ? oldSn : ''; if (!swapping) { data.swapDev = v.visitType === 'Repair' ? 'No' : ''; data.swapReason = ''; }
-    const arr = isNew ? arrFor(v.customerId, v.date) : null; /* v0.22.1: minutes from the 🚪 Arrived tap (only when the box was left empty) */
-    if (arr) { data.arrivedAt = new Date(arr.at).toISOString(); if (Number.isFinite(arr.lat)) data.arrivedGps = { lat: arr.lat, lng: arr.lng, acc: arr.acc || null }; const mins = Math.round((Date.now() - arr.at) / 60000); if (R.isNoShow(v)) { if (data.waitedMin == null) data.waitedMin = Math.max(0, Math.min(240, mins)); } else if (data.durationMin == null) data.durationMin = Math.max(1, Math.min(600, mins)); data.minutesFrom = 'arrived'; }
+    const arv = isNew ? arrFor(v.customerId, v.date) : null; /* v0.22.1: minutes from the 🚪 Arrived tap (only when the box was left empty) */
+    if (arv) { data.arrivedAt = new Date(arv.at).toISOString(); if (Number.isFinite(arv.lat)) data.arrivedGps = { lat: arv.lat, lng: arv.lng, acc: arv.acc || null }; const mins = Math.round((Date.now() - arv.at) / 60000); if (R.isNoShow(v)) { if (data.waitedMin == null) data.waitedMin = Math.max(0, Math.min(240, mins)); } else if (data.durationMin == null) data.durationMin = Math.max(1, Math.min(600, mins)); data.minutesFrom = 'arrived'; }
+    if (isDone(v.status) && !R.isNoShow(v)) data.insight = R.visitInsight({ ...data, id }, c, [...S.D.visits.values()].filter((q) => q.customerId === c.id)); /* v0.22.2: what this visit tells us — kept as of this day */
     const ok = save(`visits/${id}`, data, isNew);
     if (ok && swapping && R.normSerial(c.deviceSerial) !== newSn) save(`customers/${c.id}`, { deviceSerial: newSn }, false);
-    if (isNew && ok) { omwClear(v.customerId); if (arr) arrClear(v.customerId); }
+    if (isNew && ok) { omwClear(v.customerId); if (arv) arrClear(v.customerId); }
     const np = savePhotos(v.customerId, `visits/${id}`, v.visitType === 'Repair' ? 'repair' : 'visit') + (ok ? saveSign(v.customerId, `visits/${id}`, sig, v.signName) : 0);
     return { ok, np, go: ['customers', 'detail', { id: v.customerId, vrep: id }] };
   },
@@ -2164,13 +2177,13 @@ export function myDay(m, name, day) {
   const me = name || myName(); const t = day || m.t; const isDone = (v) => String(v.status || '').includes('Completed');
   const visits = m.D.visits.filter((v) => v.date === t && (v.technician || '') === me && isDone(v)); const installs = m.D.customers.filter((c) => c.installDate === t && ((c.installer || '') === me || (S.user && c.createdBy === S.user.uid && me === myName())));
   const pays = m.D.payments.filter((p) => p.date === t && (p.by || '') === me && (Number(p.amount) || 0) > 0); const byMethod = {}; for (const p of pays) { const k = R.methodGroup(p.method); byMethod[k] = (byMethod[k] || 0) + (Number(p.amount) || 0); }
-  const parts = {}; for (const v of visits) for (const p of v.parts || []) parts[p] = (parts[p] || 0) + 1; const filters = visits.reduce((n, v) => n + (v.filters || []).length, 0);
+  const parts = {}; for (const v of visits) for (const p of v.parts || []) parts[p] = (parts[p] || 0) + 1; const filters = visits.reduce((n, v) => n + (v.filters || []).length, 0); const oldBack = visits.reduce((n, v) => n + (Number(v.oldCount) || 0), 0); /* v0.22.2 */
   const noShows = m.D.visits.filter((v) => v.date === t && (v.technician || '') === me && R.isNoShow(v)).length;
-  return { me, t, visits, installs, pays, byMethod, parts, filters, noShows, cash: R.cashInHand(m.D, me) };
+  return { me, t, visits, installs, pays, byMethod, parts, filters, oldBack, noShows, cash: R.cashInHand(m.D, me) };
 }
 function myDayCard(m) {
   if (!(can('visit') || can('pay') || can('install'))) return ''; const d = myDay(m); const total = d.pays.reduce((s2, p) => s2 + (Number(p.amount) || 0), 0);
-  return `<h2>🧾 My day <button class="btn small ghost" style="margin-left:auto" data-report="myday">All</button></h2><div class="card"><div class="kv"><div class="k">Visits done</div><div class="v num">${d.visits.length}${d.noShows ? ` <span class="muted">· ${d.noShows} nobody home</span>` : ''}</div><div class="k">Money taken</div><div class="v num">${R.npr(total)}</div><div class="k">Cash in my hand</div><div class="v num"${d.cash.inHand > 0 ? ' style="color:var(--warn)"' : ''}>${R.npr(d.cash.inHand)}</div></div>${d.cash.inHand > 0 ? `<button class="btn ghost" data-report="cash" style="margin-top:8px">💵 Hand the cash over</button>` : ''}</div>`;
+  return `<h2>🧾 My day <button class="btn small ghost" style="margin-left:auto" data-report="myday">All</button></h2><div class="card"><div class="kv"><div class="k">Visits done</div><div class="v num">${d.visits.length}${d.noShows ? ` <span class="muted">· ${d.noShows} nobody home</span>` : ''}</div><div class="k">Money taken</div><div class="v num">${R.npr(total)}</div><div class="k">Cash in my hand</div><div class="v num"${d.cash.inHand > 0 ? ' style="color:var(--warn)"' : ''}>${R.npr(d.cash.inHand)}</div>${d.oldBack ? `<div class="k">Old filters to hand in</div><div class="v num">${d.oldBack}</div>` : ''}</div>${d.cash.inHand > 0 ? `<button class="btn ghost" data-report="cash" style="margin-top:8px">💵 Hand the cash over</button>` : ''}</div>`;
 }
 let WATCH_IDS = new Map();
 export const watchPill = (cid) => (WATCH_IDS.has(cid) ? ` <span class="pill ${WATCH_IDS.get(cid) === 'high' ? 'bad' : 'warn'}" title="On the watch list">⚠️ watch</span>` : ''); /* v0.21.0 (A3) */
@@ -2372,7 +2385,7 @@ function viewDetail(p) {
   ${S.desk ? '' : '<button class="btn ghost small" data-act="moreLinks" style="margin-top:6px">⋯ More</button>'}
   ${can('visit') && x.status !== 'Churned' ? omwChips(c) : ''}
   ${receipt ? receiptCard(x, receipt) : ''}
-  ${vrep ? `<div class="card" style="border-color:var(--ok)"><div class="status">🔧 Visit saved · ${esc(vrep.date)}</div><button type="button" class="btn ok" style="display:block;width:100%;margin-top:10px" data-act="rcVisit" data-vid="${esc(vrep.id)}">📨 Visit note → WhatsApp</button></div>` : ''}
+  ${vrep ? `<div class="card" style="border-color:var(--ok)"><div class="status">🔧 Visit saved · ${esc(vrep.date)}</div>${insightCard(vrep)}<button type="button" class="btn ok" style="display:block;width:100%;margin-top:10px" data-act="rcVisit" data-vid="${esc(vrep.id)}">📨 Visit note → WhatsApp</button></div>` : ''}
   ${inst ? `<div class="card" style="border-color:var(--ok)"><div class="status">🎉 Installed</div><button type="button" class="btn ok" style="display:block;width:100%;margin-top:10px" data-act="rcInst" data-cid="${esc(c.id)}">🏠 Installed card → WhatsApp</button><div class="muted" style="margin-top:6px;font-size:12px">Then the receipt below.</div></div>` : ''}
   <div id="rcBox" class="hidden"></div>
   ${nowCard}
@@ -3544,6 +3557,11 @@ document.addEventListener('click', async (ev) => {
   const cl = t.closest('[data-cal]'); if (cl && S.desk) { ev.preventDefault(); const bb = $('#bellBox'); if (bb) bb.classList.add('hidden'); go('calendar', 'calendar', { d: cl.dataset.cal, mo: cl.dataset.cal.slice(0, 7) }); return; }
   const wo = t.closest('[data-watchok]'); if (wo) { ev.preventDefault(); const [cid, sc] = wo.dataset.watchok.split('|'); watchCheck(cid, Number(sc)); toast('✓ Checked — hidden for 7 days unless it gets worse'); scheduleRender(); return; }
   const spk = t.closest('[data-staffpick]'); if (spk) { ev.preventDefault(); staffPick(spk.dataset.staffpick); return; } /* v0.17.0 (3) B2 */
+  const fsw = t.closest('[data-flowsw]'); if (fsw) { ev.preventDefault(); const k = fsw.dataset.flowsw; const fm = fsw.closest('form'); const el = fm && fm.elements[k]; if (!el) return; /* v0.22.2 (Jun 10/6): ⏱️ 1 L — tap when the jug starts filling, tap again when it is full → L/min */
+    if (!S.flowSw || S.flowSw.k !== k) { S.flowSw = { k, t0: Date.now() }; fsw.classList.add('on'); fsw.textContent = '⏹️ Full'; toast('⏱️ Filling 1 L — tap again when the jug is full'); return; }
+    const s = (Date.now() - S.flowSw.t0) / 1000; S.flowSw = null; fsw.classList.remove('on'); fsw.textContent = '⏱️ 1 L';
+    if (s < 5 || s > 600) { toast('Too short or too long — try again'); return; }
+    el.value = (60 / s).toFixed(1); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); toast(`1 L in ${Math.round(s)} s = ${(60 / s).toFixed(1)} L/min`); return; }
   const arb = t.closest('[data-arr]'); if (arb) { ev.preventDefault(); if (arb.disabled) return; arb.disabled = true; const cid = arb.dataset.arr; /* v0.22.1 */
     G.getHere(2 * 60e3, 8000).then((g) => { arrMark(cid, g); toast(g ? '🚪 Arrived — time and place kept' : '🚪 Arrived — time kept (no location)'); const f = arb.closest('#theForm'); if (f && f.isConnected) { refreshConditional(f); arb.disabled = false; } else scheduleRender(); }); return; }
   const om = t.closest('[data-omw]'); if (om) { ev.preventDefault(); const box = document.getElementById('omw_' + om.dataset.omw); if (box) { box.classList.toggle('hidden'); if (!box.classList.contains('hidden')) box.scrollIntoView({ block: 'nearest' }); } return; }

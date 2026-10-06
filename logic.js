@@ -520,6 +520,17 @@ export function filterBatch(fd, months = FILTER_MONTHS) {
   const types = FILTER_TYPES.filter((t) => real.some((f) => f.type === t && f.due < horizon));
   return { date: first.due, types, horizon, status: first.status, lead: first.type };
 }
+// v0.22.2 (Jun 10/6): what one visit tells us — kept on the visit as of that day, shown after Save (staff only)
+export const UV_FLOW = { ok: 1.2, thin: 1.7 }; // L/min · UV 6W verdict 9/22 (🟡): ≤ 1.2 passes · 1.7 = hepatitis E margin only 1.2–1.4× (kora-uv-disinfection-decision.md:23)
+export function visitInsight(v, customer, homeVisits) {
+  const out = {}; const f = v.flow === null || v.flow === undefined || v.flow === '' ? NaN : Number(v.flow);
+  if (Number.isFinite(f)) { out.flow = f; out.uv = f <= UV_FLOW.ok ? 'ok' : f <= UV_FLOW.thin ? 'thin' : 'low'; const b = Number(customer && customer.flow); if (b > 0) { out.flowBase = b; out.flowPct = Math.round(((f - b) / b) * 100); } }
+  const pps = (homeVisits || []).filter((q) => completed(q) && q.id !== v.id && isDate(q.date) && q.date <= v.date && (q.filters || []).includes('PP')).map((q) => q.date).sort();
+  const lastPP = pps.length ? pps[pps.length - 1] : customer && isDate(customer.installDate) ? customer.installDate : null;
+  if (lastPP && v.ppColor && isDate(v.date)) { out.ppDays = daysBetween(lastPP, v.date); out.ppColor = v.ppColor; }
+  if ((v.filters || []).length) out.oldBack = Number(v.oldCount) || 0;
+  return out;
+}
 // v0.22.0: a point → the Pokhara ward it is in (the OSM ward lines in vendor/osm-pokhara-wards.json) · edgeM = metres to that ward's line (near a line → the person checks)
 export function wardOf(gj, lat, lng) {
   if (!gj || !Array.isArray(gj.features) || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
@@ -542,6 +553,9 @@ export function filterDues(customer, cVisits, today, months = FILTER_MONTHS) {
     const m = type === 'PP' ? ppMonths(last) : months[type];
     let due = m ? addMonths(last, m) : null, why = m ? `${m} months after ${changes.length ? 'last change' : 'install'}` : 'no booking interval — observe';
     if (type === 'PP') {
+      // v0.22.2: this home's own PP life — when its last PP came out brown/black, the next one is booked after the same number of days (only ever earlier than the usual months · a white one goes back to the months)
+      const ppv = done.filter((v) => (v.filters || []).includes('PP')).sort((a, b) => String(a.date).localeCompare(String(b.date))); const lpv = ppv[ppv.length - 1]; const from = ppv.length >= 2 ? ppv[ppv.length - 2].date : customer.installDate;
+      if (lpv && ['Brown', 'Black'].includes(lpv.ppColor) && isDate(from)) { const life = daysBetween(from, lpv.date); if (life > 0 && due && addDays(last, life) < due) { due = addDays(last, life); why = `this home's PP came out ${lpv.ppColor.toLowerCase()} after ${life} days — booked at ${life} days`; } }
       const seen = cVisits.filter((v) => v.date >= last && ['Brown', 'Black'].includes(v.ppColor) && !(v.filters || []).includes('PP'));
       if (seen.length) { due = seen[seen.length - 1].date; why = `PP looked ${seen[seen.length - 1].ppColor.toLowerCase()} on ${due} — replace now (E-2)`; }
     }
@@ -1150,12 +1164,12 @@ export function expensesByMonth(expenses) {
 //  · 30–40 % of PAYGo customers "skip" a payment in the first 3 months and it is normal → one late bill weighs little (:16)
 //  · the first 90 days carry 30–50 % of all churn → a new home gets a point (:91)
 // PoC rule: no verdict on churn before 600 household-months (kora-poc-pricing-design:89) — this list only orders who to call first.
-export const WATCH = { lateDays: 7, longLateDays: 30, recentBills: 3, newDays: 90, window: 60, tdsRise: 30, visitLateDays: 14, high: 5, watch: 3 };
+export const WATCH = { lateDays: 7, longLateDays: 30, recentBills: 3, newDays: 90, window: 60, tdsRise: 30, visitLateDays: 14, high: 5, watch: 3, flowDrop: 25 }; // flowDrop 🔴 first value (v0.22.2) — PoC data sets it
 // sign → [points, name] (the list shows the detail; the counts group by sign)
 export const WATCH_SIGNS = {
   late30: [4, '30+ days late'], late7: [3, '7–29 days late'], late: [1, '1–6 days late'], trend: [1, 'Late on 2 of the last 3 bills'],
   req: [2, 'Open request'], probs: [2, '2+ problems in 60 days'], issue: [2, 'Last call: issue found'], unhappy: [2, 'Last call: ★★ or less'], meh: [1, 'Last call: ★★★'],
-  tds: [1, 'Purified TDS up 30+'], missed: [1, 'Visit cancelled or on hold'], vlate: [1, 'Visit 14+ days late'], filter: [1, 'Filter overdue'],
+  tds: [1, 'Purified TDS up 30+'], uvthin: [1, 'UV margin thin (flow 1.2–1.7 L/min)'], uvlow: [2, 'UV margin low (flow above 1.7 L/min)'], flowdrop: [1, 'Flow down 25%+ since install'], missed: [1, 'Visit cancelled or on hold'], vlate: [1, 'Visit 14+ days late'], filter: [1, 'Filter overdue'],
   noshow: [1, 'Nobody home at a visit'], new: [1, 'First 90 days'], ob: [1, 'Onboarding call overdue'], move: [1, 'Moving house'], contract: [2, 'Contract ended'], pauseEnd: [2, 'Pause ended'], paused: [1, 'Paused'], promise: [2, 'Broke a payment promise'],
 };
 const QUALITY_TYPES = ['Breakdown', 'Water quality', 'Leak'];
@@ -1188,6 +1202,9 @@ export function watchScore(x, ctx, today) {
   }
   const done = x.vs.filter(completed).filter((v) => Number.isFinite(Number(v.tdsAfter)) && v.tdsAfter !== null && v.tdsAfter !== '');
   if (done.length >= 2) { const a = Number(done[done.length - 2].tdsAfter), b = Number(done[done.length - 1].tdsAfter); if (b - a >= WATCH.tdsRise) add('tds', 'service', '💧', `purified TDS up ${a} → ${b}`, 'visit'); }
+  { const fl = x.vs.filter(completed).filter((v) => v.flow !== null && v.flow !== undefined && v.flow !== '' && Number.isFinite(Number(v.flow))); const lf = fl[fl.length - 1]; /* v0.22.2: the last measured flow */
+    if (lf && Number(lf.flow) > UV_FLOW.thin) add('uvlow', 'service', '💡', `UV margin low · flow ${lf.flow} L/min`, 'visit'); else if (lf && Number(lf.flow) > UV_FLOW.ok) add('uvthin', 'service', '💡', `UV margin thin · flow ${lf.flow} L/min`, 'visit');
+    const b = Number(c.flow); if (lf && b > 0) { const pct = Math.round(((Number(lf.flow) - b) / b) * 100); if (pct <= -WATCH.flowDrop) add('flowdrop', 'service', '🚰', `flow down ${-pct}% since install (${b} → ${lf.flow})`, 'visit'); } }
   const missed = x.vs.filter((v) => String(v.date || '') >= since && /Cancelled|On hold/.test(String(v.status || ''))).length;
   if (missed) add('missed', 'service', '🚪', `${missed} visit${missed > 1 ? 's' : ''} cancelled or on hold`, 'call');
   const nobody = x.vs.filter((v) => String(v.date || '') >= since && isNoShow(v)).length;

@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.22.3 (2026-10-06)';
+export const APP_VERSION = 'kf-v0.22.4 (2026-10-06)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -284,9 +284,11 @@ export function nextPlanFor(v) {
 }
 function nextBoxHtml(v) {
   if (!v.customerId || R.isNoShow(v)) return ''; const p = nextPlanFor(v); if (!p) return '';
-  const segs = [`📅 Suggested ${p.date} (${wdOf(p.date)})`, `before ${p.why} ${p.latest}`]; if (p.same) segs.push(`${p.same} home${p.same > 1 ? 's' : ''} in ${p.tole} that day`); segs.push(`${p.load}/${p.cap} booked`); if (p.full) segs.push('every day is full — the least full one');
-  const alts = p.alts.length ? `<div class="row" style="gap:6px;margin-top:4px;flex-wrap:wrap"><span class="muted">${esc('Other days')}</span>${p.alts.map((d) => `<button type="button" class="chip" data-nvd="${esc(d)}">${esc(`${d} (${wdOf(d)})`)}</button>`).join('')}</div>` : '';
-  return `<div>${esc(segs.join(' · '))}</div>${alts}`;
+  /* v0.22.4 Jun 10/6 "제안이랑 다음방문일이랑 합쳐서 선택하면 밑에 기사처럼 딱 선택되게": one chip row — ★ suggested · other days · 📅 another day (opens the date box) · the picked one is lit */
+  const cur = v.nextVisitDate || ''; const days = [p.date, ...p.alts]; const other = !!cur && !days.includes(cur);
+  const chip = (d, lab) => `<button type="button" class="chip${cur === d ? ' on' : ''}" data-nvd="${esc(d)}">${esc(lab)}</button>`;
+  const why = ['★ suggested', `before ${p.why} ${p.latest}`]; if (p.same) why.push(`${p.same} home${p.same > 1 ? 's' : ''} in ${p.tole} that day`); why.push(`${p.load}/${p.cap} booked`); if (p.full) why.push('every day is full — the least full one');
+  return `<div class="chips nv-chips">${chip(p.date, `★ ${p.date} (${wdOf(p.date)})`)}${p.alts.map((d) => chip(d, `${d} (${wdOf(d)})`)).join('')}<button type="button" class="chip${other ? ' on' : ''}" data-nvd="__pick">${esc(other ? `📅 ${cur} (${wdOf(cur)})` : '📅 Other day')}</button></div><div class="hint">${esc(why.join(' · '))}</div>`;
 }
 function arrLine(v, x) { /* the arrival in the visit form — a button until it is tapped */
   if (!x || v.date !== today()) return ''; const a = arrFor(x.c.id, v.date);
@@ -422,10 +424,11 @@ function stampPlace(col, data) {
   const h = G.hereNow(10 * 60e3);
   return h ? { ...data, savedAt: { lat: Number(h.lat.toFixed(5)), lng: Number(h.lng.toFixed(5)), acc: h.acc ? Math.round(h.acc) : null, t: Date.now() } } : { ...data, savedAtT: Date.now() };
 }
+const COL_NAME = { customers: 'Customer', visits: 'Visit', payments: 'Payment', requests: 'Request', checkins: 'Call', relocations: 'Relocation', recoveries: 'Recovery', contractEvents: 'Contract', screenings: 'Screening', waterTests: 'Vial', deviceEvents: 'Device' }; /* v0.22.4: the change log names the record, not the database */
 let FIELD_L = null;
 export function fieldLabel(col, k) { /* v0.17.0 (1) A6 */
   if (!FIELD_L) { FIELD_L = {}; for (const f of Object.values(FORMS)) { let sp = []; try { sp = (typeof f.spec === 'function' ? f.spec() : f.spec) || []; } catch (e) { sp = []; } for (const q of sp) if (q && q.k && q.l) { if (!FIELD_L[(f.col || '') + '|' + q.k]) FIELD_L[(f.col || '') + '|' + q.k] = q.l; if (!FIELD_L['|' + q.k]) FIELD_L['|' + q.k] = q.l; } } }
-  const own = { techNames: 'Technician names', perms: 'Rights', toles: 'Areas', role: 'Account status', fullName: 'Full name' };
+  const own = { techNames: 'Technician names', perms: 'Rights', toles: 'Areas', role: 'Account status', fullName: 'Full name', cover: 'Covered by', assignee: 'Assigned to' };
   return FIELD_L[(col || '') + '|' + k] || own[k] || FIELD_L['|' + k] || String(k).replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().replace(/\b(tds|gps|vat|pan|pp|uf|cto|uv|id|qr)\b/g, (x) => x.toUpperCase()).replace(/^./, (c) => c.toUpperCase());
 }
 // ---- change log (v0.8 security): every edit of a saved record leaves one append-only entry (who · when · field: before → after) — the admin reads it
@@ -1868,6 +1871,55 @@ export function draftSave(form) {
     lsSet(DRAFT_KEY(form.dataset.form), { v, t: Date.now() });
   }, 300);
 }
+// v0.22.4 Jun 10/6 "기록보기하면 기록만 보여주고 일단 수정불가하게하고, 오른쪽 맨 위에 그런곳에 수정하기 이렇게 해서 따로 수정버튼 눌러야 수정되게해줘, 그리고 당연히 다 로그 감시해서 기록변경사항에 다 저장되게하고":
+// a saved record opens read-only; ✏️ Edit (top right) opens the form. Every edit already leaves a change-log entry (save → auditLog) — the page lists the record's own (admin and deputy, like the home's list).
+function recVal(f, val) {
+  if (val === undefined || val === null || val === '' || (Array.isArray(val) && !val.length)) return '';
+  let opts = null; try { opts = typeof f.o === 'function' ? f.o() : f.o; } catch (e) { opts = null; }
+  const lab = (o) => { if (f.lbl && f.lbl[o]) return f.lbl[o]; const hit = Array.isArray(opts) && opts.find((q) => Array.isArray(q) && String(q[0]) === String(o)); return hit ? hit[1] : o; };
+  const word = (o) => `<span${f.noi18n ? ' data-noi18n' : ''}>${esc(String(lab(o)))}</span>`; const raw = (s) => `<span data-noi18n>${esc(String(s))}</span>`;
+  if (['chips', 'checks', 'select'].includes(f.t)) return (Array.isArray(val) ? val : [val]).map(word).join(', ');
+  if (f.t === 'counts') { const n = new Map(); for (const o of [].concat(val)) n.set(o, (n.get(o) || 0) + 1); return [...n].map(([o, c]) => word(o) + (c > 1 ? raw(' ×' + c) : '')).join(', '); }
+  if (f.t === 'customer') { const c = S.D.customers.get(val); return c ? `<button type="button" class="lnk" data-cust="${esc(c.id)}" data-noi18n>${esc(c.name)}${c.code ? ' · ' + esc(c.code) : ''}</button>` : raw(val); }
+  if (f.t === 'gps') return val && Number.isFinite(Number(val.lat)) ? raw(`${Number(val.lat).toFixed(5)}, ${Number(val.lng).toFixed(5)}${val.acc ? ` (±${Math.round(Number(val.acc) || 0)} m)` : ''}`) : '';
+  if (typeof val === 'boolean') return word(val ? 'Yes' : 'No');
+  if (typeof val === 'object') return raw(R.auditWords(JSON.stringify(val)));
+  return raw(val);
+}
+function viewRecord(p) {
+  const F = FORMS[p.form]; const rec = F && p.id && S.D[F.col] ? S.D[F.col].get(p.id) : null; const mayEdit = !!rec && canForm(p.form);
+  const top = '<button class="back" data-back>‹ Back</button>';
+  if (!rec) return top + '<div class="card empty">This record is not on this phone</div>';
+  const vis = (f) => { if (f.admin && !isBoss()) return false; if (!f.show) return true; try { return !!f.show(rec); } catch (e) { return true; } };
+  const blocks = [{ t: '', rows: [] }]; let photos = false;
+  for (const f of F.spec()) {
+    if (!f) continue;
+    if (f.t === 'section') { blocks.push({ t: f.l, rows: [] }); continue; }
+    if (f.t === 'photos') { photos = true; continue; }
+    if (!f.k || ['info', 'sign'].includes(f.t) || !vis(f)) continue;
+    const h = recVal(f, rec[f.k]); if (h) blocks[blocks.length - 1].rows.push([f.l || fieldLabel(F.col, f.k), h]);
+  }
+  if (F.col === 'visits' && rec.arrivedAt && Number.isFinite(Date.parse(rec.arrivedAt))) blocks[0].rows.push(['🚪 Arrived', `<span data-noi18n>${esc(hhmm(Date.parse(rec.arrivedAt)))}</span>`]); /* v0.22.1 */
+  const made = rec.createdAt && rec.createdAt.toMillis ? rec.createdAt.toMillis() : 0; const who = rec.createdBy ? userName(rec.createdBy, rec.by || '') : rec.by || '';
+  const saved = [who, made ? `${R.fmtD(new Date(made))} ${hhmm(made)}` : ''].filter((x) => x && x !== '—').join(' · ');
+  const parent = `${F.col}/${p.id}`; const ch = isBoss() ? arr('audit').filter((a) => a.col === F.col && a.docId === p.id) : [];
+  return top + `<div class="rv-head"><h1>${F.icon} ${esc(F.title)}</h1>${mayEdit ? `<button type="button" class="btn small rv-edit" data-edit="${esc(p.form)}" data-id="${esc(p.id)}" data-direct="1">✏️ Edit</button>` : ''}</div>
+    <div class="muted"><span>${esc(mayEdit ? 'Read-only — tap Edit at the top right to change it.' : 'Read-only')}</span>${saved ? ` · <span>${esc('Saved by')}</span> <span data-noi18n>${esc(saved)}</span>` : ''}${rec._pending ? ' <span class="pill warn">on phone</span>' : ''}</div>
+    <div class="rv">${blocks.filter((b) => b.rows.length).map((b) => `${b.t ? `<div class="sec">${esc(b.t)}</div>` : ''}<div class="card"><div class="kv">${b.rows.map(([k, v]) => `<div class="k">${esc(k)}</div><div class="v">${v}</div>`).join('')}</div></div>`).join('')}</div>
+    ${F.col === 'visits' && rec.insight ? `<div class="card">${insightCard(rec)}</div>` : ''}
+    ${photos ? `<div class="sec">Photos</div><div class="card"><div class="thumbs" id="photoBox" data-parent="${esc(parent)}"><span class="muted">Loading…</span></div>${DEMO ? '' : `<div class="row" style="margin-top:8px"><button class="btn ghost small" data-act="photosNet" data-cid="${esc(rec.customerId || '')}" data-parent="${esc(parent)}">☁️ Load from server</button></div>`}</div>` : ''}
+    ${ch.length ? `<div class="sec">🕵️ Changes to this record</div><div class="card">${auditLines(ch)}</div>` : ''}`;
+}
+// v0.22.4: change-log lines in words — the home's list and a record's own list (newest 15 · every label its own piece so it translates)
+const auditAt = (a) => (a.createdAt && a.createdAt.toMillis ? new Date(a.createdAt.toMillis()).toISOString() : String(a.at || ''));
+function auditLines(xs, withCol) {
+  return xs.map((a) => ({ ...a, at: auditAt(a), by: userName(a.createdBy, a.createdBy ? '' : a.by) })).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 15)
+    .map((a) => `<div class="muted" style="margin:4px 0"><b data-noi18n>${esc(String(a.at || '').slice(0, 16).replace('T', ' '))}</b> · <span data-noi18n>${esc(a.by || '—')}</span>${withCol ? ` · <span>${esc(COL_NAME[a.col] || a.col)}</span>` : ''} — ${(a.fields || []).map((f) => `<span>${esc(fieldLabel(a.col, f))}</span>: <span data-noi18n>${esc(R.auditWords((a.before || {})[f]) || '—')} → ${esc(R.auditWords((a.after || {})[f]) || '—')}</span>`).join(' · ')}</div>`).join('');
+}
+// v0.22.4: photos added while editing a saved record go in the change log too (the photo itself is its own document — never logged field by field)
+function auditPhotos(col, docId, customerId, n) {
+  save(`audit/${newId('audit')}`, { col, docId, customerId: customerId || (col === 'customers' ? docId : ''), fields: ['photos'], before: { photos: '' }, after: { photos: `+${n}` }, kind: 'edit', by: myName(), at: new Date().toISOString() }, true);
+}
 function formHtml(p) {
   const F = FORMS[p.form]; if (!F) return '<div class="card">Unknown form</div>';
   const existing = p.id ? S.D[F.col].get(p.id) : null;
@@ -1906,6 +1958,7 @@ function refreshConditional(form, key) {
   for (const f of spec) if (f.show && f.k) { const el = form.querySelector(`.fld[data-k="${f.k}"], .fsec[data-k="${f.k}"]`); if (el) el.classList.toggle('hidden', !f.show(v)); }
   if (F.onChange && key) F.onChange(form, v, key); /* v0.19.0 (3) */
   if (F.info) for (const f of spec) if (f.t === 'info') { const el = form.querySelector('#info_' + f.k); if (el) { const h = F.info(v, f.k); el.innerHTML = h; el.parentElement.classList.toggle('hidden', !h); } }
+  { const nvf = form.querySelector('.fld[data-k="nextVisitDate"]'), nvb = form.querySelector('#info_nextBox'); if (nvf && nvb) nvf.classList.toggle('nv-merged', !!nvb.querySelector('.nv-chips')); } /* v0.22.4: the chips are the date — the box opens only for another day */
 }
 function submitForm(form) {
   const F = FORMS[form.dataset.form]; const spec = F.spec();
@@ -1922,6 +1975,7 @@ function submitForm(form) {
   delete v._edit; delete v._id;
   const id = editId || newId(F.col);
   const r = F.save(v, id, isNew);
+  if (!isNew && r.ok && r.np) auditPhotos(F.col, id, v.customerId, r.np); /* v0.22.4 */
   if (isNew && r.ok) draftClear(form.dataset.form);
   if (r.ok && r.go && r.go[2]) { const g = r.go[2]; if (g.receipt) prerenderCard('receipt', g.receipt); else if (g.vrep) prerenderCard('visit', g.vrep); else if (g.inst) prerenderCard('install', g.inst); } /* v0.16 #4: the card is ready before the button is tapped */
   toast(r.ok ? (navigator.onLine && !DEMO ? `🟢 Saved${r.np ? ` (+${r.np} photo)` : ''} — sending now` : `🟡 Saved on phone${r.np ? ` (+${r.np} photo)` : ''} — sends when online`) : '🔴 Could not save — write it on paper');
@@ -1948,7 +2002,7 @@ function backClick() { if (navDepth > 0) history.back(); else goBack(); }
 export function go(tab, screen, params, isBack, dir) { /* v0.21.5: dir = 'tab' when a report hub tab swaps the page (no Back step) */
   const sh = document.getElementById('rsheet'); if (sh) sh.remove();
   const next = { tab, screen: screen || tab, params: params || {} };
-  if (S.desk && ['detail', 'form', 'list'].includes(next.screen)) { openDrawer(next.screen, next.params); return; }
+  if (S.desk && ['detail', 'form', 'view', 'list'].includes(next.screen)) { openDrawer(next.screen, next.params); return; }
   if (S.desk && next.screen === 'report') { closeDrawer(true); }
   if (!isBack && S.route && S.route.screen !== 'form') { history_.push(S.route); pushNav(); }
   if (history_.length > 40) history_.shift();
@@ -2033,7 +2087,7 @@ function render0(fresh) {
   }
   document.body.classList.remove('desk');
   tabs.classList.remove('hidden');
-  if (!['today', 'route', 'new', 'customers', 'status', 'detail', 'form', 'list', 'report'].includes(S.route.screen)) S.route = { tab: 'today', screen: 'today', params: {} };
+  if (!['today', 'route', 'new', 'customers', 'status', 'detail', 'form', 'view', 'list', 'report'].includes(S.route.screen)) S.route = { tab: 'today', screen: 'today', params: {} };
   const m = model();
   document.body.classList.toggle('routing', S.route.screen === 'route');
   if (S.route.screen === 'route') {
@@ -2052,7 +2106,7 @@ function render0(fresh) {
   afterRender(v, S.route);
 }
 export function screenHtml(r) {
-  const views = { today: viewToday, new: viewNew, customers: viewCustomers, status: viewStatus, detail: viewDetail, form: formHtml, list: viewList, report: viewReport };
+  const views = { today: viewToday, new: viewNew, customers: viewCustomers, status: viewStatus, detail: viewDetail, form: formHtml, view: viewRecord, list: viewList, report: viewReport };
   const html = (views[r.screen] || viewToday)(r.params || {});
   const k = r.screen === 'report' ? (r.params || {}).r : r.screen === 'list' ? (r.params || {}).list : ''; const tabs = k ? hubTabs(k) : ''; /* v0.21.5 (R3): the hub's tab strip under the title */
   return tabs && html.includes('</h1>') ? html.replace('</h1>', '</h1>' + tabs) : html;
@@ -2072,6 +2126,7 @@ export function afterRender(root, r) {
     if (mb) G.mountMini(mb, { id: mb.dataset.id, lat: Number(mb.dataset.lat), lng: Number(mb.dataset.lng), label: mb.dataset.label, note: (why) => locHelp(why) });
     G.hereIfAllowed().then((pos) => { if (pos && mb && mb._dist) mb._dist(pos); }); // one-tap directions + distance when location is already allowed
   }
+  if (r.screen === 'view') { const F = FORMS[r.params.form]; const rec = F && S.D[F.col] && S.D[F.col].get(r.params.id); if (rec && root.querySelector('#photoBox')) loadPhotos(rec.customerId || '', `${F.col}/${r.params.id}`); } /* v0.22.4 */
   if (r.screen === 'status' || (r.screen === 'report' && r.params.r === 'diag')) fillDiag();
   if (r.screen === 'report' && r.params.r === 'users') loadUsers();
   if (r.screen === 'list' && r.params.list === 'map') { const box = root.querySelector('#mapBox'); import('./desk.js').then((mm) => mm.mountMap(box)); }
@@ -2097,7 +2152,7 @@ function deskTidy(dr) { /* v0.17.1 ④ Jun 10/4 "가로로 쭉 눌린거 하지�
   const sub = h.nextElementSibling && h.nextElementSibling.classList.contains('muted') ? h.nextElementSibling : h; sub.after(bar); for (const b of nb) { b.classList.add('small'); bar.appendChild(b); }
 }
 function drawerHead() { return `<button class="x" data-act="closeDrawer" title="Close (Esc)">✕</button><button class="fx" data-act="drawerFull" title="Full width">⤢</button>${S.drawerStack.length ? `<div class="crumbs">${S.drawerStack.slice(-3).map((d) => `<span>${esc(crumbOf(d))}</span>`).join('<i>›</i>')}<i>›</i></div>` : ''}`; }
-function crumbOf(d) { if (d.screen === 'detail') { const c = S.D.customers.get(d.params.id); return c ? c.name : 'Customer'; } if (d.screen === 'form') return (FORMS[d.params.form] || {}).title || 'Form'; if (d.screen === 'list') return d.params.list || 'List'; return d.params.r || d.screen; }
+function crumbOf(d) { if (d.screen === 'detail') { const c = S.D.customers.get(d.params.id); return c ? c.name : 'Customer'; } if (d.screen === 'form') return (FORMS[d.params.form] || {}).title || 'Form'; if (d.screen === 'view') return (FORMS[d.params.form] || {}).title || 'Record'; if (d.screen === 'list') return d.params.list || 'List'; return d.params.r || d.screen; }
 function paintDrawer(dir, scroll) {
   let dr = $('#drawer');
   if (!dr) { const bg = document.createElement('div'); bg.id = 'drawerBg'; bg.className = 'drawer-bg'; document.body.appendChild(bg); dr = document.createElement('div'); dr.id = 'drawer'; dr.className = 'drawer'; document.body.appendChild(dr); }
@@ -2114,7 +2169,7 @@ export function closeDrawer(silent) {
   if (!silent && S.staleDesk) scheduleRender(); // only if data changed while a form was open
 }
 // Desktop: detail/form/list/report open in the drawer; phones: full screens.
-export function nav(tab, screen, params) { if (S.desk && ['detail', 'form', 'list'].includes(screen)) openDrawer(screen, params); else go(tab, screen, params); }
+export function nav(tab, screen, params) { if (S.desk && ['detail', 'form', 'view', 'list'].includes(screen)) openDrawer(screen, params); else go(tab, screen, params); }
 
 // ================= screens (phone) =================
 function viewLogin() {
@@ -2384,11 +2439,11 @@ function viewDetail(p) {
   if (x.nv && x.nv.date <= t) todo.push({ lvl: x.nv.date < t ? 'bad' : 'warn', ic: '🔧', t: `Visit due ${x.nv.date === t ? 'today' : x.nv.date}`, s: x.nv.source, a: `${can('visit') ? omwBtn(c, 'btn small ghost') + arrBtn(c, 'btn small ghost') : ''}<button class="btn small" data-go-form="visit" data-cid="${esc(c.id)}">🔧 Visit</button>` });
   if (fo.length) todo.push({ lvl: 'bad', ic: '🧪', t: `Filters to change: ${fo.map((f) => f.type).join(', ')}`, s: fo.map((f) => f.why).join(' · '), a: x.nv && x.nv.date <= t ? '' : `<button class="btn small" data-go-form="visit" data-cid="${esc(c.id)}">🔧 Visit</button>` });
   const open = m.openReq.filter((o) => o.r.customerId === c.id);
-  for (const o of open) { const late = Date.now() > o.sla.replyBy; todo.push({ lvl: late || o.r.priority === 'Urgent' ? 'bad' : 'warn', ic: '📋', t: `${o.r.type} · ${o.r.status}`, s: `${String(o.r.description || '').slice(0, 80)} · ${late ? 'reply overdue' : 'reply by ' + fmtTime(new Date(o.sla.replyBy), { hour: '2-digit', minute: '2-digit' })}`, a: `<button class="btn small" data-edit="request" data-id="${esc(o.r.id)}">Update</button>` }); }
+  for (const o of open) { const late = Date.now() > o.sla.replyBy; todo.push({ lvl: late || o.r.priority === 'Urgent' ? 'bad' : 'warn', ic: '📋', t: `${o.r.type} · ${o.r.status}`, s: `${String(o.r.description || '').slice(0, 80)} · ${late ? 'reply overdue' : 'reply by ' + fmtTime(new Date(o.sla.replyBy), { hour: '2-digit', minute: '2-digit' })}`, a: `<button class="btn small" data-edit="request" data-id="${esc(o.r.id)}" data-direct="1">Update</button>` }); }
   for (const o of x.ob.filter((q) => q.status === 'due' || q.status === 'overdue')) todo.push({ lvl: o.status === 'overdue' ? 'warn' : 'info', ic: '📞', t: o.label, s: `due ${o.due}`, a: `<button class="btn small ghost" data-go-form="checkin" data-cid="${esc(c.id)}" data-kind="${esc(o.k === 'Q' ? 'Quarterly call' : o.k)}">📞 Log call</button>` });
-  for (const wt of m.vials.waiting.filter((q) => q.customerId === c.id)) todo.push({ lvl: 'info', ic: '🧫', t: 'Read the water vial', s: `filled ${wt.sampledDate || '?'}`, a: `<button class="btn small ghost" data-edit="waterTest" data-id="${esc(wt.id)}">🧫 Read</button>` });
+  for (const wt of m.vials.waiting.filter((q) => q.customerId === c.id)) todo.push({ lvl: 'info', ic: '🧫', t: 'Read the water vial', s: `filled ${wt.sampledDate || '?'}`, a: `<button class="btn small ghost" data-edit="waterTest" data-id="${esc(wt.id)}" data-direct="1">🧫 Read</button>` });
   if (led.contractEnded) todo.push({ lvl: 'warn', ic: '📝', t: 'Contract ended — renew', s: `${R.PRICES.contractMonths} months since ${c.installDate}` });
-  for (const o of m.contractOpen.filter((q) => q.e.customerId === c.id)) todo.push(o.kind === 'notice' ? { lvl: o.overdue || o.soon ? 'bad' : 'warn', ic: '📜', t: `ending on ${o.e.endDate || '?'} — book the recovery`, s: o.e.early ? `before 36 months · deposit paid ${R.npr(o.e.depositPaid || 0)} is kept (draft §2.2)` : 'after 36 months · deposit back with the unit (draft §2.2)', a: can('visit') ? `<button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start recovery</button>` : '' } : { lvl: 'warn', ic: '📜', t: 'device lost or stolen — not settled', s: `${o.e.fault || ''}${o.lateNotice ? ' · told us late (draft §2.5(b))' : ''}`, a: `${can('pay') ? (() => { const LS = R.lostSettlement(c, led, o.e.lostDate || o.e.date); const amt = Number(o.e.settleAmount) > 0 ? Number(o.e.settleAmount) : Math.max(0, LS.total); return `<button class="btn small" data-go-form="payment" data-cid="${esc(c.id)}" data-type="Lost device settlement" data-amount="${amt}" data-lost="${esc(o.e.id)}">💵 Settle · ${R.npr(amt)}</button>`; })() : ''}${canForm('contract') ? `<button class="btn small ghost" data-edit="contract" data-id="${esc(o.e.id)}">Edit</button>` : ''}` }); /* v0.19.0 (8): Settle = take the money (the event closes itself) · Edit = the event */
+  for (const o of m.contractOpen.filter((q) => q.e.customerId === c.id)) todo.push(o.kind === 'notice' ? { lvl: o.overdue || o.soon ? 'bad' : 'warn', ic: '📜', t: `ending on ${o.e.endDate || '?'} — book the recovery`, s: o.e.early ? `before 36 months · deposit paid ${R.npr(o.e.depositPaid || 0)} is kept (draft §2.2)` : 'after 36 months · deposit back with the unit (draft §2.2)', a: can('visit') ? `<button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start recovery</button>` : '' } : { lvl: 'warn', ic: '📜', t: 'device lost or stolen — not settled', s: `${o.e.fault || ''}${o.lateNotice ? ' · told us late (draft §2.5(b))' : ''}`, a: `${can('pay') ? (() => { const LS = R.lostSettlement(c, led, o.e.lostDate || o.e.date); const amt = Number(o.e.settleAmount) > 0 ? Number(o.e.settleAmount) : Math.max(0, LS.total); return `<button class="btn small" data-go-form="payment" data-cid="${esc(c.id)}" data-type="Lost device settlement" data-amount="${amt}" data-lost="${esc(o.e.id)}">💵 Settle · ${R.npr(amt)}</button>`; })() : ''}${canForm('contract') ? `<button class="btn small ghost" data-edit="contract" data-id="${esc(o.e.id)}" data-direct="1">Edit</button>` : ''}` }); /* v0.19.0 (8): Settle = take the money (the event closes itself) · Edit = the event */
   for (const r of refs.filter((q) => q.ready)) todo.push({ lvl: 'info', ic: '🎁', t: `Brought ${esc((S.D.customers.get(r.forId) || {}).name || 'a new home')} — referrer's 50% off a bill`, s: '3 months after their install · apply once', a: isBoss() ? `<a href="#" class="btn small ghost" data-refcredit="${esc(r.who.id)}|${esc(r.forId)}">Apply</a>` : '' });
   const worst = todo.some((q) => q.lvl === 'bad') ? 'bad' : todo.some((q) => q.lvl === 'warn') ? 'warn' : todo.length ? 'info' : 'ok';
   const nowCard = x.status === 'Churned' ? `<div class="card now lv-info"><div class="now-h">⚫ Customer has left${c.churnDate ? ` <span class="muted">${esc(c.churnDate)}</span>` : ''}</div>${recs.length ? '' : `<div class="now-i lv-warn"><span class="ic">📦</span><div class="main"><div class="t">No recovery case yet</div><div class="s">get the device back and settle the deposit</div></div><div class="acts"><button class="btn small" data-go-form="recovery" data-cid="${esc(c.id)}">📦 Start</button></div></div>`}<div class="now-i lv-info"><span class="ic">👋</span><div class="main"><div class="t">Thank-you card</div><div class="s">why they left · the unit back · the deposit · see you again</div></div><div class="acts"><button class="btn small ghost" data-act="rcEnd" data-cid="${esc(c.id)}">👋 Card</button></div></div></div>`
@@ -2449,7 +2504,7 @@ function viewDetail(p) {
   <div class="sec">Customer</div>
   <div class="card">${kv([['Household', c.householdSize], ['Water before', c.prevWater], ['Water source', c.waterSource], ['Plan', c.plan], ['Signed up', c.signUpDate], ['Screening', (() => { const sc = R.findScreening(m.D.screenings, c.leadId, c.phone); return sc ? `${sc.verdict} · ${sc.decision || ''} · ${sc.date || ''}` : undefined; })()], ['Heard via', (c.referral || '') + (c.referrerName ? ' — ' + c.referrerName : '') + (c.referrerId && S.D.customers.get(c.referrerId) ? ' — ' + S.D.customers.get(c.referrerId).name : '')], ...(c.buyerPan ? [['Buyer PAN', c.buyerPan]] : []), ['Special comment', c.notes]])}</div>
   ${isBoss() ? `<div class="card"><label for="privNotes">🔒 Private notes</label><textarea id="privNotes" placeholder="loading…"></textarea><button class="btn ghost" data-act="privSave" data-cid="${esc(c.id)}">Save private notes</button></div>` : ''}
-  ${isBoss() ? (() => { const atOf = (a) => (a.createdAt && a.createdAt.toMillis ? new Date(a.createdAt.toMillis()).toISOString() : String(a.at || '')); const ch = arr('audit').filter((a) => a.customerId === c.id).map((a) => ({ ...a, at: atOf(a), by: userName(a.createdBy, a.createdBy ? '' : a.by) })).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 15); return ch.length ? `<div class="sec">🕵️ Changes to this home</div><div class="card">${ch.map((a) => `<div class="muted" style="margin:4px 0" data-noi18n><b>${esc(String(a.at || '').slice(0, 16).replace('T', ' '))}</b> · ${esc(a.by || '—')} · ${esc(a.col)} — ${(a.fields || []).map((f) => `${esc(f)}: ${esc((a.before || {})[f] || '—')} → ${esc((a.after || {})[f] || '—')}`).join(' · ')}</div>`).join('')}</div>` : ''; })() : ''}
+  ${isBoss() ? (() => { const ch = arr('audit').filter((a) => a.customerId === c.id); return ch.length ? `<div class="sec">🕵️ Changes to this home</div><div class="card">${auditLines(ch, 1)}</div>` : ''; })() : ''}
   <details class="card tl" style="padding:10px 14px"><summary class="sec" style="margin:0;cursor:pointer">🗂️ Photo timeline <span class="muted">(ours · not sent)</span></summary><div class="thumbs" id="photoBox"><span class="muted">Loading…</span></div></details><div class="card"><div class="row"><button class="btn ghost small" data-go-form="photo" data-cid="${esc(c.id)}">📷 Add photos</button>${DEMO ? '' : `<button class="btn ghost small" data-act="photosNet" data-cid="${esc(c.id)}">☁️ Load from server</button>`}</div></div>
   ${rels.length ? `<div class="sec">Relocations (${rels.length})</div><div class="card flush">${rels.map((r) => `<div class="item" data-edit="relocation" data-id="${esc(r.id)}"><div class="main"><div class="t">${esc(r.moveDate || '')} · ${esc(r.status)}</div><div class="s">${esc(r.oldTole === 'Other' ? r.oldToleOther : r.oldTole || '?')} → ${esc(r.newTole === 'Other' ? r.newToleOther : r.newTole || '?')}${r.newSerial ? ' · new device ' + esc(r.newSerial) : ''}</div></div><div class="r">›</div></div>`).join('')}</div>` : ''}
   <div class="sec">Visits (${x.vs.length})</div>
@@ -2687,7 +2742,7 @@ async function loadPhotos(cid, parent, net = false) { /* v0.11.1 (#2): the serve
   const box = $('#drawer #photoBox') || $('#photoBox'); if (!box) return;
   const seen = new Map();
   const show = () => {
-    const b = $('#drawer #photoBox') || $('#photoBox'); if (!b) return;
+    const b = $('#drawer #photoBox') || $('#photoBox'); if (!b || (b.dataset.parent || '') !== (parent || '')) return; /* v0.22.4: a late answer for the home's photos never fills a record's box (or the other way round) */
     const list = [...seen.values()].filter((x) => (typeof photoSrc(x) === 'string' && (photoSrc(x).startsWith('data:image/') || isPdf(photoSrc(x)))) || (x.st && String(x.st).endsWith('.pdf'))).sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))); /* v0.14 (#5): a timeline — oldest first · v0.18.3: thumbnail + Storage path */
     const stage = (x) => String(x.parent || '').startsWith('visits/') ? (x.kind === 'repair' ? '🛠️ repair' : '🔧 visit') : String(x.parent || '').startsWith('customers/') ? '🏠 install' : esc(x.kind || '');
     b.innerHTML = list.map((x) => figOf(x, `${stage(x)} · ${esc(x.date || '')}${x.local ? ' · 🟡' : ''}`)).join('') || '<span class="muted">No photos yet</span>';
@@ -3587,7 +3642,9 @@ document.addEventListener('click', async (ev) => {
   const cl = t.closest('[data-cal]'); if (cl && S.desk) { ev.preventDefault(); const bb = $('#bellBox'); if (bb) bb.classList.add('hidden'); go('calendar', 'calendar', { d: cl.dataset.cal, mo: cl.dataset.cal.slice(0, 7) }); return; }
   const wo = t.closest('[data-watchok]'); if (wo) { ev.preventDefault(); const [cid, sc] = wo.dataset.watchok.split('|'); watchCheck(cid, Number(sc)); toast('✓ Checked — hidden for 7 days unless it gets worse'); scheduleRender(); return; }
   const spk = t.closest('[data-staffpick]'); if (spk) { ev.preventDefault(); staffPick(spk.dataset.staffpick); return; } /* v0.17.0 (3) B2 */
-  const nvd = t.closest('[data-nvd]'); if (nvd) { ev.preventDefault(); const fm = nvd.closest('form'); const el = fm && fm.elements.nextVisitDate; if (el) { el.value = nvd.dataset.nvd; fm.dataset.nextVisitDateTouched = '1'; refreshConditional(fm); draftSave(fm); unconfirm(fm); } return; } /* v0.22.3 */
+  const nvd = t.closest('[data-nvd]'); if (nvd) { ev.preventDefault(); const fm = nvd.closest('form'); const el = fm && fm.elements.nextVisitDate; if (!el) return; fm.dataset.nextVisitDateTouched = '1'; const fl = fm.querySelector('.fld[data-k="nextVisitDate"]'); /* v0.22.3 · v0.22.4: 📅 another day opens the date box */
+    if (nvd.dataset.nvd === '__pick') { if (fl) fl.classList.add('nv-pick'); el.focus(); try { if (el.showPicker) el.showPicker(); } catch (e) { /* not every browser */ } return; }
+    el.value = nvd.dataset.nvd; if (fl) fl.classList.remove('nv-pick'); refreshConditional(fm); draftSave(fm); unconfirm(fm); return; }
   const fsw = t.closest('[data-flowsw]'); if (fsw) { ev.preventDefault(); const k = fsw.dataset.flowsw; const fm = fsw.closest('form'); const el = fm && fm.elements[k]; if (!el) return; /* v0.22.2 (Jun 10/6): ⏱️ 1 L — tap when the jug starts filling, tap again when it is full → L/min */
     if (!S.flowSw || S.flowSw.k !== k) { S.flowSw = { k, t0: Date.now() }; fsw.classList.add('on'); fsw.textContent = '⏹️ Full'; toast('⏱️ Filling 1 L — tap again when the jug is full'); return; }
     const s = (Date.now() - S.flowSw.t0) / 1000; S.flowSw = null; fsw.classList.remove('on'); fsw.textContent = '⏱️ 1 L';
@@ -3630,7 +3687,7 @@ document.addEventListener('click', async (ev) => {
   if (gf) { ev.preventDefault(); nav(S.route.tab === 'customers' || S.route.screen === 'detail' ? 'customers' : 'new', 'form', { form: gf.dataset.goForm, cid: gf.dataset.cid, id: gf.dataset.id, lead: gf.dataset.lead, kind: gf.dataset.kind, serial: gf.dataset.serial, event: gf.dataset.kind, date: gf.dataset.date, lane: gf.dataset.lane, board: gf.dataset.board, type: gf.dataset.type, amount: gf.dataset.amount ? Number(gf.dataset.amount) : undefined, lost: gf.dataset.lost }); return; }
   const cv = t.closest('[data-convert]'); if (cv) { nav('new', 'form', { form: 'install', lead: cv.dataset.convert }); return; } /* v0.11: the install form prefills itself from the lead + its screening */
   const cb = t.closest('button[data-cust]'); if (cb && cb.dataset.cust) { nav('customers', 'detail', { id: cb.dataset.cust }); return; } // a button inside an edit row
-  const ed = t.closest('[data-edit]'); if (ed) { nav(S.route.tab, 'form', { form: ed.dataset.edit, id: ed.dataset.id }); return; }
+  const ed = t.closest('[data-edit]'); if (ed) { nav(S.route.tab, ed.dataset.direct === '1' || !ed.dataset.id ? 'form' : 'view', { form: ed.dataset.edit, id: ed.dataset.id }); return; } /* v0.22.4: a saved record opens read-only — ✏️ Edit and the named action buttons (Update · Read · Edit) go straight to the form */
   const rc = t.closest('[data-receipt]'); if (rc) { nav('customers', 'detail', { id: rc.dataset.cid, receipt: rc.dataset.receipt }); return; }
   const sc = t.closest('[data-svccredit]'); if (sc) { /* before [data-cust]: the button sits inside the customer row */
     if (!isBoss()) return; const x = model().repairCr.find((y) => y.r.id === sc.dataset.svccredit); if (!x || x.given || !x.c.done) return;
@@ -3765,7 +3822,7 @@ document.addEventListener('click', async (ev) => {
     await wipePhone(); await signOut(auth); location.reload();
   } else if (act === 'draftClear') { const f = a.closest('form'); if (f) { draftClear(f.dataset.form); if (S.drawer) refreshDrawer(); else render(false); toast('Draft removed'); } }
   else if (act === 'gpsHere') { gpsHere(a.dataset.cid, a); }
-  else if (act === 'photosNet') { a.disabled = true; a.textContent = 'Loading…'; loadPhotos(a.dataset.cid, '', true).then(() => { a.textContent = 'Loaded'; }); }
+  else if (act === 'photosNet') { a.disabled = true; a.textContent = 'Loading…'; loadPhotos(a.dataset.cid, a.dataset.parent || '', true).then(() => { a.textContent = 'Loaded'; }); }
   else if (act === 'moreLinks') { const m = $('#moreLinks'); if (m) { m.classList.toggle('hidden'); a.textContent = m.classList.contains('hidden') ? '⋯ More' : '⋯ Less'; } }
   else if (act === 'sync') { toast('Checking…'); await reconcile(true); toast(syncState().t); }
   else if (act === 'full') { if (navigator.onLine && !DEMO) { await startData(true); toast('Reloading from server…'); } else toast('Needs internet'); }

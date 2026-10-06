@@ -44,6 +44,11 @@ input.bad, select.bad, textarea.bad { border-color:var(--bad); background:var(--
 .note { background:var(--brand-soft); border-radius:10px; padding:10px 12px; font-size:14px; margin-top:8px; }
 .row { display:flex; gap:10px; } .row > * { flex:1; min-width:0; }
 .chips { display:flex; flex-wrap:wrap; gap:8px; }
+/* v0.22.4: next visit = one chip row (the date box opens only for another day) */
+#info_nextBox.note { background:none; padding:0; margin-top:4px; }
+#info_nextBox .hint { margin-top:6px; }
+.fld.nv-merged > input[type="date"], .fld.nv-merged > .hint { display:none; }
+.fld.nv-merged.nv-pick > input[type="date"] { display:block; }
 .chip { flex:1 0 auto; min-width:64px; min-height:50px; font-size:16px; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); padding:0 12px; font-family:inherit; transition: transform .08s, background .15s, border-color .15s; }
 .chip:active { transform:scale(.97); }
 .chip.on { border-color:var(--brand); background:var(--brand-soft); font-weight:700; color:var(--ink); box-shadow: inset 0 0 0 1px var(--brand); }
@@ -1084,3 +1089,9 @@ button.warn.link { display:block; width:100%; text-align:left; cursor:pointer; f
 
 /* v0.21.5 (R3) report hubs: the tab strip under the title */
 .rp-tabs { margin:4px 0 12px; } .rp-tabs button { white-space:nowrap; }
+/* v0.22.4 a saved record opens read-only — ✏️ Edit at the right end of the title row (on the phone the language switch holds the very top) */
+.rv-head { display:flex; align-items:center; gap:10px; }
+.rv-head h1 { flex:1; min-width:0; }
+.rv-head .btn.rv-edit { margin:0; flex:none; }
+.rv .kv .v { white-space:pre-wrap; }
+.rv .kv .v .lnk { background:none; border:0; padding:0; color:var(--brand); font:inherit; text-align:left; cursor:pointer; text-decoration:underline; }

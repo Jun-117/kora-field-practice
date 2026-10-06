@@ -520,6 +520,24 @@ export function filterBatch(fd, months = FILTER_MONTHS) {
   const types = FILTER_TYPES.filter((t) => real.some((f) => f.type === t && f.due < horizon));
   return { date: first.due, types, horizon, status: first.status, lead: first.type };
 }
+// v0.22.4 (Jun 10/6 "코드를 보여주면 어카노 우리가 어케아노"): a change-log value in words — never JSON (a cover · a location · note lines · any other bundle)
+export function auditWords(v) {
+  const t = String(v ?? '').trim(); if (!t) return '';
+  if (!/^[[{]/.test(t)) return t;
+  const word = (k) => String(k).replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
+  const one = (x) => {
+    if (x === null || x === undefined || x === '') return '';
+    if (typeof x !== 'object') return String(x);
+    if (Array.isArray(x)) return x.map(one).filter(Boolean).join(', ');
+    if ('to' in x && ('from' in x || 'until' in x)) return `${x.from || '—'} → ${x.to || '—'}${x.until ? ` until ${x.until}` : ''}`;
+    if ('lat' in x && Number.isFinite(Number(x.lat)) && Number.isFinite(Number(x.lng))) return `${Number(x.lat).toFixed(5)}, ${Number(x.lng).toFixed(5)}${x.acc ? ` (±${Math.round(Number(x.acc))} m)` : ''}`;
+    if ('en' in x) return String(x.en || '');
+    return Object.entries(x).filter(([, y]) => y !== null && y !== undefined && y !== '').map(([k, y]) => `${word(k)} ${one(y)}`).join(' · ');
+  };
+  for (const s of [t, `[${t}]`]) { try { return one(JSON.parse(s)) || '—'; } catch (e) { /* next */ } }
+  const pairs = [...t.matchAll(/"([A-Za-z]+)":\s*(?:"([^"]*)"|(-?[\d.]+|true|false))/g)].map((m) => `${word(m[1])} ${m[2] ?? m[3]}`); /* cut at 120 characters → read the pairs that survived */
+  return pairs.length ? pairs.join(' · ') + (t.endsWith('…') ? ' …' : '') : t.replace(/[{}[\]"]/g, '');
+}
 // v0.22.3 (Jun 10/6 "각 방문일자들 나중까지 고려해서 가장 일정 없는 날짜로 자동으로"): the next visit = a working day inside a short window before the latest day it may be
 // (never after) · not a full day · the same tole first (one trip) · then the emptiest day · a tie → the later day (the filters are used longer)
 export const NEXT_WIN = { quarterly: 14, monthly: 3 }; // days the visit may move earlier (🔴 first values · Settings)

@@ -1176,7 +1176,7 @@ const AUDIT_COL = { login: '🔑 Sign-in', cashHandovers: '💵 Cash handover', 
 const MONEY_FIELDS = new Set(['amount', 'discount', 'depositRefunded', 'depositForfeited', 'approval', 'status', 'churnDate', 'type', 'customerId', 'perms', 'apprDiscountOver', 'apprRefundOver', 'apprWho']);
 const auditAt = (a) => (a.createdAt && a.createdAt.toMillis ? new Date(a.createdAt.toMillis()).toISOString() : String(a.at || '')); // server time; own unsent entries: the phone's
 const auditBy = (a) => userName(a.createdBy, a.createdBy ? '' : a.by); // the account that wrote it — the "by" text inside is not trusted
-const chgV = (f, v) => { const s = String(v ?? ''); if (!s) return '—'; const n = s.replace(/,/g, ''); return MONEY_FIELDS.has(f) && /^-?\d+(\.\d+)?$/.test(n) ? fmtN(Number(n)) : s; }; /* v0.17.0 (1) A6: "1,400 → 1100" read as two styles */
+const chgV = (f, v) => { const s = R.auditWords(v); if (!s) return '—'; /* v0.22.4: never JSON */ const n = s.replace(/,/g, ''); return MONEY_FIELDS.has(f) && /^-?\d+(\.\d+)?$/.test(n) ? fmtN(Number(n)) : s; }; /* v0.17.0 (1) A6: "1,400 → 1100" read as two styles */
 function pageChanges(m) {
   ensureUsers(() => reDesk());
   const p = S.route.params || {}; const all = (m.D.audit || []).map((a) => ({ ...a, by: auditBy(a), at: auditAt(a) })).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));

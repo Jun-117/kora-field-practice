@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.22.4 (2026-10-06)';
+export const APP_VERSION = 'kf-v0.22.5 (2026-10-10)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -130,7 +130,7 @@ export const db = initializeFirestore(app, {
 // Old documents with the whole picture inside (img) still read as before. Firebase's own guidance: files in Storage, the URL/path in Firestore.
 const storage = getStorage(app);
 // v0.20.0 (C1) Jun 10/5 "2000가구여도 끄떡없지 … 다 해봐": App Check — every request to Firestore / Storage carries a reCAPTCHA v3 token that says
-// "this came from the real app on koracarenepal.com", so the public web key alone is no longer enough to talk to the project. The site key is
+// "this came from the real app on app.koracarenepal.com (Firebase Hosting since 2026-10-11 · was koracarenepal.com/kora-field)", so the public web key alone is no longer enough to talk to the project. The site key is
 // public by design (it is in the page anyway). Empty key = off (nothing changes) · demo / practice / emulator = off · the Firebase console decides
 // whether the token is ENFORCED (Jun flips it after the Phones page shows every device sending tokens — "unenforced" first, so nobody is locked out).
 export const APP_CHECK_SITE_KEY = '6Leest8tAAAAACBZbfdQe7HysRtGkyWBuMOjNlpJ'; /* ← the reCAPTCHA (Fraud Defense / Enterprise) site key — Firebase console → App Check → Web app → Fraud Defense · public by design */
@@ -882,7 +882,7 @@ FORMS.install = {
     { k: 'ward', l: 'Ward', t: 'select', o: OPT.ward, req: 1 },
     { k: 'tole', l: 'Tole', t: 'select', o: OPT.tole, req: 1 },
     { k: 'toleOther', l: 'Tole name', t: 'text', show: (v) => v.tole === 'Other' },
-    { k: 'houseDetail', l: 'How to find the house', t: 'textarea', ph: 'e.g. next to the blue-gate shop, 2nd floor' },
+    { k: 'houseDetail', l: 'How to find the house', t: 'textarea', req: 1, ph: 'Floor · entrance · landmark — e.g. 2nd floor, blue gate, behind the grocery', hint: 'Only someone who has been there knows this — GPS alone does not find the door. Required (Jun 10/10).' }, /* v0.22.5 (29-b): required · the location pin is a helper, not the address */
     { k: 'referral', l: 'How they heard about KORA', t: 'select', o: OPT.referral, req: 1 },
     { k: 'referrerId', l: 'Referred by (existing customer)', t: 'customer', show: (v) => v.referral === 'Word of mouth', hint: 'During a referral campaign the referrer gets 50% off a bill, 3 months after this home joins.' },
     { k: 'referrerName', l: 'Referred by (name, if not a customer)', t: 'text', show: (v) => v.referral === 'Word of mouth' },

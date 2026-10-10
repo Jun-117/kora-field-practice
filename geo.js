@@ -54,7 +54,9 @@ export function km(a, b) { const R0 = 6371, dLat = rad(b.lat - a.lat), dLng = ra
 // ---------- Google Maps directions from the real position ----------
 // https://developers.google.com/maps/documentation/urls/get-started#directions-action — origin/destination/waypoints/travelmode
 export function dirUrl(dest, way, origin) {
-  let u = `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(dest)}`;
+  // v0.22.7 (Jun 10/10 #44): two-wheeler — Google's URL API lists it ("Routes through preferred streets for two-wheelers, where available");
+  // whether Nepal is a supported country is unconfirmed → Tara's phone decides; Google Maps falls back on its own when a mode is unsupported.
+  let u = `https://www.google.com/maps/dir/?api=1&travelmode=two-wheeler&destination=${encodeURIComponent(dest)}`;
   if (origin) u += `&origin=${origin.lat.toFixed(6)},${origin.lng.toFixed(6)}`;
   if (way) u += `&waypoints=${encodeURIComponent(way)}`;
   return u;

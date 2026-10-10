@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.22.7 (2026-10-10)';
+export const APP_VERSION = 'kf-v0.22.8 (2026-10-10)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -900,7 +900,7 @@ FORMS.install = {
     { k: 'toleOther', l: 'Tole name', t: 'text', show: (v) => v.tole === 'Other' },
     { k: 'houseDetail', l: 'How to find the house', t: 'textarea', req: 1, ph: 'Floor · entrance · landmark — e.g. 2nd floor, blue gate, behind the grocery', hint: 'Only someone who has been there knows this — GPS alone does not find the door. Required (Jun 10/10).' }, /* v0.22.5 (29-b): required · the location pin is a helper, not the address */
     { k: 'referral', l: 'How they heard about KORA', t: 'select', o: OPT.referral, req: 1 },
-    { k: 'referrerId', l: 'Referred by (existing customer)', t: 'customer', show: (v) => v.referral === 'Word of mouth', hint: 'During a referral campaign the referrer gets 50% off a bill, 3 months after this home joins.' },
+    { k: 'referrerId', l: 'Referred by (existing customer)', t: 'customer', show: (v) => v.referral === 'Word of mouth', hint: referralOn() ? 'During a referral campaign the referrer gets 50% off a bill, 3 months after this home joins.' : '' }, /* v0.22.8 (Jun 10/10 "추적은 하되 보상 없음"): the reward line shows only while the campaign is on (Settings) — off = we only keep who sent them */
     { k: 'referrerName', l: 'Referred by (name, if not a customer)', t: 'text', show: (v) => v.referral === 'Word of mouth' },
     { t: 'section', l: 'Water & site', hint: 'Measure before installing.' },
     { k: 'waterSource', l: 'Water source', t: 'chips', o: OPT.waterSource, req: 1 },
@@ -3583,7 +3583,7 @@ export async function decodeQrFromImage(src) { /* src = <img>/<canvas>/<video> o
   return '';
 }
 function scanApply(text) {
-  const st = scanState; if (!st) return; const sn = R.normSerial(text); if (!sn) return; const el = document.getElementById(st.target); if (!el) return;
+  const st = scanState; if (!st) return; const sn = R.serialFromScan(text); if (!sn) return; /* v0.22.8: new stickers carry a link — take the KD number out of it */ const el = document.getElementById(st.target); if (!el) return;
   if (st.multi) { const lines = el.value.split(/\n/).map((x) => x.trim()).filter(Boolean); if (lines.includes(sn)) { toast(`${sn} is already in the list`); return; } lines.push(sn); el.value = lines.join('\n'); }
   else el.value = sn;
   el.dispatchEvent(new Event('input', { bubbles: true })); toast(`📷 ${sn}`); if (navigator.vibrate) navigator.vibrate(60);

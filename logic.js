@@ -1123,6 +1123,10 @@ export const DEVICE_EVENTS = ['Received into stock', 'Arrival check OK', 'Arriva
 const DEV_STATUS = { 'Received into stock': 'In stock', 'Arrival check OK': 'In stock', 'Arrival check — defect': 'Defect — claim', Installed: 'At a customer', Recovered: 'Back — check it', 'Sent to refurbish': 'At refurbish', 'Refurbished — ready': 'In stock', 'Swapped out': 'Back — check it', Scrapped: 'Scrapped', 'Lost / stolen': 'Lost' };
 export const DEVICE_STATES = ['In stock', 'At a customer', 'Back — check it', 'At refurbish', 'Defect — claim', 'Scrapped', 'Lost'];
 export const normSerial = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+// v0.22.8 (card 24 · Jun 10/10 Q2 [1] our domain): the device sticker QR is a link now (https://koracarenepal.com/q/?d=KD-26-0001) so a
+// customer's camera opens the help page; the app's scanner takes the KORA number out of the link. A plain number (stickers printed before
+// this) or a supplier serial reads exactly as before.
+export const serialFromScan = (s) => { const m = /KD-\d{2}-\d{4}/i.exec(String(s || '')); return m ? m[0].toUpperCase() : normSerial(s); };
 // v0.21.1: KORA sticker numbers are KD-YY-NNNN (make_device_labels.py). Typing digits is enough: "7" → KD-26-0007 (on blur) · "260012" → KD-26-0012 · "KD-26-0012" stays.
 export function serialMask(raw, yy = '26', final = false) {
   const t = String(raw || '').toUpperCase().trim(); if (!t) return '';

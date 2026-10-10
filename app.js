@@ -19,7 +19,7 @@ import * as CAL from './cal.js';
 import * as RC from './receipt.js';
 
 document.addEventListener('input', (ev) => { const ta = ev.target && ev.target.id === 'memoTa' ? ev.target : null; if (!ta) return; lsSet('kfp_memo', ta.value.slice(0, 4000)); const h = $('#memoHint'); if (h) h.textContent = ta.value ? 'Saved on this phone' : 'Anything — it is saved as you type'; const b = document.querySelector('[data-act="memoToggle"]'); if (b) { b.classList.toggle('has', !!ta.value); b.textContent = '📝 Memo' + (ta.value ? ' ·' : ''); } }); /* v0.13.2 memo pad */
-export const APP_VERSION = 'kf-v0.22.5 (2026-10-10)';
+export const APP_VERSION = 'kf-v0.22.6 (2026-10-10)';
 const ADMIN_EMAIL = 'koracarepokhara@gmail.com';
 // v0.9.3 (Jun 2026-09-29): a backup admin address — kept here only as a SHA-256 hash so the public app code does not show it. The rules hold the real list.
 const ADMIN_BACKUP_SHA256 = ['26d538c7399e96ff2b279a1ea2823fd31653cdc8290fd0e5f35ed492d1e13a17'];
@@ -160,6 +160,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const lim = (p, ms = 4000) => Promise.race([p, sleep(ms).then(() => { throw new Error('timeout'); })]);
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+// v0.22.6 (Jun 10/10 #48): one weather line on Today — Open-Meteo (free · no key · Pokhara 28.21,83.99 · Asia/Kathmandu), cached 1 h on this phone.
+// DEMO/practice = a fixed sample so the tests never touch the network. Nothing else depends on it — a failed fetch just leaves the line as it was.
+const WX_ICON = (c) => c === 0 ? '☀️' : c <= 2 ? '⛅' : c === 3 ? '☁️' : c <= 48 ? '🌫️' : c <= 67 ? '🌧️' : c <= 77 ? '❄️' : c <= 82 ? '🌧️' : c <= 86 ? '❄️' : '⛈️';
+const wxText = (d) => `${WX_ICON(d.c)} ${d.t}° · rain ${d.p0}% · tomorrow ${WX_ICON(d.c1)} ${d.t1}° · rain ${d.p1}%`;
+function wxLine() {
+  if (DEMO) return wxText({ c: 2, t: 24, p0: 10, c1: 61, t1: 22, p1: 70 });
+  const w = lsGet('kfp_wx', null); const fresh = w && Date.now() - w.at < 3600e3;
+  if (!fresh && navigator.onLine && !wxLine.busy) {
+    wxLine.busy = true;
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=28.21&longitude=83.99&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,precipitation_probability_max&forecast_days=2&timezone=Asia%2FKathmandu')
+      .then((r) => r.json())
+      .then((j) => { const d = { c: j.current.weather_code, t: Math.round(j.current.temperature_2m), p0: j.daily.precipitation_probability_max[0], c1: j.daily.weather_code[1], t1: Math.round(j.daily.temperature_2m_max[1]), p1: j.daily.precipitation_probability_max[1] }; lsSet('kfp_wx', { at: Date.now(), d }); if (S.route && S.route.screen === 'today') rerender(); })
+      .catch(() => {}).finally(() => { wxLine.busy = false; });
+  }
+  return w ? wxText(w.d) : '';
+}
 export function toast(msg, ms = 2800) {
   const t = $('#toast'); t.textContent = msg; t.classList.remove('show'); void t.offsetWidth; t.classList.add('show');
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms);
@@ -2244,6 +2260,7 @@ function viewToday() {
   return `<div class="hero">
     <div class="hello">${esc(greet)}, ${esc(myName() || 'team')}</div>
     <div class="top sub"><div class="date">${esc(fmtDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }))}</div><div class="right">${langSeg()}<span class="syncpill"><span class="dot live ${s.c}" data-sync-dot></span><span data-sync-text>${esc(s.t)}</span></span></div></div>${/* v0.19.5: the greeting owns its line (it wrapped next to the language + sync pills) */ ''}
+    ${wxLine() ? `<div class="wx" data-wx>${esc(wxLine())}</div>` : ''}
     <div class="hero-acts"><button class="cta" data-tab-go="route">🗺️ Open today's route</button><button type="button" class="memo-btn${lsGet('kfp_memo', '') ? ' has' : ''}" data-act="memoToggle" title="Memo">📝 Memo${lsGet('kfp_memo', '') ? ' ·' : ''}</button></div>${/* v0.19.5 Jun 10/5 "C로 하기로했다 … c2로 가자": the numbers live in the six tiles only; the hero keeps the greeting and two buttons side by side */ ''}
     <div id="memoBox" class="memo${lsGet('kfp_memo_open', 0) ? '' : ' hidden'}"><textarea id="memoTa" rows="4" placeholder="Memo — stays on this phone">${esc(lsGet('kfp_memo', ''))}</textarea><div class="muted" id="memoHint">${lsGet('kfp_memo', '') ? 'Saved on this phone' : 'Anything — it is saved as you type'}</div></div>
   </div>

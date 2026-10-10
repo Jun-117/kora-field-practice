@@ -288,6 +288,7 @@ body:not(.desk) { background: radial-gradient(120% 60% at 100% -10%, color-mix(i
 .hero .top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
 .hero .hello { font-size:22px; font-weight:800; letter-spacing:-.01em; }
 .hero .date { font-size:13px; opacity:.85; margin-top:2px; }
+.hero .wx { font-size:12.5px; opacity:.85; margin-top:4px; letter-spacing:.01em; } /* v0.22.6 weather line */
 .hero .syncpill { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.28); padding:6px 10px; border-radius:14px; backdrop-filter: blur(6px); white-space:normal; line-height:1.25; max-width:150px; text-align:left; } /* v0.9.1: wraps on a phone instead of cutting the text */
 .hero .stats { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-top:16px; }
 .hero .stats button { background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); border-radius:16px; padding:10px 8px; color:#fff; text-align:left; font-family:inherit; cursor:pointer; }
